@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use NUDGE, please cite it as below."
+title: "NUDGE: Node/edge Ultrasensitivity Diagnostic for Gene-regulatory Effects"
+abstract: >-
+  A mechanism-attribution tool for perturbation (Perturb-seq) screens. NUDGE fits
+  a compositional, differentiable gene-regulatory circuit model to single-cell
+  data and distinguishes perturbations that move a switch's threshold from ones
+  that change its gain, then inverts the fit to propose untested interventions.
+  Built on the MADDENING differentiable graph-physics engine.
+authors:
+  - family-names: "Ehsan Roy"
+    given-names: "Nicholas"
+version: 0.1.0
+license: MIT
+keywords:
+  - perturb-seq
+  - single-cell
+  - gene-regulatory-network
+  - mechanism-attribution
+  - differentiable-simulation
+  - jax
+repository-code: "https://github.com/NicholasEhsanRoy/NUDGE"

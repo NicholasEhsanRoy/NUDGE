@@ -1,0 +1,40 @@
+name: Known limitation
+description: Report a NUDGE known limitation / failure mode (NUDGE-LIM-*)
+labels: ["known-limitation"]
+body:
+  - type: input
+    id: title
+    attributes:
+      label: Title
+      description: One-line summary of the limitation.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options: [minor, major, critical]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What goes wrong, and under what conditions?
+    validations:
+      required: true
+  - type: input
+    id: decoy_ref
+    attributes:
+      label: Decoy that exercises it
+      description: The NUDGE-DECOY-* id, if any.
+  - type: input
+    id: mechanism_ref
+    attributes:
+      label: Affected mechanism
+      description: The NUDGE-MECH-* id(s), if specific.
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: How a user avoids or mitigates it (e.g. NUDGE returns "unresolved").

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'pyproject.toml'
+              - '.github/workflows/ci.yml'
+            docs:
+              - 'docs/**'
+
+  compliance:
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install maddening pyyaml
+      - name: Validate known-limitations registry
+        run: python scripts/check_anomalies.py
+      - name: Validate bibliography citations
+        run: python scripts/check_citations.py
+
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[ci]" "ruff>=0.6" "pyright>=1.1.380"
+      - name: Lint
+        run: ruff check src tests scripts
+      - name: Type-check
+        run: pyright src
+      - name: Test (verification + fast decoys)
+        env:
+          JAX_PLATFORMS: cpu
+        run: pytest -m "not slow and not validation and not needs_llm"
+      - name: Check Mechanism-Card implementation mapping
+        run: python scripts/check_impl_mapping.py

@@ -1,0 +1,35 @@
+name: Slow tests (scheduled)
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # weekly, Monday 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  slow:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[ci]"
+      - name: Slow lane (identifiability sweep, calibration-at-scale, heavy decoys)
+        env:
+          JAX_PLATFORMS: cpu
+        run: pytest -m "slow and not validation and not needs_llm"
+      - name: Open issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Slow-test lane failed (${context.sha.substring(0, 7)})`,
+              body: `The scheduled slow-test lane failed on run ${context.runId}.`,
+              labels: ['slow-test-failure'],
+            })

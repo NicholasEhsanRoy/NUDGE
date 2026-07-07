@@ -1,0 +1,15 @@
+# NUDGE Known Limitations Registry
+#
+# The honest counterweight to the press release: a living, CI-validated list of
+# NUDGE's known failure modes — most of them enumerated by the decoy battery.
+# Validated by scripts/check_anomalies.py (which wraps MADDENING's
+# validate_anomaly_registry with the NUDGE-LIM- prefix). Entries are added as
+# the decoy battery and mechanism library grow (Phase 3+).
+#
+# ID convention: NUDGE-LIM-NNN. Each entry should, where applicable, reference
+# the decoy (NUDGE-DECOY-NNN) that exercises it and the mechanism it constrains.
+
+schema_version: "1.0"
+nudge_version: "0.1.0"
+generated_date: "2026-07-08"
+anomalies: []

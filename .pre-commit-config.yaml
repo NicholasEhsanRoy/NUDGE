@@ -1,0 +1,24 @@
+# Pre-commit hooks for NUDGE.
+#   pre-commit install        # enable locally
+#
+# Ruff runs always. The AI "reviewer agent" hook (creative-AI idea 3) is
+# opt-in via NUDGE_AI_REVIEW=1 and the `ai` extra — it feeds a MechanismMap
+# to an antagonistic reviewer that fails the commit on a confident claim with
+# overlapping uncertainty bounds. Off by default so commits never require an
+# LLM call or network.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: nudge-reviewer-agent
+        name: NUDGE AI reviewer agent (opt-in)
+        entry: python scripts/ai/reviewer_agent.py
+        language: system
+        pass_filenames: false
+        stages: [manual]  # run explicitly: pre-commit run nudge-reviewer-agent --hook-stage manual

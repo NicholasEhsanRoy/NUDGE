@@ -1,0 +1,106 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nudge-bio"
+version = "0.1.0"
+description = "Node/edge Ultrasensitivity Diagnostic for Gene-regulatory Effects — mechanism attribution for Perturb-seq screens"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Nicholas Ehsan Roy" }]
+keywords = [
+    "perturb-seq",
+    "single-cell",
+    "gene-regulatory-network",
+    "mechanism-attribution",
+    "differentiable-simulation",
+    "jax",
+    "systems-biology",
+    "drug-discovery",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "maddening>=0.3.0,<0.4",
+    "jax==0.5.1",
+    "jaxlib==0.5.1",
+    "numpy>=1.24",
+    "optax>=0.2",
+    "pydantic>=2",
+    "anndata>=0.10",
+]
+
+[project.optional-dependencies]
+# Real-data loaders (Tier 1/2) + E-distance convenience. Heavy scanpy stack.
+bio = ["scanpy>=1.10", "pertpy>=0.9", "scikit-misc"]
+# Claude Science MCP adapter (stretch/demo).
+mcp = ["mcp>=1.0"]
+# AI-in-the-loop dev/test harnesses (creative-AI ideas 1-3, 5). Never in CI.
+ai = ["anthropic>=0.40"]
+# Independent single-cell simulators for the Tier-0.5 inverse-crime guard.
+# Package names TBD (SERGIO/BoolODE are not reliably on PyPI); likely vendored
+# as thin adapters. Left empty so the project locks until the names are pinned.
+sim = []
+# Headless-safe test subset (anndata is already a core dep).
+ci = ["pytest>=7.0", "pytest-xdist", "pyyaml>=6.0"]
+# Full local development environment.
+dev = ["nudge-bio[ci,bio,mcp,ai]", "ruff>=0.6", "pyright>=1.1.380", "pre-commit", "build"]
+
+[project.urls]
+Repository = "https://github.com/NicholasEhsanRoy/NUDGE"
+Issues = "https://github.com/NicholasEhsanRoy/NUDGE/issues"
+
+[project.scripts]
+nudge = "nudge.runner.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nudge"]
+
+# Guarantee the PEP 561 marker lands in the wheel. Hatchling does not
+# reliably package non-.py files by default; force-include is the same
+# pattern MADDENING uses for its USD schema data files.
+[tool.hatch.build.targets.wheel.force-include]
+"src/nudge/py.typed" = "nudge/py.typed"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# CI-fast default: verification + fast decoys run; slow/validation/LLM excluded.
+addopts = "-m 'not slow and not validation and not needs_llm'"
+markers = [
+    "verification: NUDGE-VER-* synthetic ground-truth assertions",
+    "validation: real-data (T-cell) checks; need data; never in CI",
+    "decoy: decoy-battery negative/abstain assertions",
+    "slow: too expensive for PR CI (>30 s on CPU: identifiability sweep, full fits)",
+    "gpu: requires a CUDA GPU",
+    "x64: needs jax_enable_x64=True; scoped per-test by conftest",
+    "needs_data: requires a downloaded external dataset",
+    "agent: mock-scientist drives the MCP server (creative-AI idea 5)",
+    "needs_llm: calls an LLM API; never in CI",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.10"
+# Start standard; tighten core/ to strict once the state/param pytree
+# shape conventions settle.
+typeCheckingMode = "standard"
+reportMissingImports = false  # maddening/anndata may lack type stubs

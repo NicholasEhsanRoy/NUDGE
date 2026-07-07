@@ -1,0 +1,36 @@
+# Scratch / working dirs
+tmp/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.mypy_cache/
+.hypothesis/
+
+# uv
+# (uv.lock is intentionally committed once we adopt it; nothing to ignore yet)
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Local data (never commit datasets)
+/data/
+*.h5ad
+
+# Claude Code local
+.claude/scheduled_tasks.lock
