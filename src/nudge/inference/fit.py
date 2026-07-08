@@ -309,9 +309,10 @@ def _sim_transition(
 ) -> Array:
     """Transition-mode sample: activity spread lognormally about the saddle ``center``.
 
-    A **scalar centre + strictly-positive lognormal width** (``exp(log_width)``) — so
-    there is no covariance matrix to collapse when a fit wanders toward the bifurcation
-    (the FM1 NaN risk). The centre is a stop-gradient constant recomputed each step.
+    ``center`` is an ``(n_species,)`` vector (length-1 for a 1-species switch; the
+    saddle of an N-node toggle otherwise); it broadcasts over cells. A strictly-positive
+    lognormal width (``exp(log_width)``) means there is no covariance matrix to collapse
+    near the bifurcation (the FM1 NaN risk). The centre is a per-step stop-grad const.
     """
     k_a, k_lib, k_obs = jax.random.split(key, 3)
     width = jnp.exp(log_width)
@@ -376,6 +377,10 @@ def fit_transition_parameters(
     opt_state = optimizer.init(theta)
 
     def loss_fn(vec: Array, key: Array, center: Array, valid: Array) -> Array:
+        # The saddle center/valid are per-step constants from the eager finder — never
+        # differentiate through the root-finder (XLA would trace its backward pass).
+        center = jax.lax.stop_gradient(center)
+        valid = jax.lax.stop_gradient(valid)
         log_vals = vec[:n_free]
         logits = vec[n_free : n_free + 3]
         log_width = vec[n_free + 3]
@@ -429,15 +434,18 @@ def fit_transition_parameters(
         return new_vec, state, loss
 
     def _saddle(vec: Array) -> tuple[Array, Array]:
-        # Recompute the saddle from the current concrete kinetics (numpy, per step).
+        # Recompute the saddle from the current concrete kinetics per step (eager, then
+        # fed into the jitted step as a stop-gradient constant). `transition_state()`
+        # returns an (n_species,) vector (length-1 for a 1-species switch) or None.
         vals = np.exp(np.asarray(vec[:n_free]))
         cur = _updated_circuit(
             circuit, {f: float(v) for f, v in zip(free, vals, strict=True)}
         )
         state = cur.transition_state()
         if state is None:
-            return jnp.asarray(1.0), jnp.asarray(0.0)  # safe centre, masked off
-        return jnp.asarray(float(state)), jnp.asarray(1.0)
+            # monostable/no saddle → safe finite centre, transition masked off
+            return jnp.ones((n_species,)), jnp.asarray(0.0)
+        return jnp.asarray(state), jnp.asarray(1.0)
 
     key = jax.random.key(seed)
     history: list[float] = []

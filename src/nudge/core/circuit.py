@@ -28,6 +28,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import Array
+from jax.experimental import enable_x64
 
 from nudge.mechanisms.integrators.saturating import saturating_production
 from nudge.mechanisms.regulatory import (
@@ -163,44 +164,63 @@ class Circuit:
         edges = tuple(replace(e, effect="linear") for e in self.edges)
         return Circuit(self.species, edges)
 
-    def fixed_points(self) -> list[float] | None:
-        """Steady-state activity fixed points — **only** for a 1-species self-switch.
+    def fixed_points(self) -> list[tuple[np.ndarray, str]] | None:
+        """Steady-state fixed points + stability labels, or ``None`` if unsupported.
 
-        Decouples the topology-specific saddle math from the fit (the fit's transition
-        mode needs the intermediate/unstable fixed point, but should not itself know
-        how to find one — see ``design/STATE.md`` §6). For a single self-activating gene
-        this returns the sorted real roots of ``basal + vmax·x^n/(K^n+x^n) − decay·x``:
-        ``[low]`` when monostable, ``[low, saddle, high]`` when bistable. For any other
-        topology (N-species, non-self, non-Hill) it returns ``None`` — there is no
-        general N-D saddle finder yet, so the caller falls back to safe abstention
-        rather than fabricating a fixed point. Never raises (returns ``None`` on any
-        numerical failure), so it is safe to call inside an optimizer step.
+        Returns ``[(state_vector (n_species,) float32, label), ...]`` where label is
+        ``stable`` / ``saddle-index1`` / ``source`` / ``other``. Decouples the topology-
+        specific saddle math from the fit (which needs the unstable index-1 fixed point
+        but should not itself know how to find one). Dispatch:
+
+        - **1-species self-activation Hill switch**: the exact 1-D grid+bisection roots
+          (unchanged math), ordered ``[low, saddle, high]`` (bistable) or ``[low]``
+          (monostable) and labelled by that order;
+        - **N-species (>=2)**: multi-start Newton + Jacobian-eigenvalue index
+          classification (``_nd_fixed_points``, under a local x64 context);
+        - **any other 1-species topology**: ``None`` (caller abstains).
+
+        Never raises (``None`` on any numerical failure) — safe in an optimizer step.
         """
-        if self.n_species != 1 or self.n_edges != 1:
-            return None
-        e, s = self.edges[0], self.species[0]
-        if e.source != 0 or e.target != 0 or e.effect != "hill_activation":
-            return None
-        try:
-            return _self_activation_roots(
-                basal=s.basal, decay=s.decay, K=e.K, n=e.n, vmax=e.vmax
+        if self.n_species == 1:
+            if self.n_edges != 1:
+                return None
+            e, s = self.edges[0], self.species[0]
+            if e.source != 0 or e.target != 0 or e.effect != "hill_activation":
+                return None
+            try:
+                roots = _self_activation_roots(
+                    basal=s.basal, decay=s.decay, K=e.K, n=e.n, vmax=e.vmax
+                )
+            except Exception:
+                return None
+            labels = (
+                ["stable", "saddle-index1", "stable"]
+                if len(roots) == 3
+                else ["stable"] * len(roots)
             )
+            return [
+                (np.asarray([r], dtype=np.float32), lab)
+                for r, lab in zip(roots, labels, strict=True)
+            ]
+        try:
+            return _nd_fixed_points(self)
         except Exception:
             return None
 
-    def transition_state(self) -> float | None:
-        """The intermediate (unstable saddle) activity when bistable, else ``None``.
+    def transition_state(self) -> np.ndarray | None:
+        """The index-1 saddle state (n_species,) when bistable, else ``None``.
 
-        ``fixed_points()[1]`` iff there are exactly three roots. This is where graded
-        cells pile up when a switch loses cooperativity (a gain reduction), so it is the
-        centre of the fit's transition mixture mode. ``None`` (monostable or N-species)
-        means "no transition mode" — the fit collapses gracefully and the gain gate
-        abstains.
+        Where graded cells pile up when a switch loses cooperativity (a gain reduction),
+        so it centres the fit's transition mixture mode. ``None`` (monostable or an
+        unsupported topology) means "no transition mode" — the fit collapses gracefully
+        and the gain gate abstains. Generalizes the old 1-D scalar to an N-D vector (a
+        length-1 array for 1 species — same saddle location, now a vector).
         """
-        roots = self.fixed_points()
-        if roots is None or len(roots) != 3:
+        fps = self.fixed_points()
+        if fps is None:
             return None
-        return roots[1]
+        saddles = [state for state, label in fps if label == "saddle-index1"]
+        return saddles[0] if saddles else None
 
 
 def _self_activation_roots(
@@ -237,3 +257,108 @@ def _self_activation_roots(
         if not deduped or abs(r - deduped[-1]) > 1e-4:
             deduped.append(float(r))
     return deduped
+
+
+def _nd_fixed_points(
+    circuit: Circuit,
+    *,
+    n_grid: int = 9,
+    n_rand: int = 200,
+    seed: int = 0,
+    tol: float = 1e-5,
+    reg: float = 1e-6,
+    dedup_tol: float = 1e-3,
+    eig_tol: float = 1e-4,
+    max_iter: int = 100,
+    box_hi: float = 1e4,
+) -> list[tuple[np.ndarray, str]]:
+    """Enumerate + classify the steady states of an N-species circuit.
+
+    Recipe (validated in a spike; endorsed by the saddle literature review): fixed-point
+    enumeration via vmap'd multi-start Newton, masked-distance dedupe, then a Jacobian-
+    eigenvalue index classification (index-1 saddle = exactly one eigenvalue with a
+    positive real part). Energy-landscape path methods are wrong here (GRN ODEs are
+    non-gradient). The vector field reuses ``Circuit.production`` (any topology).
+
+    Numerics: run under a **local x64 context** (f32 Newton cancels catastrophically on
+    an ill-conditioned Jacobian near a saddle-node), casting to f32 on return. The heavy
+    work (vmap ridge Newton, masked dedupe) stays in ``jnp`` on-device with static
+    shapes (``[n_starts, n]`` + a keep mask; no dynamic root lists in XLA, no host
+    round-trip); only the small unique set crosses to numpy. Never raises. Returns
+    ``[(state, label), ...]`` sorted lexicographically for a deterministic slot order.
+    """
+    n = circuit.n_species
+    with enable_x64():
+        base = circuit.base_params()
+        decay = base["species"]["decay"]
+
+        def field(state: Array) -> Array:
+            # clip >=0 inside production so a Newton overshoot never hits x^frac < 0
+            return circuit.production(jnp.maximum(state, 0.0), base) - decay * state
+
+        jac = jax.jacfwd(field)
+
+        # start cloud: capped grid + random over [~0, hi]^n
+        basal = np.asarray(base["species"]["basal"], dtype=float)
+        dec = np.asarray(decay, dtype=float)
+        vmax_sum = (
+            float(np.sum(np.asarray(base["edges"]["vmax"], dtype=float)))
+            if circuit.n_edges
+            else 0.0
+        )
+        hi = float(np.max((basal + vmax_sum) / dec)) * 1.2 + 1e-3
+        per_dim = n_grid if n_grid**n <= 1000 else max(2, round(1000 ** (1.0 / n)))
+        g = np.linspace(1e-3, hi, per_dim)
+        grid = np.stack([a.ravel() for a in np.meshgrid(*([g] * n))], axis=-1)
+        rand = np.random.default_rng(seed).uniform(0.0, hi, size=(n_rand, n))
+        starts = jnp.asarray(np.vstack([grid, rand]))
+        eye = jnp.eye(n)
+
+        def newton(x0: Array) -> tuple[Array, Array]:
+            def cond(c: tuple[Array, Array, Array]) -> Array:
+                _, i, done = c
+                return jnp.logical_and(i < max_iter, jnp.logical_not(done))
+
+            def body(c: tuple[Array, Array, Array]) -> tuple[Array, Array, Array]:
+                x, i, _ = c
+                fx, jx = field(x), jac(x)
+                delta = jnp.linalg.solve(jx.T @ jx + reg * eye, -(jx.T @ fx))
+                sn = jnp.linalg.norm(delta)
+                x_new = x + jnp.minimum(1.0, 5.0 / (sn + 1e-30)) * delta
+                x_new = jnp.clip(x_new, 0.0, box_hi)
+                x_new = jnp.where(jnp.isfinite(x_new), x_new, box_hi)
+                return x_new, i + 1, jnp.linalg.norm(field(x_new)) < tol
+
+            init = (x0, jnp.array(0), jnp.array(False))
+            xf, _, done = jax.lax.while_loop(cond, body, init)
+            resid_ok = jnp.linalg.norm(field(xf)) < tol * 10
+            ok = done & resid_ok & jnp.all(jnp.isfinite(xf))
+            return xf, ok
+
+        roots, oks = jax.vmap(newton)(starts)  # (S, n), (S,) static shapes
+
+        # jnp masked-distance dedupe: keep a converged root iff no earlier converged
+        # root lies within dedup_tol (static (S, S) matrix; no host round-trip).
+        diff = roots[:, None, :] - roots[None, :, :]
+        dist = jnp.sqrt(jnp.sum(diff * diff, axis=-1) + 1e-30)
+        s = roots.shape[0]
+        earlier = jnp.tril(jnp.ones((s, s), dtype=bool), k=-1)
+        is_dup = jnp.any((dist < dedup_tol) & earlier & oks[None, :], axis=1)
+        uniq = roots[oks & jnp.logical_not(is_dup)]  # eager gather → concrete
+
+        out: list[tuple[np.ndarray, str]] = []
+        for r in uniq:
+            re = jnp.real(jnp.linalg.eigvals(jac(r)))
+            n_pos = int(jnp.sum(re > eig_tol))
+            n_neg = int(jnp.sum(re < -eig_tol))
+            if n_neg == n:
+                label = "stable"
+            elif n_pos == 1 and n_neg == n - 1:
+                label = "saddle-index1"
+            elif n_pos == n:
+                label = "source"
+            else:
+                label = "other"
+            out.append((np.asarray(r, dtype=np.float32), label))
+    out.sort(key=lambda sl: tuple(float(v) for v in sl[0]))
+    return out

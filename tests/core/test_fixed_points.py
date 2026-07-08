@@ -1,9 +1,10 @@
-"""Circuit.fixed_points / transition_state — the decoupled saddle finder.
+"""Circuit.fixed_points / transition_state — the decoupled saddle finder (1-D + N-D).
 
-These underpin the multi-basin transition mode (the gain-gate probe). The safety
-contract matters as much as the numbers: monostable and N-species circuits must
-return gracefully (no exception, no fabricated saddle), so the fit falls back to
-abstention rather than feeding a bogus root into a gradient step.
+Underpins the multi-basin transition mode (the gain-gate probe). The safety contract
+matters as much as the numbers: monostable and unsupported topologies must return
+gracefully (no exception, no fabricated saddle) so the fit falls back to abstention
+rather than feeding a bogus root into a gradient step. fixed_points returns
+``[(state_vector, label), ...]``; transition_state returns the index-1 saddle vector.
 """
 
 from __future__ import annotations
@@ -20,37 +21,86 @@ def _switch(*, K: float = 1.0, n: float = 6.0, vmax: float = 2.0) -> Circuit:
     )
 
 
-def test_bistable_switch_has_three_fixed_points() -> None:
-    roots = _switch().fixed_points()
-    assert roots is not None and len(roots) == 3
-    low, saddle, high = roots
-    assert low == pytest.approx(0.05, abs=0.02)
-    assert saddle == pytest.approx(0.975, abs=0.05)
-    assert high == pytest.approx(2.02, abs=0.05)
-    # transition_state is the middle (unstable) root.
-    assert _switch().transition_state() == pytest.approx(saddle, abs=1e-6)
+def _toggle(
+    *, n: float = 4.0, vmax: float = 2.0, basal_b: float = 0.05, vmax_b: float = 2.0
+) -> Circuit:
+    """2-node mutual-inhibition (Gardner-Collins) toggle switch."""
+    return Circuit(
+        [
+            SpeciesDef("A", basal=0.05, decay=1.0),
+            SpeciesDef("B", basal=basal_b, decay=1.0),
+        ],
+        [
+            EdgeDef(1, 0, "hill_repression", K=1.0, n=n, vmax=vmax),
+            EdgeDef(0, 1, "hill_repression", K=1.0, n=n, vmax=vmax_b),
+        ],
+    )
 
 
-def test_gain_collapse_is_monostable_intermediate() -> None:
-    # A gain reduction (n: 6 -> 1.2) destroys bistability: one intermediate root,
-    # right where the WT saddle sat (~1.1). transition_state must be None (no saddle).
-    roots = _switch(n=1.2).fixed_points()
-    assert roots is not None and len(roots) == 1
-    assert roots[0] == pytest.approx(1.1, abs=0.15)
+# --- 1-species self-activation: unchanged math, now a vector return -----------
+def test_bistable_switch_three_fixed_points() -> None:
+    fps = _switch().fixed_points()
+    assert fps is not None and len(fps) == 3
+    states = [float(s[0]) for s, _ in fps]  # length-1 state vectors
+    labels = [lab for _, lab in fps]
+    assert states[0] == pytest.approx(0.05, abs=0.02)
+    assert states[1] == pytest.approx(0.975, abs=0.05)
+    assert states[2] == pytest.approx(2.02, abs=0.05)
+    assert labels == ["stable", "saddle-index1", "stable"]
+    sad = _switch().transition_state()
+    assert sad is not None and sad.shape == (1,)
+    assert float(sad[0]) == pytest.approx(states[1], abs=1e-6)
+
+
+def test_gain_collapse_monostable_no_saddle() -> None:
+    fps = _switch(n=1.2).fixed_points()
+    assert fps is not None and len(fps) == 1
+    assert float(fps[0][0][0]) == pytest.approx(1.1, abs=0.15)
     assert _switch(n=1.2).transition_state() is None
 
 
-def test_threshold_and_ceiling_collapse_low_and_monostable() -> None:
-    # Threshold (K*3) and ceiling (vmax*0.3) both drop to a single low fixed point.
+def test_threshold_ceiling_collapse_low_monostable() -> None:
     for circ in (_switch(K=3.0), _switch(vmax=0.6)):
-        roots = circ.fixed_points()
-        assert roots is not None and len(roots) == 1
-        assert roots[0] == pytest.approx(0.05, abs=0.03)
+        fps = circ.fixed_points()
+        assert fps is not None and len(fps) == 1
+        assert float(fps[0][0][0]) == pytest.approx(0.05, abs=0.03)
         assert circ.transition_state() is None
 
 
-def test_n_species_and_non_self_return_none_safely() -> None:
-    # No general N-D saddle finder → None (caller abstains), never an exception.
+# --- N-D toggle switch: the generalization ------------------------------------
+def test_symmetric_toggle_two_stable_one_saddle() -> None:
+    fps = _toggle().fixed_points()
+    assert fps is not None
+    labels = [lab for _, lab in fps]
+    assert labels.count("stable") == 2
+    assert labels.count("saddle-index1") == 1
+    sad = _toggle().transition_state()
+    assert sad is not None and sad.shape == (2,)
+    # symmetric → the saddle sits on the diagonal separatrix, near [1, 1]
+    assert float(sad[0]) == pytest.approx(float(sad[1]), abs=0.05)
+    assert float(sad[0]) == pytest.approx(1.0, abs=0.2)
+
+
+def test_asymmetric_toggle_saddle_moves_off_diagonal() -> None:
+    sad = _toggle(basal_b=0.15, vmax_b=1.6).transition_state()
+    assert sad is not None and sad.shape == (2,)
+    assert abs(float(sad[0]) - float(sad[1])) > 0.05  # off the diagonal
+
+
+def test_monostable_toggle_no_saddle() -> None:
+    # Low Hill coefficient destroys bistability → no saddle (graceful).
+    assert _toggle(n=1.0).transition_state() is None
+
+
+def test_unsupported_topologies_return_gracefully() -> None:
+    # 1-species linear (non-Hill) self-edge is out of the 1-D scope → None.
+    linear = Circuit(
+        [SpeciesDef("SW", basal=0.05, decay=1.0)],
+        [EdgeDef(0, 0, "linear", weight=1.0)],
+    )
+    assert linear.fixed_points() is None
+    # A 2-species feedforward switch is monostable: the finder runs (not None) but
+    # finds no saddle — so the transition mode / gain gate abstain, never crash.
     feedforward = Circuit(
         [
             SpeciesDef("IN", basal=1.0, decay=1.0),
@@ -58,11 +108,4 @@ def test_n_species_and_non_self_return_none_safely() -> None:
         ],
         [EdgeDef(0, 1, "hill_activation", K=1.0, n=6.0, vmax=2.0)],
     )
-    assert feedforward.fixed_points() is None
     assert feedforward.transition_state() is None
-    # A 1-species linear (non-Hill) self-edge is also out of scope → None.
-    linear = Circuit(
-        [SpeciesDef("SW", basal=0.05, decay=1.0)],
-        [EdgeDef(0, 0, "linear", weight=1.0)],
-    )
-    assert linear.fixed_points() is None
