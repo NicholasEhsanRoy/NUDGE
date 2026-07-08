@@ -34,6 +34,13 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   bimodality decoy (`generate_telegraph_perturbseq`, To & Maheshri 2010): bimodal but
   deterministically monostable data that NUDGE must decline as not-a-switch (it does,
   on both fit paths). Registry `data/decoys.py`; limitation `NUDGE-LIM-001`.
+- **N-D saddle finder + multi-basin representation:** `Circuit.fixed_points` /
+  `transition_state` generalized to N species (multi-start Newton + Jacobian-index
+  classification; verified on a 2-node toggle), and the transition fit seeds basins at the
+  stable fixed points (`generate_toggle_perturbseq` for toggle data). The `w_trans` gain
+  gate is 1-D-specific and does *not* extend to the toggle (measured), so it stays guarded
+  to `n_species == 1`; NUDGE abstains (never misclassifies) on toggles. See FINDINGS
+  "N-D saddle".
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`); PEP 561.
 

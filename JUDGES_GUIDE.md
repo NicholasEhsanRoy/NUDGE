@@ -109,6 +109,19 @@ the fit reject "no switch." That is both a candidate NUDGE capability and a conc
 experimental-design suggestion to the field for making mechanism attribution survive a
 nonlinear readout (`FINDINGS.md`, NUDGE-LIM-006 + mitigation).
 
+**Generalizing beyond one gene — and knowing when to stop.** We took the saddle gain gate
+toward multi-species switches (the canonical 2-node toggle) in bite-size milestones, each
+ending with the full slow lane green *and identical to baseline* (the decoy battery is the
+regression harness). The N-D **saddle finder** and **multi-basin representation** landed and
+are verified (multi-start Newton + Jacobian-index classification; the toggle is represented
+at 56× lower loss than naive seeding) — engineered against real numerical traps (f32 Newton
+cancellation → a local x64 context; the XLA dynamic-shape cliff → static padded arrays;
+monostable excursions and root-order slot-swaps that would thrash the optimizer). But a
+measured **go/no-go** showed the gain *signature* is 1-D-specific and does not extend to the
+toggle — so we **kept the gate guarded to one species and shipped abstention** (NUDGE stays
+fail-safe on toggles, `test_toggle_nd_safety.py`) rather than ship an unreliable N-D gate.
+Reusable infrastructure + an honest boundary, not overreach (`FINDINGS.md`, "N-D saddle").
+
 ## 4. Demo (30%) — reproducible science you can run
 
 The demo today is **reproducible, trustworthy findings** rather than a polished UI —

@@ -367,3 +367,43 @@ channel; absent one, abstain on the circuit-vs-readout axis rather than mis-attr
 (ii) A concrete screen-design suggestion to the field: include a constitutively-driven
 reporter titration when trustworthy mechanism attribution is needed. The limitation
 (LIM-006) and its validated mitigation are, together, a publishable methodological result.
+
+---
+
+# N-D saddle: the finder + representation generalize; the gain gate is 1-D-specific
+
+Generalizing the saddle transition-mode gain gate beyond the 1-species self-activation
+switch to the canonical **2-node mutual-inhibition toggle** — done as bite-size milestones,
+each ending with the full slow lane (5-case battery + Tier-0.5 + saddle) **green and
+identical to baseline**, so nothing regressed the 1-species fail-safe guarantee.
+
+**Landed (reusable, verified — M1/M2).**
+- **N-D fixed-point / saddle finder** (`Circuit.fixed_points` / `transition_state`):
+  multi-start Newton + Jacobian-eigenvalue index classification (index-1 saddle = exactly
+  one +Re eigenvalue), vector field from `Circuit.production` (any topology). Reproduces the
+  spike exactly on the toggle (symmetric saddle `[1.017, 1.017]`; asymmetric off-diagonal
+  `[0.933, 1.061]`; monostable / feedforward → no saddle). Engineered against the numerical
+  traps: local x64 context (f32 Newton cancels near the saddle-node), static padded `vmap`
+  output + `jnp` masked dedupe (no XLA dynamic-shape cliff, no host sync), `stop_gradient`
+  at the loss boundary.
+- **N-D multi-basin representation**: the transition fit seeds basins at the **stable fixed
+  points** (static slots + a monostable-excursion fallback + a deterministic root-sort for
+  stable slot identity, so Optax momentum isn't thrashed). It *represents* a bistable toggle
+  well — WT loss **0.015 vs 0.83** for the naive `0`/`high_ic` seeding (56×).
+
+**The gain gate does NOT extend — a measured NO-GO (M3).** The `w_trans > τ → GAIN` signature
+was 1-D-specific: it worked because a gain reduction on a *self-activation* loop collapses
+the switch to a single intermediate fixed point *at the saddle* (graded cells → transition
+mode). On a toggle, reducing cooperativity on **one** repression edge does not collapse the
+system — the other edge keeps it bistable, so cells stay in the two basins. Measured free-`n`
+`w_trans` for the gain condition across seeds: **0.00 / 0.25 / 0.22** — weakly elevated but
+far below the calibrated τ=0.5 and seed-unreliable (vs the clean 1-D 0.87–0.94); the other
+classes stay ≤0.04. So the gate stays guarded to `n_species == 1`.
+
+**Fail-safe preserved.** With the gate 1-D-guarded, NUDGE **abstains** (off-model) on a toggle
+rather than misclassifying — locked in by `tests/verification/test_toggle_nd_safety.py` (no
+wrong positive on toggle threshold/gain/ceiling data). The N-D finder + representation are
+reusable infrastructure (they make multi-species attribution *approachable*, and unblock the
+T-cell circuits); a **toggle-specific attribution signature** — how each mechanism manifests
+in a multi-attractor snapshot — is honest open future work, a natural next spike. We shipped
+the finder + representation and *declined* to ship an unreliable N-D gate.

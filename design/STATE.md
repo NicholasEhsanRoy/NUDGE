@@ -49,7 +49,7 @@ JAX graph-physics engine) — reuses its `ift_linear_solve` primitive and
 | V&V calibration | ✅ | `scripts/vv/` (harness + results + `FINDINGS.md`) |
 | 3 Fail-loud | ◑ ~45% | gate logic + Tier-0.5 simulator + saddle gain gate + decoy battery started (`NUDGE-DECOY-001` telegraph, `NUDGE-LIM-001`); verification suite/Laplace + more decoys NOT built |
 | 4 Validation + provenance | ⬜ | T-cell SOS/RasGRP1; `provenance.py` is a stub |
-| Stretch | ⬜ (homes reserved) | `design/invert.py`, `mcp/server.py`, `mechanisms/integrators/zero_order.py`, `data/loaders/tier{1,2}.py`, **constitutive-control channel** (validated — `design/CONSTITUTIVE_CONTROL.md`), N-D saddle integration (spike done), docs site, `scripts/ai/` |
+| Stretch | ◑ | **N-D saddle finder + toggle representation DONE** (attribution is 1-D only — see below); **constitutive-control channel** validated (`design/CONSTITUTIVE_CONTROL.md`); `design/invert.py`, `mcp/server.py`, `zero_order.py`, `data/loaders/tier{1,2}.py`, docs site, `scripts/ai/` still homes-reserved |
 
 **The PoC works end to end** (`tests/inference/test_fit_end_to_end.py`, slow lane):
 generate ground-truth data → `fit()` → recover kinetics → attribute
@@ -146,8 +146,16 @@ to a fail-safe fix. The arc (full detail in `scripts/vv/FINDINGS.md` §T0.5-3→
    positives**, N-species safely abstains. Six failure modes engineered against (FM1 NaN
    masking, FM2 N-D decoupling+`n_species==1` guard, FM3-6). Guarded by the Tier-0.5 test.
 
-**Open follow-ons:** N-D saddle finding (mutual-inhibition toggles) for the transition mode
-beyond 1 species; sweep the gain-factor/τ calibration; the To&Maheshri decoy still deferred.
+**N-D saddle (DONE — finder + representation; attribution NO-GO).** `Circuit.fixed_points`
+/`transition_state` now find the index-1 saddle of an N-species circuit (multi-start Newton
++ Jacobian index; verified on a 2-node toggle), and the transition fit represents a toggle
+(FP-seeded basins, 56× lower loss than naive seeding). But the `w_trans` gain gate is
+**1-D-specific** and does NOT extend to the toggle (a single-edge gain reduction doesn't
+collapse it to the saddle) — so the gate stays guarded to `n_species == 1` and NUDGE
+**abstains** (never misclassifies) on toggles (`tests/verification/test_toggle_nd_safety.py`).
+Finder + representation are reusable infra; a toggle-specific attribution signature is open.
+Full write-up: `scripts/vv/FINDINGS.md` "N-D saddle". **Other open follow-ons:** sweep the
+1-D gain-factor/τ calibration; the To&Maheshri telegraph decoy is done (`NUDGE-DECOY-001`).
 
 The original plan is retained below for reference.
 
