@@ -17,7 +17,8 @@ relaxation is loose at very low counts; adequate for a switch reporter.)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from dataclasses import replace
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -25,19 +26,28 @@ import numpy as np
 import optax
 from jax import Array
 
-from nudge.core.results import MechanismMap
+from nudge.core.circuit import Circuit
+from nudge.core.results import MechanismCall, MechanismMap
+from nudge.core.vocabulary import POSITIVE_CLASSES, MechanismClass
 from nudge.data.ingest import check_counts
 from nudge.data.synthetic import _per_cell_params
+from nudge.inference.classify import decide, switch_detected
 from nudge.inference.losses import energy_distance
 from nudge.mechanisms.readout import Readout
-
-if TYPE_CHECKING:
-    from nudge.core.circuit import Circuit
 
 __all__ = ["FreeParam", "fit", "fit_parameters"]
 
 #: A parameter to optimize: ``(scope, index, name)`` — e.g. ``("edge", 0, "K")``.
 FreeParam = tuple[str, int, str]
+
+
+def _apply_transform(x: Array, transform: str) -> Array:
+    """Optional shape-sensitizing transform applied to counts before the distance."""
+    if transform == "log1p":
+        return jnp.log1p(x)
+    if transform == "none":
+        return x
+    raise ValueError(f"unknown transform {transform!r}")
 
 
 def _param_value(circuit: Circuit, free: FreeParam) -> float:
@@ -87,20 +97,24 @@ def fit_parameters(
     extrinsic_sigma: float = 0.3,
     dispersion: float = 0.1,
     library_sigma: float = 0.2,
+    transform: str = "log1p",
     seed: int = 0,
 ) -> tuple[dict[FreeParam, float], list[float]]:
     """Recover the ``free`` circuit parameters from one condition's counts.
 
     Optimizes in log-space (parameters are positive) with Adam and a fresh
-    minibatch of simulated + observed cells each step. Returns the recovered
-    values and the loss history.
+    minibatch of simulated + observed cells each step. ``transform="log1p"``
+    compares distributions in log space, which is scale-robust and far more
+    sensitive to distribution *shape* (bimodality) than raw counts. Returns the
+    recovered values and the loss history.
     """
     check_counts(adata)  # the bouncer — raw integer counts only
     if readout is None:
         readout = Readout.identity(circuit.n_species)
 
     mask = np.asarray(adata.obs["condition"] == condition)
-    observed = jnp.asarray(np.asarray(adata.X, dtype=np.float32)[mask])
+    raw = jnp.asarray(np.asarray(adata.X, dtype=np.float32)[mask])
+    observed = _apply_transform(raw, transform)
     log_theta = jnp.log(jnp.array([_param_value(circuit, f) for f in free]))
 
     optimizer = optax.adam(learning_rate)
@@ -116,7 +130,7 @@ def fit_parameters(
             dispersion=dispersion, library_sigma=library_sigma,
         )
         idx = jax.random.choice(k_pick, observed.shape[0], (n_cells,), replace=False)
-        return energy_distance(sim, observed[idx])
+        return energy_distance(_apply_transform(sim, transform), observed[idx])
 
     @jax.jit
     def step(
@@ -138,10 +152,157 @@ def fit_parameters(
     return recovered, history
 
 
-def fit(adata: Any, circuit: Circuit) -> MechanismMap:
+def _condition_counts(adata: Any, condition: str) -> Array:
+    mask = np.asarray(adata.obs["condition"] == condition)
+    return jnp.asarray(np.asarray(adata.X, dtype=np.float32)[mask])
+
+
+def _updated_circuit(circuit: Circuit, updates: dict[FreeParam, float]) -> Circuit:
+    """Return a copy of ``circuit`` with the given parameters replaced."""
+    species = list(circuit.species)
+    edges = list(circuit.edges)
+    for (scope, index, name), value in updates.items():
+        if scope == "edge":
+            edges[index] = replace(edges[index], **{name: value})
+        else:
+            species[index] = replace(species[index], **{name: value})
+    return Circuit(species, edges)
+
+
+def _loss_stats(history: list[float], tail: int = 40) -> tuple[float, float]:
+    """Converged loss (mean) and its noise floor (std) from the loss-history tail."""
+    arr = np.asarray(history[-tail:])
+    return float(arr.mean()), float(arr.std())
+
+
+def _subsample(counts: Array, n: int, key: Array) -> Array:
+    take = min(n, int(counts.shape[0]))
+    idx = jax.random.choice(key, counts.shape[0], (take,), replace=False)
+    return counts[idx]
+
+
+def _self_distance(
+    counts: Array, n: int, key: Array, reps: int = 10
+) -> tuple[float, float]:
+    """Irreducible finite-sample loss floor (log1p space) and its std, from bootstrap.
+
+    A perfect fit's loss ≈ the energy distance between two ``n``-cell subsamples of
+    the same distribution; its std is the loss noise floor the gates compare against.
+    """
+    dists = []
+    for _ in range(reps):
+        key, k1, k2 = jax.random.split(key, 3)
+        a = _apply_transform(_subsample(counts, n, k1), "log1p")
+        b = _apply_transform(_subsample(counts, n, k2), "log1p")
+        dists.append(float(energy_distance(a, b)))
+    arr = np.asarray(dists)
+    return float(arr.mean()), float(arr.std())
+
+
+def _log1p_distance(a: Array, b: Array, n: int, key: Array) -> float:
+    k1, k2 = jax.random.split(key)
+    return float(
+        energy_distance(
+            _apply_transform(_subsample(a, n, k1), "log1p"),
+            _apply_transform(_subsample(b, n, k2), "log1p"),
+        )
+    )
+
+
+def fit(
+    adata: Any,
+    circuit: Circuit,
+    *,
+    target_edge: int = 0,
+    wt_condition: str = "WT",
+    conditions: list[str] | None = None,
+    readout: Readout | None = None,
+    steps: int = 300,
+    n_cells: int = 256,
+    margin_k: float = 1.0,
+    off_model_k: float = 5.0,
+    seed: int = 0,
+) -> MechanismMap:
     """Fit ``circuit`` to ``adata`` (raw-count Perturb-seq) → a ``MechanismMap``.
 
-    Completed once the abstention classifier (``inference.classify``) lands; the
-    optimizer engine is ``fit_parameters``.
+    (1) Fit the WT mechanistic circuit and the WT linear baseline; the
+    linear-baseline parsimony gate (``switch_detected``) decides whether a switch
+    exists at all — if not, every perturbation is ``off-model``. (2) Given a switch,
+    for each perturbation fit the three restricted mechanistic models (free K / n /
+    vmax of ``target_edge``) and route them through ``classify.decide``. The gate
+    noise floor is the WT self-distance bootstrap (the irreducible loss scale).
     """
-    raise NotImplementedError("fit — completed with inference.classify (Phase 2)")
+    check_counts(adata)
+    if readout is None:
+        readout = Readout.identity(circuit.n_species)
+    labels = list(dict.fromkeys(np.asarray(adata.obs["condition"]).tolist()))
+    if conditions is None:
+        conditions = [c for c in labels if c != wt_condition]
+
+    common: dict[str, Any] = {"readout": readout, "steps": steps, "n_cells": n_cells}
+    wt_counts = _condition_counts(adata, wt_condition)
+    floor_key = jax.random.key(seed + 50)
+    floor_mean, floor_std = _self_distance(wt_counts, n_cells, floor_key)
+    noise_margin = margin_k * floor_std
+    effect_margin = floor_mean + 3.0 * floor_std
+    off_model_loss = off_model_k * floor_mean
+
+    # 1. WT: mechanistic (free K, n, vmax) vs linear baseline (free weight).
+    wt_free: list[FreeParam] = [("edge", target_edge, p) for p in ("K", "n", "vmax")]
+    wt_values, wt_mech_history = fit_parameters(
+        adata, circuit, wt_free, condition=wt_condition, seed=seed, **common
+    )
+    wt_circuit = _updated_circuit(circuit, wt_values)
+    _, wt_lin_history = fit_parameters(
+        adata, wt_circuit.linear_baseline(), [("edge", target_edge, "weight")],
+        condition=wt_condition, seed=seed + 1, **common,
+    )
+    wt_mech_loss, _ = _loss_stats(wt_mech_history)
+    wt_lin_loss, _ = _loss_stats(wt_lin_history)
+
+    # 2. The linear-baseline parsimony gate — is there a switch to attribute?
+    if not switch_detected(wt_mech_loss, wt_lin_loss, noise_margin=noise_margin):
+        calls = [
+            MechanismCall(
+                perturbation=c,
+                mechanism=MechanismClass.OFF_MODEL,
+                confidence=0.0,
+                rationale="no switch detected — linear baseline explains WT",
+            )
+            for c in conditions
+        ]
+        return MechanismMap(
+            calls=calls,
+            beats_linear_baseline=False,
+            provenance={"conditions": ",".join(conditions), "seed": str(seed)},
+        )
+
+    # 3. A switch exists — attribute each perturbation via restricted fits.
+    key = jax.random.key(seed + 100)
+    calls = []
+    for i, condition in enumerate(conditions):
+        key, k_dist = jax.random.split(key)
+        perturbed = _condition_counts(adata, condition)
+        wt_distance = _log1p_distance(perturbed, wt_counts, n_cells, k_dist)
+        param_losses: dict[str, float] = {}
+        for j, param in enumerate(("K", "n", "vmax")):
+            _, history = fit_parameters(
+                adata, wt_circuit, [("edge", target_edge, param)],
+                condition=condition, seed=seed + 10 * (i + 1) + j, **common,
+            )
+            param_losses[param] = _loss_stats(history)[0]
+        calls.append(
+            decide(
+                condition, param_losses, wt_distance,
+                noise_margin=noise_margin,
+                effect_margin=effect_margin,
+                off_model_loss=off_model_loss,
+            )
+        )
+
+    beats = any(c.mechanism in POSITIVE_CLASSES for c in calls)
+    return MechanismMap(
+        calls=calls,
+        beats_linear_baseline=beats,
+        provenance={"conditions": ",".join(conditions), "seed": str(seed)},
+    )

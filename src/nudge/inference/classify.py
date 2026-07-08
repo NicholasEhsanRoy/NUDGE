@@ -1,21 +1,27 @@
-"""Map a fitted circuit to a ``MechanismClass``, with the abstention gates.
+"""Map fitted losses to a ``MechanismClass``, with the abstention gates.
 
-The gates, in order — fail-loud by construction:
+Two levels, both fail-loud:
 
-1. **no-effect** — the perturbed distribution is ≈ WT (distance below the effect
-   noise floor).
-2. **off-model — the linear-baseline / parsimony gate.** The mechanistic (switch)
-   model is *not warranted* unless it beats the linear baseline by **more than the
-   loss noise floor**. Because ``LinearEffect`` is a limiting case of Hill, the
-   more-flexible mechanistic model almost always fits ≥ linear, so without this
-   gate false positives are structural. This is what stops NUDGE inventing a
-   nonlinear switch when linear regression explains the data just as well —
-   catching the "linear circuit + saturating readout" and "marginal-overfit Hill"
-   decoys. Broadened to also cover poor absolute fit (off-target). Distinguished
-   by ``rationale``.
-3. **unresolved** — the best two switch hypotheses (threshold / gain / ceiling)
-   are within the loss noise floor: can't tell which.
-4. **threshold / gain / ceiling** — a clear winner.
+**Circuit level — the linear-baseline / parsimony gate** (``switch_detected``).
+Before attributing anything, ask whether the WT data contains a switch at all: the
+mechanistic model must beat the linear baseline on WT by **more than the loss noise
+floor**. Because ``LinearEffect`` is a limiting case of Hill, the more-flexible
+mechanistic model almost always fits ≥ linear, so without this gate false positives
+are structural. If it fails, there is no switch to attribute — every perturbation
+is ``off-model``. This catches the "linear circuit + saturating readout" and
+"marginal-overfit Hill" decoys at the right level (the whole dataset), and — unlike
+a per-perturbation version — does **not** misfire on genuine gain/ceiling reductions
+that make a *perturbed* condition look linear.
+
+**Per-perturbation** (``decide``), given a switch exists:
+1. **no-effect** — the perturbed distribution ≈ WT.
+2. **off-model** — even the best restricted fit leaves a large *absolute* residual
+   (off-target / wrong circuit).
+3. **unresolved** — the best two switch hypotheses are within the noise floor.
+4. **threshold / gain / ceiling** — the clear winner among the restricted fits.
+
+Design credit: the linear-baseline-as-primary-gate idea is the user's; the noise
+floor is the loss's own finite-sample scale (== "the margin survives uncertainty").
 """
 
 from __future__ import annotations
@@ -23,7 +29,7 @@ from __future__ import annotations
 from nudge.core.results import MechanismCall
 from nudge.core.vocabulary import MechanismClass
 
-__all__ = ["decide"]
+__all__ = ["decide", "switch_detected"]
 
 _PARAM_MECHANISM = {
     "K": MechanismClass.THRESHOLD,
@@ -32,22 +38,33 @@ _PARAM_MECHANISM = {
 }
 
 
+def switch_detected(
+    wt_mechanistic_loss: float, wt_linear_loss: float, *, noise_margin: float
+) -> bool:
+    """Linear-baseline parsimony gate (circuit level): does WT contain a switch?
+
+    ``True`` iff the mechanistic model beats the linear baseline on WT by more than
+    the loss noise floor — i.e. a nonlinear switch is warranted over linear regression.
+    """
+    return wt_mechanistic_loss < wt_linear_loss - noise_margin
+
+
 def decide(
     perturbation: str,
     param_losses: dict[str, float],
-    linear_loss: float,
     wt_distance: float,
     *,
     noise_margin: float,
     effect_margin: float,
+    off_model_loss: float,
 ) -> MechanismCall:
-    """Apply the abstention gates to fitted losses → a ``MechanismCall``.
+    """Attribute one perturbation to a ``MechanismClass`` (a switch is assumed present).
 
     ``param_losses`` maps each candidate parameter (``K``/``n``/``vmax``) to its
-    restricted-mechanistic fit loss; ``linear_loss`` is the linear-baseline fit;
-    ``wt_distance`` is the perturbed-vs-WT distributional distance; ``noise_margin``
-    is the loss noise floor (bootstrap std) and ``effect_margin`` the no-effect
-    floor.
+    restricted-mechanistic fit loss; ``wt_distance`` is the perturbed-vs-WT
+    distance; ``noise_margin`` the loss noise floor; ``effect_margin`` the no-effect
+    floor; ``off_model_loss`` the absolute residual above which even the best fit is
+    deemed off-model.
     """
     best_param = min(param_losses, key=param_losses.__getitem__)
     best = param_losses[best_param]
@@ -64,33 +81,23 @@ def decide(
             rationale=rationale,
         )
 
-    # 1. no-effect — the perturbation barely moved the distribution.
     if wt_distance < effect_margin:
         return call(MechanismClass.NO_EFFECT, 0.0, "distribution ~ WT (no effect)")
-
-    # 2. off-model — the linear-baseline / parsimony gate.
-    if best >= linear_loss - noise_margin:
+    if best > off_model_loss:
         return call(
             MechanismClass.OFF_MODEL,
             0.0,
-            "mechanistic fit does not beat the linear baseline beyond the noise "
-            "floor — no switch mechanism warranted",
+            "even the best mechanistic fit leaves a large residual (off-target)",
         )
-
-    # 3. unresolved — the top two switch hypotheses are within the noise floor.
     if runner_up - best < noise_margin:
         return call(
             MechanismClass.UNRESOLVED,
             0.0,
             "top two mechanisms within the loss noise floor — cannot resolve",
         )
-
-    # 4. a clear switch mechanism.
-    gap_vs_linear = (linear_loss - best) / max(linear_loss, 1e-9)
-    gap_vs_runner = (runner_up - best) / max(runner_up, 1e-9)
-    confidence = float(min(1.0, 2.0 * min(gap_vs_linear, gap_vs_runner)))
+    confidence = float(min(1.0, (runner_up - best) / max(runner_up, 1e-9)))
     return call(
         _PARAM_MECHANISM[best_param],
         confidence,
-        f"{best_param} beats the linear baseline and the runner-up beyond the floor",
+        f"{best_param} beats the runner-up beyond the loss noise floor",
     )
