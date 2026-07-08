@@ -19,11 +19,17 @@ create a commit in this repo.
    ```
 
    Name the exact model that did the work (e.g. `Claude Opus 4.8`). If a
-   different Claude model produced the change, credit that one instead.
+   different Claude model produced the change, credit that one instead — but
+   **only if you can verify which model ran** (see the honesty note below).
 
 2. **Write a real body for anything non-trivial**, and in it say briefly *what
    Claude actually did* (analysis, drafting, research, code) so the credit is
    specific and honest rather than boilerplate.
+
+3. **When your change alters current state, update the living docs in the same
+   commit** — `design/STATE.md`, `scripts/vv/FINDINGS.md`, `JUDGES_GUIDE.md`,
+   `README.md` "Status", `CHANGELOG.md`. See `CLAUDE.md` for which is which. Don't
+   let a doc outlive the thing it describes.
 
 ## Conventions
 
@@ -32,6 +38,13 @@ create a commit in this repo.
 - **Never fabricate co-authorship.** Only credit Claude for work Claude did. If a
   commit was written entirely by the human with no Claude involvement, the
   trailer is not required — honesty over ritual.
+- **Only name a model you can verify ran.** A subagent's `model:` override can
+  silently no-op — it once did (subagents launched with `model:"fable"` did *not*
+  run on Fable 5; docs and two commits wrongly credited "Claude Fable 5" before the
+  human caught it via usage quota). Never assert a specific model ran without
+  evidence: credit the model you can confirm (the main loop's), or describe the
+  work without naming a sub-model. The same holds for any claim that a tool/model
+  override took effect — verify, don't assume.
 - Only commit (and only push) when the user has asked you to.
 
 ## Example
