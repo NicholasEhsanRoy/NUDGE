@@ -53,7 +53,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[ci]" "ruff>=0.6" "pyright>=1.1.380"
+      - run: pip install -e ".[ci]" "ruff==0.15.20" "pyright==1.1.411"
       - name: Lint
         run: ruff check src tests scripts
       - name: Type-check

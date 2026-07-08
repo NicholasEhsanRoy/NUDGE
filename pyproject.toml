@@ -54,7 +54,9 @@ sim = []
 # Headless-safe test subset (anndata is already a core dep).
 ci = ["pytest>=7.0", "pytest-xdist", "pyyaml>=6.0"]
 # Full local development environment.
-dev = ["nudge-bio[ci,bio,mcp,ai]", "ruff>=0.6", "pyright>=1.1.380", "pre-commit", "build"]
+# pyright and ruff pinned exactly so local == CI (avoid "passes locally, fails CI"
+# when a fresh CI install picks up a stricter checker version).
+dev = ["nudge-bio[ci,bio,mcp,ai]", "ruff==0.15.20", "pyright==1.1.411", "pre-commit", "build"]
 
 [project.urls]
 Repository = "https://github.com/NicholasEhsanRoy/NUDGE"

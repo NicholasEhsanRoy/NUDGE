@@ -175,9 +175,9 @@ def generate_synthetic_perturbseq(
 
     obs = pd.DataFrame(
         {"condition": obs_condition, "true_mechanism": obs_mechanism},
-        index=[f"cell_{i}" for i in range(counts_matrix.shape[0])],
+        index=pd.Index([f"cell_{i}" for i in range(counts_matrix.shape[0])]),
     )
-    var = pd.DataFrame(index=list(gene_names))
+    var = pd.DataFrame(index=pd.Index(list(gene_names)))
     adata = ad.AnnData(X=counts_matrix, obs=obs, var=var)
     base = circuit.base_params()
     adata.uns["ground_truth"] = {
