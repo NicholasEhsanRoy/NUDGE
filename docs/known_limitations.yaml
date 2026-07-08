@@ -93,3 +93,27 @@ anomalies:
       The whole "fails safely" claim rests on this margin: too loose and marginal
       nonlinearities become false switches. NUDGE-DECOY-005 is the regression test that
       the calibrated margin_k (1.7) rejects a within-floor nonlinearity.
+
+  - anomaly_id: NUDGE-LIM-006
+    title: A nonlinear measurement readout is misattributed as a circuit switch
+    description: >-
+      NUDGE assumes an AFFINE reporter (Λ = base + scale·activity). A linear (non-switch)
+      circuit observed through a NONLINEAR reporter — saturating or sigmoidal (Hill h≥1) —
+      produces a skewed / pseudo-bimodal count distribution that the affine-readout switch
+      model can only explain by bending the circuit. NUDGE cannot structurally distinguish
+      readout ultrasensitivity from circuit ultrasensitivity, because only the composition
+      readout∘circuit is observed. Verified: at strong readout nonlinearity (h≈6) plus a
+      strong perturbation, NUDGE emits a CONFIDENT FALSE POSITIVE (variably threshold /
+      gain / ceiling across seeds) even at adequate fit budget. Higher fit budget strongly
+      mitigates but does not eliminate it (at fit()'s default 256/300 budget it is fooled
+      broadly; at 384/400 most configs recover correct abstention). This BOUNDS the
+      "fails safely" guarantee: it holds under an approximately-affine readout.
+      Witnessed by generate_readout_nonlinearity_decoy + tests/verification (xfail).
+    severity: major
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      This is the sharpest bound on the core fail-safe guarantee: under a strongly
+      nonlinear reporter NUDGE can be confidently wrong, not merely abstain. Mitigation
+      requires a calibrated (non-affine) Readout in the forward model or an independent
+      reporter-linearity control (e.g. a constitutive-reporter calibration that anchors
+      the readout separately from the circuit) — under investigation; not in this release.

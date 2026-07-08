@@ -281,3 +281,54 @@ generator check (`tests/data/test_telegraph.py`); limitation `NUDGE-LIM-001`.
 > Takeaway: **bimodal ≠ switch**, and NUDGE encodes that distinction structurally (the
 > parsimony gate), not by eyeballing a histogram. The same reasoning underwrites trusting
 > a *positive* call on real bimodal data.
+
+## Decoy battery — the gates it now covers
+
+Five passing cases spanning three gates, plus one documented-limitation witness:
+
+| Decoy | Failure mode faked | Gate exercised | Verdict |
+|---|---|---|---|
+| 001 telegraph | noise-induced bimodality | parsimony | off-model ✓ |
+| 002 mixture | cell-type / doublet mixture | parsimony | off-model ✓ |
+| 003 dropout | technical zero-peak | parsimony | off-model ✓ |
+| 004 dead-guide | null perturbation on a real switch | no-effect | no-effect ✓ |
+| 005 marginal Hill | within-floor nonlinearity | parsimony **margin** | off-model ✓ |
+| **006 nonlinear readout** | readout ultrasensitivity | — | **fooled → NUDGE-LIM-006** |
+
+All five passing cases hold on **both** fit paths, and — audited explicitly — at fit()'s
+*default* budget (256/300) as well as the battery's 384/400. The abstention is **not** a
+budget artifact; the only budget-sensitive case is the genuine readout confound (006).
+
+## NUDGE-LIM-006 — a nonlinear readout is misattributed as a circuit switch (verified bound)
+
+The sharpest bound we've found on the fail-safe guarantee, and a case study in verifying
+an AI collaborator's claim. An autonomous spike proposed decoy 006 (a linear circuit read
+through a Hill reporter) and reported NUDGE is *fooled* into a confident false positive.
+**Independent reproduction changed the finding twice:**
+1. At the spike's setup I first got *off-model* (NUDGE declines) — a contradiction.
+2. Reconciling, the difference was **fit budget**: the spike used fit()'s default
+   (n_cells=256, steps=300) → fooled; at 384/400 the *same data* correctly abstains. So
+   the false positive is partly a **budget** effect the spike hadn't isolated.
+3. But a seed sweep at the *higher* budget showed it is **not** purely budget: a steep
+   readout (Hill h≈6) + a strong perturbation still fools NUDGE into **ceiling** (2/3
+   seeds). So the limitation is **real and structural**, merely **budget-mitigated**.
+
+**The mechanism (real):** NUDGE fixes the readout as affine, so it cannot tell whether
+ultrasensitivity lives in the *circuit* or the *measurement* — only the composition
+readout∘circuit is observed. A sigmoidal reporter on a broad input yields a skewed,
+pseudo-bimodal distribution the affine-readout switch model explains by bending the
+circuit; a perturbation that shifts the sigmoid on-fraction is then attributed to a
+mechanism (variably threshold / gain / ceiling across seeds — it fails *unreliably*).
+
+**Disposition (honest):** 006 is **not** a passing decoy (asserting NUDGE declines would
+be false); it is `NUDGE-LIM-006` + an **xfail witness** (`generate_readout_nonlinearity_decoy`)
+that asserts the *desired* abstention and currently xfails — so a future fix flips it to a
+failure and forces a docs update. This makes the claim precise: **"fails safely" holds
+under an approximately-affine readout.**
+
+**Turning the bound into a feature (in progress):** an identifiability spike is testing
+whether jointly fitting the circuit *and* readout nonlinearities can separate them, and
+whether a **constitutive-reporter control** (a calibration population that drives the
+reporter independent of the circuit) anchors the readout and breaks the degeneracy — which
+would be both a candidate NUDGE capability and a concrete experimental-design suggestion to
+the field.

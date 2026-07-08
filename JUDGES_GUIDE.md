@@ -89,6 +89,21 @@ threshold). We also caught and fixed a subtle integration bug (restricted fits m
 start from the nominal, not the distorted-WT, circuit). Nothing was asserted that
 wasn't measured.
 
+**A decoy battery that earns the "fails safely" claim, and a bound we surface rather
+than hide.** Five adversarial negatives (`data/decoys.py`) span three gates —
+noise-induced bimodality, cell-type/doublet mixtures, dropout zero-peaks (parsimony
+gate); a dead-guide null (no-effect gate); a marginal Hill (margin calibration) — each a
+green CI test where NUDGE must *decline*, verified on both fit paths and at the default
+budget. The sixth case is the honest one: `NUDGE-LIM-006` — a **nonlinear reporter** on a
+linear circuit *does* fool NUDGE (it fixes the readout as affine, so it can't tell circuit
+ultrasensitivity from measurement ultrasensitivity). We keep it as a strict-`xfail`
+witness, not a hidden blind spot, precisely bounding the guarantee: *fails safely under an
+approximately-affine readout.* Its discovery is also a **case study in verifying an AI
+collaborator** — an autonomous spike claimed the failure; independent reproduction
+reconciled it *twice* (a fit-budget confound, then confirmed a residual structural
+failure) before we believed and documented it. We're now spiking whether a
+constitutive-reporter control can turn that limitation into a capability.
+
 ## 4. Demo (30%) — reproducible science you can run
 
 The demo today is **reproducible, trustworthy findings** rather than a polished UI —
