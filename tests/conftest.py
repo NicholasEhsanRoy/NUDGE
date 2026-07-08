@@ -10,7 +10,6 @@ knobs are no-ops on CPU.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 
@@ -19,20 +18,13 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.4")
 os.environ.setdefault("XLA_FLAGS", "--xla_gpu_autotune_level=0")
 
-# Persistent compile cache.
-_cache = Path(
-    os.environ.get(
-        "JAX_COMPILATION_CACHE_DIR",
-        str(Path.home() / ".cache" / "jax_compilation_cache"),
-    )
-)
-_cache.mkdir(parents=True, exist_ok=True)
-
+# NOTE: no persistent on-disk compilation cache. MIME's conftest enables one for
+# speed, but the shared ~/.cache/jax_compilation_cache served corrupted
+# executables for jax.random.poisson/gamma here — cold compilation was correct,
+# but a warm cache load returned the -1 failure sentinel, flaking the NB-count
+# tests. In-process compilation caching still makes a single run fast; we just
+# don't persist across runs. Correctness beats cross-run reuse for a ~3 s suite.
 import jax  # noqa: E402 — must follow the env setup above
-
-jax.config.update("jax_compilation_cache_dir", str(_cache))
-jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
-jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 
 
 @pytest.fixture(autouse=True)
