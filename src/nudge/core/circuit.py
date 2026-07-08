@@ -26,6 +26,7 @@ from dataclasses import dataclass, replace
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 from nudge.mechanisms.integrators.saturating import saturating_production
@@ -161,3 +162,78 @@ class Circuit:
         """The same topology with every edge swapped to ``LinearEffect``."""
         edges = tuple(replace(e, effect="linear") for e in self.edges)
         return Circuit(self.species, edges)
+
+    def fixed_points(self) -> list[float] | None:
+        """Steady-state activity fixed points — **only** for a 1-species self-switch.
+
+        Decouples the topology-specific saddle math from the fit (the fit's transition
+        mode needs the intermediate/unstable fixed point, but should not itself know
+        how to find one — see ``design/STATE.md`` §6). For a single self-activating gene
+        this returns the sorted real roots of ``basal + vmax·x^n/(K^n+x^n) − decay·x``:
+        ``[low]`` when monostable, ``[low, saddle, high]`` when bistable. For any other
+        topology (N-species, non-self, non-Hill) it returns ``None`` — there is no
+        general N-D saddle finder yet, so the caller falls back to safe abstention
+        rather than fabricating a fixed point. Never raises (returns ``None`` on any
+        numerical failure), so it is safe to call inside an optimizer step.
+        """
+        if self.n_species != 1 or self.n_edges != 1:
+            return None
+        e, s = self.edges[0], self.species[0]
+        if e.source != 0 or e.target != 0 or e.effect != "hill_activation":
+            return None
+        try:
+            return _self_activation_roots(
+                basal=s.basal, decay=s.decay, K=e.K, n=e.n, vmax=e.vmax
+            )
+        except Exception:
+            return None
+
+    def transition_state(self) -> float | None:
+        """The intermediate (unstable saddle) activity when bistable, else ``None``.
+
+        ``fixed_points()[1]`` iff there are exactly three roots. This is where graded
+        cells pile up when a switch loses cooperativity (a gain reduction), so it is the
+        centre of the fit's transition mixture mode. ``None`` (monostable or N-species)
+        means "no transition mode" — the fit collapses gracefully and the gain gate
+        abstains.
+        """
+        roots = self.fixed_points()
+        if roots is None or len(roots) != 3:
+            return None
+        return roots[1]
+
+
+def _self_activation_roots(
+    *, basal: float, decay: float, K: float, n: float, vmax: float, n_grid: int = 2000
+) -> list[float]:
+    """Real roots of ``f(x) = basal + vmax·x^n/(K^n+x^n) − decay·x`` on ``x ≥ 0``.
+
+    Grid sign-change detection + bisection (real roots only — no complex/duplicate
+    artifacts), deduped. Returns a sorted list (1 root monostable, 3 bistable).
+    """
+
+    def f(x: np.ndarray) -> np.ndarray:
+        return basal + vmax * x**n / (K**n + x**n) - decay * x
+
+    hi = 1.3 * (basal + vmax) / decay
+    xs = np.linspace(1e-6, hi, n_grid)
+    fx = f(xs)
+    roots: list[float] = []
+    for i in range(len(xs) - 1):
+        if fx[i] == 0.0:
+            roots.append(float(xs[i]))
+        elif fx[i] * fx[i + 1] < 0.0:
+            a, b, fa = xs[i], xs[i + 1], fx[i]
+            for _ in range(60):
+                m = 0.5 * (a + b)
+                fm = float(f(np.array([m]))[0])
+                if fa * fm <= 0.0:
+                    b = m
+                else:
+                    a, fa = m, fm
+            roots.append(0.5 * (a + b))
+    deduped: list[float] = []
+    for r in sorted(roots):
+        if not deduped or abs(r - deduped[-1]) > 1e-4:
+            deduped.append(float(r))
+    return deduped

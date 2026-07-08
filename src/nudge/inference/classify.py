@@ -29,7 +29,7 @@ from __future__ import annotations
 from nudge.core.results import MechanismCall
 from nudge.core.vocabulary import MechanismClass
 
-__all__ = ["decide", "switch_detected"]
+__all__ = ["decide", "decide_with_transition", "switch_detected"]
 
 _PARAM_MECHANISM = {
     "K": MechanismClass.THRESHOLD,
@@ -101,3 +101,64 @@ def decide(
         confidence,
         f"{best_param} beats the runner-up beyond the loss noise floor",
     )
+
+
+def decide_with_transition(
+    perturbation: str,
+    param_losses: dict[str, float],
+    wt_distance: float,
+    *,
+    noise_margin: float,
+    effect_margin: float,
+    off_model_loss: float,
+    transition_weight: float | None,
+    n_species: int,
+    gain_wtrans_tau: float = 0.5,
+) -> MechanismCall:
+    """``decide`` plus the **saddle transition-mode gain gate** (multi-basin path).
+
+    A gain reduction destroys a switch's cooperativity, collapsing it toward a single
+    *intermediate* fixed point — graded cells the two basins cannot hold but the
+    transition-at-saddle mode can. So when a restricted free-``n`` fit is *forced* to
+    spend a large transition weight, that is a specific, seed-robust gain signature
+    (measured: ``w_trans`` ≈ 0.9 for gain vs ≈ 0.01 for threshold/ceiling/no-effect;
+    ``FINDINGS.md`` §T0.5-5) — and it is decisive where the raw loss argmin ties
+    thin (the gain/ceiling degeneracy of the 2-mode model).
+
+    Fail-safe by construction:
+    - Runs **after** the no-effect and off-model gates (via ``decide``), so it can never
+      promote a WT-like or badly-fit condition to GAIN.
+    - Fires **only** for a genuine 1-species saddle (``n_species == 1`` and a real
+      ``transition_weight``). For N-species there is no saddle finder, so it defers to
+      the honest single-basin abstention — the degeneracy is isolated to the case we
+      have proven (FM2).
+    - ``gain_wtrans_tau`` sits in a wide verified margin (0.12 ↔ 0.87); tunable.
+    """
+    base = decide(
+        perturbation, param_losses, wt_distance,
+        noise_margin=noise_margin,
+        effect_margin=effect_margin,
+        off_model_loss=off_model_loss,
+    )
+    abstained_low = base.mechanism in (
+        MechanismClass.NO_EFFECT,
+        MechanismClass.OFF_MODEL,
+    )
+    gate_fires = (
+        n_species == 1
+        and transition_weight is not None
+        and transition_weight > gain_wtrans_tau
+        and not abstained_low
+    )
+    if gate_fires:
+        assert transition_weight is not None
+        return MechanismCall(
+            perturbation=perturbation,
+            mechanism=MechanismClass.GAIN,
+            confidence=float(min(1.0, transition_weight)),
+            rationale=(
+                f"graded transition-mode signature at the saddle "
+                f"(w_trans={transition_weight:.2f} > {gain_wtrans_tau}) → gain"
+            ),
+        )
+    return base

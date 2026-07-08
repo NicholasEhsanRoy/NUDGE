@@ -31,7 +31,7 @@ from nudge.core.results import MechanismCall, MechanismMap
 from nudge.core.vocabulary import POSITIVE_CLASSES, MechanismClass
 from nudge.data.ingest import check_counts
 from nudge.data.synthetic import _per_cell_params
-from nudge.inference.classify import decide, switch_detected
+from nudge.inference.classify import decide, decide_with_transition, switch_detected
 from nudge.inference.losses import energy_distance, energy_distance_weighted
 from nudge.mechanisms.readout import Readout
 
@@ -41,6 +41,7 @@ __all__ = [
     "fit_multibasin",
     "fit_multibasin_parameters",
     "fit_parameters",
+    "fit_transition_parameters",
 ]
 
 #: A parameter to optimize: ``(scope, index, name)`` — e.g. ``("edge", 0, "K")``.
@@ -295,6 +296,167 @@ def fit_multibasin_parameters(
     return recovered, p_hat, history
 
 
+def _sim_transition(
+    readout: Readout,
+    key: Array,
+    center: Array,
+    log_width: Array,
+    n_cells: int,
+    n_species: int,
+    *,
+    dispersion: float,
+    library_sigma: float,
+) -> Array:
+    """Transition-mode sample: activity spread lognormally about the saddle ``center``.
+
+    A **scalar centre + strictly-positive lognormal width** (``exp(log_width)``) — so
+    there is no covariance matrix to collapse when a fit wanders toward the bifurcation
+    (the FM1 NaN risk). The centre is a stop-gradient constant recomputed each step.
+    """
+    k_a, k_lib, k_obs = jax.random.split(key, 3)
+    width = jnp.exp(log_width)
+    act = center * jnp.exp(width * jax.random.normal(k_a, (n_cells, n_species)))
+    expression = readout.expression(act)
+    library = jnp.exp(library_sigma * jax.random.normal(k_lib, (n_cells, 1)))
+    mean = library * expression
+    nb_var = mean + dispersion * mean**2
+    noise = jnp.sqrt(nb_var + 1e-8) * jax.random.normal(k_obs, mean.shape)
+    return jnp.maximum(mean + noise, 0.0)
+
+
+def fit_transition_parameters(
+    adata: Any,
+    circuit: Circuit,
+    free: list[FreeParam],
+    *,
+    condition: str = "WT",
+    readout: Readout | None = None,
+    n_cells: int = 256,
+    steps: int = 300,
+    learning_rate: float = 0.05,
+    extrinsic_sigma: float = 0.3,
+    dispersion: float = 0.1,
+    library_sigma: float = 0.2,
+    transform: str = "log1p",
+    high_ic: float = 10.0,
+    width_init: float = 0.35,
+    seed: int = 0,
+) -> tuple[dict[FreeParam, float], float, list[float]]:
+    """Three-mode fit: LOW + HIGH basins + a **TRANSITION mode at the ODE saddle**.
+
+    Extends the two-basin mixture with a third component centred on the unstable
+    intermediate fixed point (``circuit.transition_state``), recomputed from the
+    current kinetics each step and passed in as a stop-gradient constant. Mixture
+    weights are a softmax over three logits; the transition width is fitted in
+    log-space. Returns the recovered kinetics, the **effective transition weight
+    ``w_trans``** (the gain-gate probe), and the loss history.
+
+    Graceful at the bifurcation (FM1): when the circuit is monostable
+    (``transition_state`` is ``None``) the transition weight is **masked to zero** and
+    the mix reduces to the two basins — no fabricated saddle ever enters a gradient.
+    When ``circuit`` has no 1-D saddle at all (N-species; ``fixed_points`` is ``None``),
+    ``w_trans`` stays ~0 throughout and the gain gate abstains (FM2).
+    """
+    check_counts(adata)
+    if readout is None:
+        readout = Readout.identity(circuit.n_species)
+
+    mask = np.asarray(adata.obs["condition"] == condition)
+    raw = jnp.asarray(np.asarray(adata.X, dtype=np.float32)[mask])
+    observed = _apply_transform(raw, transform)
+    n_species = circuit.n_species
+    n_free = len(free)
+
+    log_kin0 = jnp.log(jnp.array([_param_value(circuit, f) for f in free]))
+    logits0 = jnp.zeros(3)  # equal thirds
+    log_width0 = jnp.asarray(float(np.log(width_init)))
+    theta = jnp.concatenate([log_kin0, logits0, log_width0[None]])
+
+    optimizer = optax.adam(learning_rate)
+    opt_state = optimizer.init(theta)
+
+    def loss_fn(vec: Array, key: Array, center: Array, valid: Array) -> Array:
+        log_vals = vec[:n_free]
+        logits = vec[n_free : n_free + 3]
+        log_width = vec[n_free + 3]
+        w = jax.nn.softmax(logits)
+        # Mask the transition weight to 0 when no saddle exists, then renormalize.
+        w_trans = w[2] * valid
+        total = w[0] + w[1] + w_trans + 1e-8
+        k_ext, k_pick, k_low, k_high, k_tr = jax.random.split(key, 5)
+        params = _per_cell_params(circuit, k_ext, n_cells, extrinsic_sigma)
+        for f, value in zip(free, jnp.exp(log_vals), strict=True):
+            _override(params, f, value)
+        x0_low = jnp.zeros((n_cells, n_species))
+        x0_high = jnp.full((n_cells, n_species), high_ic)
+        sim_low = _simulate_basin(
+            circuit, params, readout, k_low, x0_low,
+            dispersion=dispersion, library_sigma=library_sigma,
+        )
+        sim_high = _simulate_basin(
+            circuit, params, readout, k_high, x0_high,
+            dispersion=dispersion, library_sigma=library_sigma,
+        )
+        sim_tr = _sim_transition(
+            readout, k_tr, center, log_width, n_cells, n_species,
+            dispersion=dispersion, library_sigma=library_sigma,
+        )
+        sim = jnp.concatenate(
+            [
+                _apply_transform(sim_low, transform),
+                _apply_transform(sim_high, transform),
+                _apply_transform(sim_tr, transform),
+            ],
+            axis=0,
+        )
+        weights = jnp.concatenate(
+            [
+                jnp.full((n_cells,), w[0] / total),
+                jnp.full((n_cells,), w[1] / total),
+                jnp.full((n_cells,), w_trans / total),
+            ]
+        )
+        idx = jax.random.choice(k_pick, observed.shape[0], (n_cells,), replace=False)
+        return energy_distance_weighted(sim, weights, observed[idx])
+
+    @jax.jit
+    def step(
+        vec: Array, state: optax.OptState, key: Array, center: Array, valid: Array
+    ) -> tuple[Array, optax.OptState, Array]:
+        loss, grad = jax.value_and_grad(loss_fn)(vec, key, center, valid)
+        updates, state = optimizer.update(grad, state)
+        new_vec = jnp.asarray(optax.apply_updates(vec, updates))
+        return new_vec, state, loss
+
+    def _saddle(vec: Array) -> tuple[Array, Array]:
+        # Recompute the saddle from the current concrete kinetics (numpy, per step).
+        vals = np.exp(np.asarray(vec[:n_free]))
+        cur = _updated_circuit(
+            circuit, {f: float(v) for f, v in zip(free, vals, strict=True)}
+        )
+        state = cur.transition_state()
+        if state is None:
+            return jnp.asarray(1.0), jnp.asarray(0.0)  # safe centre, masked off
+        return jnp.asarray(float(state)), jnp.asarray(1.0)
+
+    key = jax.random.key(seed)
+    history: list[float] = []
+    for _ in range(steps):
+        key, sub = jax.random.split(key)
+        center, valid = _saddle(theta)
+        theta, opt_state, loss = step(theta, opt_state, sub, center, valid)
+        history.append(float(loss))
+
+    recovered = {
+        f: float(v) for f, v in zip(free, jnp.exp(theta[:n_free]), strict=True)
+    }
+    w_final = np.asarray(jax.nn.softmax(theta[n_free : n_free + 3]))
+    _, valid_final = _saddle(theta)
+    w_trans_eff = float(w_final[2]) * float(valid_final)
+    total = float(w_final[0]) + float(w_final[1]) + w_trans_eff + 1e-8
+    return recovered, w_trans_eff / total, history
+
+
 def _condition_counts(adata: Any, condition: str) -> Array:
     mask = np.asarray(adata.obs["condition"] == condition)
     return jnp.asarray(np.asarray(adata.X, dtype=np.float32)[mask])
@@ -471,28 +633,34 @@ def fit_multibasin(
     margin_k: float = 1.7,
     off_model_k: float = 5.0,
     high_ic: float = 10.0,
+    transition_mode: bool = False,
+    gain_wtrans_tau: float = 0.5,
     seed: int = 0,
 ) -> MechanismMap:
     """``fit`` with a **basin-occupancy latent** — for emergent-bistable circuits.
 
-    ⚠️ **EXPERIMENTAL — not fail-safe. Do not use for production attribution.** The
-    two-basin mixture *represents* emergent bistability well (10× lower loss than the
-    single-basin ``fit``; ``p`` recovers), but **attribution degenerates**: a two-mode
-    model conflates a *gain* reduction (which makes the switch graded — intermediate
-    cells the two modes can't hold) with a *ceiling* reduction (which just lowers the
-    high mode), so it can emit a **confident wrong mechanism** where single-basin
-    ``fit`` correctly abstains (``FINDINGS.md`` §T0.5-4). Kept as a validated
-    *representation* building block and a documented negative; the Tier-0.5 guard stays
-    on single-basin ``fit``. A three-mode (saddle) extension is under investigation.
-
     Orchestration mirrors :func:`fit` (WT parsimony gate → per-perturbation restricted
-    fits → ``classify.decide``), but the mechanistic fits use
-    :func:`fit_multibasin_parameters`, solving from BOTH basins (low ``x0 = 0`` and high
-    ``x0 = high_ic``) and fitting occupancy ``p``. Per condition ``p`` is estimated once
-    (all kinetics free) then PINNED for the restricted fits, so the kinetic params
-    discriminate on residual shape rather than re-absorbing the occupancy change; the
-    linear baseline stays single-basin (a linear circuit is monostable). Built alongside
-    :func:`fit`, which is unchanged.
+    fits → classify), but the mechanistic fits solve from BOTH basins (low ``x0 = 0``
+    and high ``x0 = high_ic``), so the deterministic model can *represent* an emergent-
+    bistable population a single ``x0 = 0`` solve cannot. The linear baseline stays
+    single-basin (a linear circuit is monostable). Built alongside :func:`fit`, which
+    is unchanged.
+
+    **``transition_mode`` — the saddle gain gate (the fail-safe fix).** With the plain
+    two-basin mixture, attribution *degenerates*: a gain reduction makes the switch
+    graded — intermediate cells the two modes can't hold — so the model conflates it
+    with a ceiling reduction and can be confidently wrong (``FINDINGS.md`` §T0.5-4).
+    ``transition_mode=True`` adds a third mixture mode at the ODE's unstable saddle
+    (:func:`fit_transition_parameters`, via ``circuit.transition_state``): the
+    transition weight a restricted free-``n`` fit is *forced* to spend is a clean,
+    seed-robust gain detector (``w_trans`` ≈ 0.9 gain vs ≈ 0.01 else), gated in
+    ``classify.decide_with_transition``. This **fixes the gain/ceiling degeneracy for
+    1-species self-activation switches while staying never-wrong** (§T0.5-5). It is
+    isolated by ``circuit.n_species == 1``: N-species circuits have no saddle finder,
+    so the gate defers to honest abstention (FM2). Without ``transition_mode`` the
+    two-basin path is EXPERIMENTAL / not-fail-safe — prefer ``transition_mode=True``
+    for 1-species emergent-bistable workloads, or single-basin :func:`fit` otherwise.
+    ``gain_wtrans_tau`` (default 0.5) sits in a wide verified margin (0.12 ↔ 0.87).
     """
     check_counts(adata)
     if readout is None:
@@ -545,22 +713,52 @@ def fit_multibasin(
             },
         )
 
-    # 3. A switch exists — attribute each perturbation via restricted multi-basin fits
-    #    (each frees one kinetic param + the occupancy p, which absorbs mode shifts).
+    # 3. A switch exists — attribute each perturbation via restricted fits.
+    mb_t: dict[str, Any] = {
+        "readout": readout, "steps": steps, "n_cells": n_cells, "high_ic": high_ic,
+    }
     key = jax.random.key(seed + 100)
     calls = []
     for i, condition in enumerate(conditions):
         key, k_dist = jax.random.split(key)
         perturbed = _condition_counts(adata, condition)
         wt_distance = _log1p_distance(perturbed, wt_counts, n_cells, k_dist)
-        # Estimate this condition's basin occupancy p* once (all kinetics free), then
-        # PIN it for the restricted fits so the kinetic params discriminate on residual
-        # shape rather than re-absorbing the occupancy change (the T0.5-4 degeneracy).
+        param_losses: dict[str, float] = {}
+        if transition_mode:
+            # Three-mode restricted fits: each frees one kinetic + the 3 mixture
+            # weights. The free-n fit's transition weight is the gain-gate probe.
+            # Start from the NOMINAL circuit, not the WT-recovered one: the multibasin
+            # WT fit distorts the kinetics (n inflates as the 2 basins compensate),
+            # which shifts the saddle and corrupts the w_trans signal. The saddle
+            # reference must be the un-distorted nominal switch.
+            w_trans_n: float | None = None
+            for j, param in enumerate(("K", "n", "vmax")):
+                _, w_tr, history = fit_transition_parameters(
+                    adata, circuit, [("edge", target_edge, param)],
+                    condition=condition, seed=seed + 10 * (i + 1) + j, **mb_t,
+                )
+                param_losses[param] = _loss_stats(history)[0]
+                if param == "n":
+                    w_trans_n = w_tr
+            calls.append(
+                decide_with_transition(
+                    condition, param_losses, wt_distance,
+                    noise_margin=noise_margin,
+                    effect_margin=effect_margin,
+                    off_model_loss=off_model_loss,
+                    transition_weight=w_trans_n,
+                    n_species=circuit.n_species,
+                    gain_wtrans_tau=gain_wtrans_tau,
+                )
+            )
+            continue
+        # Two-basin path: estimate occupancy p* once (all kinetics free), then PIN it
+        # for the restricted fits so kinetics discriminate on residual shape rather than
+        # re-absorbing the occupancy change (the T0.5-4 degeneracy — EXPERIMENTAL).
         _, p_star, _ = fit_multibasin_parameters(
             adata, wt_circuit, wt_free,
             condition=condition, seed=seed + 10 * (i + 1), **mb,
         )
-        param_losses: dict[str, float] = {}
         for j, param in enumerate(("K", "n", "vmax")):
             _, _p, history = fit_multibasin_parameters(
                 adata, wt_circuit, [("edge", target_edge, param)],

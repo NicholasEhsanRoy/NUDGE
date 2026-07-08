@@ -187,8 +187,70 @@ stays on single-basin `fit` (never wrong). Single-basin trades attribution for
 conservative abstention and keeps the fail-safe guarantee; multi-basin represents more but
 can be confidently wrong — the classic sensitivity/safety trade, now measured.
 
-**Next (under investigation).** Add a **third "transition" mode at the unstable saddle**
-(the ODE has an unstable fixed point exactly between the two stable basins). A gain
-reduction should pile intermediate cells near the saddle (raising a `p_transition` weight)
-while a ceiling reduction should not — a candidate signal to break the gain/ceiling
-degeneracy. An isolated subagent is prototyping this on a worktree copy.
+**Next → resolved in T0.5-5.** Add a **third "transition" mode at the unstable saddle** —
+a gain reduction piles intermediate cells near the saddle while a ceiling reduction does
+not, a candidate signal to break the degeneracy. Prototyped by a Fable-5 subagent, then
+integrated and verified (T0.5-5).
+
+## T0.5-5. The saddle transition-mode gain gate — degeneracy BROKEN, fail-safe
+
+The user's insight: a two-fixed-mode mixture has nowhere to put the *intermediate* cells
+a gain reduction creates, but the ODE has a third relevant point — the **unstable saddle**
+between the basins. Adding a transition mode there breaks the T0.5-4 degeneracy.
+
+**Mechanistic root (why it must work).** Under the *true* perturbed kinetics the switch
+changes regime: a gain reduction (n: 6→1.2) **collapses bistability to a single
+intermediate fixed point at 1.116** — right where the WT saddle sits (0.975) — so gain
+data is *graded*, centred on the saddle. Threshold (K·3) and ceiling (vmax·0.3) instead go
+monostable-**low** (0.050). So only a gain reduction fills the saddle region.
+
+**The discriminator (verified, fail-safe).** A restricted **free-`n`** three-mode fit is
+*forced* to spend transition-mode weight to represent graded data. Measured `w_trans`
+(free-n) across seeds 0–3, all four mechanism classes:
+
+| condition | free-n `w_trans` (seeds 0–3) | mean |
+|---|---|---|
+| no-effect (WT) | 0.095 / 0.073 / 0.121 / 0.118 | 0.10 |
+| threshold | 0.010 / 0.010 / 0.010 / 0.010 | 0.01 |
+| ceiling | 0.009 / 0.010 / 0.010 / 0.010 | 0.01 |
+| **gain** | **0.871 / 0.890 / 0.873 / 0.937** | **0.89** |
+
+**Only gain exceeds ~0.12** — a τ=0.5 gate has a 0.12↔0.87 margin and misfires on
+nothing (verified independently in-codebase, no NaNs across 80+ fits).
+
+**End-to-end result.** `fit_multibasin(transition_mode=True)` **recovers `gai→gain` at all
+four seeds — including the notorious seed 2** where single-basin `fit` abstains and the
+2-basin model was confidently wrong (`gai→ceiling`) — with **zero wrong positives**;
+threshold/ceiling safely abstain (`off-model`). This is fail-safe attribution on emergent
+bistability. Guarded by `tests/verification/test_stochastic_inverse_crime.py`.
+
+**Fail-safe engineering (the failure modes we designed against).** The user flagged two;
+we added four more:
+- **FM1 bifurcation-collapse NaN:** the transition sample is a scalar-centre + strictly-
+  positive lognormal width (no covariance to collapse); when a fit wanders monostable the
+  transition weight is *masked to 0* (`trans_valid`) so no fabricated saddle enters a
+  gradient. Zero NaNs observed.
+- **FM2 N-D saddle:** decoupled onto `Circuit.fixed_points`/`transition_state` (1-D
+  root-find for a self-activation switch; `None` for N-species). The gate is guarded by
+  `n_species == 1`; N-species defers to honest single-basin abstention — the fix ships for
+  the 1-D case we proved, and crashes on nothing (verified: a 2-species fit runs, gate
+  inert).
+- **FM3 off-model / FM5 no-effect:** the gate runs *after* those gates (`decide_with_transition`),
+  so a badly-fit or WT-like condition can never be promoted to GAIN.
+- **FM4 which probe:** the gate reads the **free-`n`** fit's `w_trans` specifically — free-K
+  overlaps (gain 0.45 vs ceiling 0.17), free-n is clean (0.89 vs 0.01).
+- **FM6:** `gain_wtrans_tau` is a parameter (default 0.5) in a wide margin; the root-finder
+  never raises (returns `None` on any failure). A subtle integration bug also surfaced and
+  was fixed: the restricted fits must start from the **nominal** circuit, not the WT-
+  recovered one (the 2-basin WT fit distorts `n`, shifting the saddle).
+
+**Honest limits.** Verified for a 1-species self-activation switch at a strong gain factor
+(n·0.2); the τ and the gain SIGNATURE are calibrated there, not yet swept over milder
+factors or other 1-D circuits. Threshold/ceiling still abstain on this data (the fix is
+specifically for the gain/ceiling *confusion*, not K/vmax recovery). N-D saddle finding
+(mutual-inhibition toggle switches) is future work — a natural next subagent spike.
+
+> The arc, all in the git history: single-basin abstains (safe) → 2-basin represents but
+> misclassifies (T0.5-4) → a user hypothesis (saddle) scoped by a Fable-5 spike →
+> integrated with six anticipated failure modes → fail-safe gain attribution on emergent
+> bistability. The crown-jewel fail-safe guarantee was extended, not compromised.

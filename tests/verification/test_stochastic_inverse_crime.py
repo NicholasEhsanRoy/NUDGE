@@ -30,7 +30,7 @@ from nudge.core.circuit import Circuit, EdgeDef, SpeciesDef
 from nudge.core.vocabulary import POSITIVE_CLASSES, MechanismClass
 from nudge.data.stochastic import generate_stochastic_perturbseq
 from nudge.data.synthetic import PerturbationSpec
-from nudge.inference.fit import fit
+from nudge.inference.fit import fit, fit_multibasin
 
 pytestmark = pytest.mark.verification
 
@@ -92,4 +92,29 @@ def test_stochastic_fit_never_misclassifies() -> None:
             assert call.mechanism is _TRUE[call.perturbation], (
                 f"{call.perturbation}: emitted WRONG positive {call.mechanism.value} "
                 f"(true = {_TRUE[call.perturbation].value}) — fail-safe violated"
+            )
+
+
+@pytest.mark.slow
+def test_saddle_transition_recovers_gain_never_wrong() -> None:
+    # The saddle gain gate (FINDINGS §T0.5-5): fit_multibasin(transition_mode=True)
+    # adds a transition mode at the ODE saddle, whose free-n weight is a fail-safe gain
+    # detector. It must RECOVER gain on seed 2 — the exact seed where single-basin fit
+    # abstains and the 2-basin model was confidently WRONG (gain→ceiling) — while never
+    # assigning any perturbation the wrong positive mechanism.
+    adata = generate_stochastic_perturbseq(
+        _self_activation_switch(), _movers(), n_cells_per_condition=3000, seed=2
+    )
+    mm = fit_multibasin(
+        adata, _self_activation_switch(),
+        n_cells=384, steps=400, margin_k=1.7, transition_mode=True, seed=0,
+    )
+    calls = {c.perturbation: c.mechanism for c in mm.calls}
+    # The headline: gain is recovered on the notorious seed.
+    assert calls["gai"] is MechanismClass.GAIN
+    # Fail-safe: nothing is ever assigned the wrong positive mechanism.
+    for pert, mech in calls.items():
+        if mech in POSITIVE_CLASSES:
+            assert mech is _TRUE[pert], (
+                f"{pert}: WRONG positive {mech.value} (true {_TRUE[pert].value})"
             )

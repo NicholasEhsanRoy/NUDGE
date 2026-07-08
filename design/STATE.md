@@ -129,15 +129,23 @@ fit → can misclassify (the fail-safe boundary is topology). See `FINDINGS.md`
 §Tier-0.5. **Deferred follow-ons:** the To & Maheshri bimodality-without-bistability
 *decoy* (needs a telegraph/promoter mechanism + a short lit search — user-confirmed
 fast-follow), and a **multi-basin IC seeding** extension to the fit so it can
-*represent* emergent feedback bistability — a Fable-5 async spike found it feasible,
-and it is now **built into NUDGE** (`inference/losses.py::energy_distance_weighted`,
-`inference/fit.py::{fit_multibasin_parameters, fit_multibasin}`, alongside the unchanged
-`fit`). **Result: representation works (≈10× lower loss, `p` recovers) but attribution
-degenerates** — a two-fixed-mode mixture conflates *gain* (graded) with *ceiling*
-(shifted high mode), a confident wrong call → so `fit_multibasin` is EXPERIMENTAL /
-not-fail-safe and the Tier-0.5 guard stays on single-basin `fit`. Full arc in
-`scripts/vv/FINDINGS.md` §T0.5-3/§T0.5-4. **Under investigation:** a 3rd "transition"
-mode at the unstable saddle to break the gain/ceiling degeneracy (user's idea).
+*represent* emergent feedback bistability, now **built into NUDGE** and taken all the way
+to a fail-safe fix. The arc (full detail in `scripts/vv/FINDINGS.md` §T0.5-3→5):
+1. Fable-5 spike found multi-basin representation feasible (`p` recovers, ≈10× lower loss).
+2. Built `energy_distance_weighted` + `fit_multibasin_parameters` + `fit_multibasin`: it
+   *represents* bistability but plain 2-basin **attribution degenerates** (conflates gain
+   with ceiling → a confident wrong call) — so `fit_multibasin(transition_mode=False)` is
+   EXPERIMENTAL / not-fail-safe.
+3. **RESOLVED** via the user's saddle idea (a 2nd Fable-5 spike → integrated): a **third
+   transition mode at the unstable saddle** (`Circuit.fixed_points`/`transition_state`,
+   `fit_transition_parameters`, `classify.decide_with_transition`). The free-`n` transition
+   weight is a fail-safe gain detector (0.89 gain vs 0.01 else). **`fit_multibasin(
+   transition_mode=True)` recovers `gai→gain` at all seeds incl. the seed-2 bug, zero wrong
+   positives**, N-species safely abstains. Six failure modes engineered against (FM1 NaN
+   masking, FM2 N-D decoupling+`n_species==1` guard, FM3-6). Guarded by the Tier-0.5 test.
+
+**Open follow-ons:** N-D saddle finding (mutual-inhibition toggles) for the transition mode
+beyond 1 species; sweep the gain-factor/τ calibration; the To&Maheshri decoy still deferred.
 
 The original plan is retained below for reference.
 
