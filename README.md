@@ -19,9 +19,25 @@ hackathon, 7–13 July 2026.
 
 ## Status
 
-Pre-alpha. The package skeleton is stood up (Phase 0); the mechanism library,
-fit engine, and decoy battery are being filled in. See the phase plan in the
-design docs.
+**Working proof of concept, calibrated.** The generative backbone and the fit
+engine are built end to end: generate ground-truth Perturb-seq data → `fit()` →
+recover the circuit → attribute threshold / gain / ceiling → **abstain when the
+data can't say**. The fail-safe property is *measured* — **0% misclassification**
+across hundreds of synthetic datasets (it abstains, never guesses wrong).
+
+Highlights so far:
+- **Phases 0–2 done:** circuit model, differentiable population fit, distributional
+  losses, and the two-level abstention gates (calibrated `margin_k = 1.7`).
+- **Tier-0.5 independent stochastic simulator** — a tau-leaping SSA with *emergent*
+  bimodality that breaks the "inverse crime" of self-benchmarking; the fail-safe
+  guarantee survives it.
+- **Saddle transition-mode gain gate** — fail-safe mechanism attribution on
+  genuinely bistable stochastic data (recovers *gain* where a naive fit is
+  confidently wrong). See [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md).
+
+Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
+and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap
+and [`JUDGES_GUIDE.md`](JUDGES_GUIDE.md) for a guided tour.
 
 ## Install
 
@@ -30,7 +46,7 @@ uv venv && uv pip install -e ".[dev]"     # local development
 pip install nudge-bio                      # (once published)
 ```
 
-Requires `maddening>=0.3.0`, `jax==0.5.1` (pinned), Python ≥ 3.10.
+Requires `maddening[ift]>=0.3.1`, `jax==0.5.1` (pinned), Python ≥ 3.10.
 
 ## The two verbs
 

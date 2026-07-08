@@ -1,0 +1,124 @@
+# NUDGE — a guide for judges
+
+Thanks for reading. This is a short, honest tour of NUDGE against the four judging
+criteria, with pointers to the exact files, commits, and results behind each claim —
+and a straight account of what is proven versus prototype-stage.
+
+**NUDGE in one paragraph.** Perturb-seq screens tell you *that* a gene matters; they
+can't tell you *how* — whether a perturbation moves a genetic switch's **threshold**,
+changes its **gain** (steepness), or lowers its **ceiling**. NUDGE fits a
+differentiable gene-regulatory *circuit* to single-cell counts and attributes each
+perturbation to one of those mechanisms — and its defining property is that it
+**abstains, loudly, rather than guess wrong**. That fail-safe guarantee is *measured*,
+not asserted: **0% misclassification across 852 synthetic datasets.** Built on
+MADDENING (a differentiable JAX physics engine) for *Built with Claude: Life Sciences*.
+
+The single best artifact to read is **[`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md)** —
+the measured results, including the multi-agent research arc (§T0.5-3 → §T0.5-5).
+**[`design/STATE.md`](design/STATE.md)** is the engineering source of truth.
+
+---
+
+## 1. Impact (25%) — mechanism, not just a hit list
+
+The question NUDGE answers is one a linear screen analysis *structurally cannot*:
+two perturbations can move the same readout by the same amount while doing opposite
+things to the underlying switch. That distinction is exactly what decides a
+follow-up: a **threshold** mover is a sensitizer, a **gain** mover reshapes the
+decision, a **ceiling** mover caps output. Getting it wrong wastes a wet-lab cycle —
+which is why the product is built to **abstain** instead.
+
+- The value framing: [`design/PITCH.md`](design/PITCH.md) (plain language) and
+  [`design/WORKING_BACKWARDS.md`](design/WORKING_BACKWARDS.md) (the PR/FAQ).
+- Scope discipline is stated up front (README "Capabilities NOT provided"): it is a
+  hypothesis-prioritizer for a powered screen, not a clinical tool or a hit-caller.
+- **Honest status:** validated on synthetic ground truth today; the real-data
+  (T-cell SOS/RasGRP1) validation is designed but not yet run. We would rather show
+  a measured fail-safe guarantee than an unbacked biological claim.
+
+## 2. Claude Use (25%) — an async, multi-model R&D lab
+
+This project was built *with* Claude Code as an active engineering participant, and
+the git history is deliberately an auditable record of that (see `CLAUDE.md`: every
+commit names the exact model that did the work).
+
+- **Multi-agent async R&D — the part that surprised us.** When we hit a hard research
+  question — *can the fit represent emergent bistability?* — the main agent (Opus 4.8)
+  spawned an **autonomous Fable 5 subagent** to run an isolated JAX/Optax numerical
+  spike *in parallel* while the main build continued, then folded the verdict back in.
+  It did this **twice**: once to scope multi-basin feasibility (**§T0.5-3**), and once
+  to prototype the saddle fix (**§T0.5-5**). The second spike produced a genuinely
+  non-obvious scientific diagnosis — *the optimizer instability lives in the free mode
+  locations, not the basin mixture* — that reframed the whole approach. A different
+  model, running unsupervised, scoped a core architecture decision cheaply.
+- **`/deep-research` literature synthesis.** Two adversarially-verified research
+  workflows resolved the two hardest design cruxes (the negative-binomial vs
+  zero-inflation count-model debate; when deterministic-plus-noise breaks down near a
+  bifurcation). Captured in [`design/GENERATOR_DESIGN.md`](design/GENERATOR_DESIGN.md).
+- **Honest AI collaboration.** Claude's output was *independently verified*, not
+  trusted: we audited the subagent's spike code for ground-truth leakage and
+  reproduced its headline result before integrating it (§T0.5-5).
+- **The full harness:** custom Agent Skills (`.claude/skills/`), the co-authorship
+  policy, and a documented decision to *bypass* a framework primitive when it didn't
+  fit (`../plans/NUDGE_deterministic_solve_vs_graphmanager.md`).
+
+## 3. Depth & Execution (20%) — we wrestled with it
+
+The spine of the project is a single arc where each step was forced by the previous
+one's honest failure — the opposite of a quick hack. It is all in the git history and
+in `FINDINGS.md`:
+
+1. **Single-basin fit** attributes mechanism and abstains — fail-safe, but everything
+   so far is an *inverse crime* (generator and fitter share a model).
+2. **Tier-0.5 independent stochastic simulator** (`20cf3e0`) breaks the inverse crime.
+   Fail-safe *survives* — and we found a real **boundary**: it can be wrong under
+   *topology* misspecification (**§T0.5-2**). We documented the boundary instead of
+   hiding it.
+3. **Multi-basin fit** (`b5348f1`) *represents* emergent bistability (10× lower loss)
+   but its attribution **degenerates** — a confident wrong call. We shipped this as a
+   **documented negative** (§T0.5-4), marked EXPERIMENTAL, rather than force a green test.
+4. **Saddle transition-mode gain gate** (`453eabf`) **fixes** it: fail-safe gain
+   attribution on emergent-bistable data, recovering the case the previous step got
+   wrong (§T0.5-5).
+
+Engineering craft in that last step: the fail-safe fix was designed against **six
+named failure modes** (NaN-at-the-bifurcation via a covariance-free transition sample +
+a validity mask; N-dimensional saddles via a *decoupled* `Circuit.fixed_points` and an
+`n_species == 1` gate; off-model / no-effect ordering; probe selection; a tunable
+threshold). We also caught and fixed a subtle integration bug (restricted fits must
+start from the nominal, not the distorted-WT, circuit). Nothing was asserted that
+wasn't measured.
+
+## 4. Demo (30%) — reproducible science you can run
+
+The demo today is **reproducible, trustworthy findings** rather than a polished UI —
+and every headline number is a command away:
+
+```bash
+uv venv && uv pip install -e ".[dev]"
+
+# Fail-safe attribution + abstention, end to end (the proof of concept):
+uv run pytest tests/inference/test_fit_end_to_end.py -m slow -q
+
+# The honest arc — independent stochastic data + the saddle gain-gate fix:
+uv run pytest tests/verification/test_stochastic_inverse_crime.py -m "slow or verification" -q
+
+# The calibration behind "0% misclassification" (figures + CSVs land in results/):
+uv run python scripts/vv/overnight_sweep.py --smoke
+```
+
+- Read alongside [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md) and the figures in
+  `scripts/vv/results/` (calibration curve, identifiability heatmaps).
+- **Honest status:** this is the criterion with the most road left — a guided
+  notebook / visual walkthrough is the natural next build. What holds up *today* is the
+  science: green tests, measured guarantees, and results you can reproduce.
+
+---
+
+### The one thing to take away
+
+NUDGE's core promise is a **fail-safe guarantee** — never confidently wrong, abstain
+loudly — and this week we did the hard thing: we *attacked* that guarantee with
+independent stochastic data and a genuinely harder problem (emergent bistability), found
+where it bent, and **extended it rather than quietly breaking it** — with a multi-model
+Claude workflow doing real, verified R&D in the loop.

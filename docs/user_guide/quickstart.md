@@ -1,7 +1,8 @@
 # Quickstart
 
-> Pre-alpha: the surface below is defined; the engines are being filled in
-> (Phases 1–4). This is the intended shape.
+> `fit()` works end to end today (see [`../../scripts/vv/FINDINGS.md`](../../scripts/vv/FINDINGS.md)
+> for measured results). `design()` is still a stretch stub. The circuit builder
+> below is the intended authoring surface.
 
 ```python
 import nudge
