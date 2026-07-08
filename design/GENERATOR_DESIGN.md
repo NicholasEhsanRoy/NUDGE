@@ -134,39 +134,83 @@ labels, realistic enough that recovering mechanism from it *means something*.
 
 ---
 
-## THE OPEN CRUX — deterministic-vmap validity near bistability (UNRESOLVED)
+## THE CRUX, RESOLVED — deterministic-vmap near bistability (focused review, HIGH)
 
-The review's honest gap: **no surviving claim substantiates when the
-"deterministic ODE per cell + per-cell parameter draw (extrinsic noise)"
-approximation breaks down near a bistable switch**, where the *stochastic*
-stationary distribution (bimodal, with noise-induced switching between attractors,
-mode weights set by basin depths / the quasi-potential landscape) qualitatively
-differs from a deterministic solve seeded by parameter draws. This is the single
-most important architectural question for the elegant `vmap` approach (design
-Part 5) and it is *not* answered by this pass.
+A second focused `/deep-research` pass (103 agents; primary stochastic-gene-
+expression theory) settled this. **The elegant `vmap` design survives —
+validated, with its limits named.**
 
-**First-principles position (to be confirmed against the literature):**
+**The settled physics.**
 
-- For **generation** (forward simulation, no gradients needed), deterministic
-  `vmap`-over-(parameters + initial conditions spanning both basins) *can* produce
-  bistable bimodality — but the **fraction in each mode is imposed by our IC/param
-  distribution, not emergent** from stochastic dynamics. For Tier-0 this is
-  arguably a *feature*: we control the true mode split as a ground-truth label.
-  The near-bifurcation adjoint fragility the brief warns about is a **fit-time**
-  concern (handled by `ift_linear_solve` + the blindness diagnostic), **not** a
-  generation-time one — generation should integrate to convergence, not root-find.
-- The **honest robustness test** is therefore to generate Tier-0.5 data with a
-  *genuinely stochastic* switch (emergent, basin-weighted bimodality) and confirm
-  NUDGE's deterministic fit still recovers the mechanism. This is where the
-  approximation's breakdown is *tested*, not assumed away.
+- **Validity boundary (Elf & Ehrenberg 2003; Thomas & Grima 2013).** The
+  deterministic-steady-state + Gaussian/parameter-draw (LNA-regime) picture is
+  valid only *locally around a single stable fixed point, at high copy number,
+  far from the bifurcation*, with fast intrinsic relaxation vs extrinsic drift.
+  It **fails near a saddle-node / bistable point**: it cannot represent bimodality
+  or a continuum of states, and near criticality (near-singular Jacobian /
+  critical slowing down) fluctuations are large and slow; at low copy number it
+  can even get the *direction* of noise dependence wrong.
+- **Occupancy is emergent, not imposed (Wang/Xu/Wang 2008; Zhou et al. 2012;
+  Zheng et al. 2011).** In the true stochastic system the mode weights are set by
+  the quasi-potential landscape (`U = −ln P_ss`, `P_ss ∝ exp(−U)`) — basin depths,
+  noise-induced switching — and GRNs are *non-gradient* (a nonzero curl flux
+  breaks detailed balance), so occupancy **cannot** be recovered by integrating
+  the deterministic force. A deterministic solve locates the extrema of `U`, not
+  their probability depths.
+- **Kepler & Elston 2001.** Deterministic and stochastic models can disagree on
+  the very *number* of stable states (stochastic bistability where the ODE is
+  monostable and vice versa), and **promoter-switching rate is an independent
+  bifurcation axis** a deterministic-plus-parameter generator structurally omits.
 
-**Recommendation:** run a **focused follow-up** literature pass on exactly this
-(noise-decomposition near bifurcations; stochastic bistable-switch stationary
-distributions — Kepler & Elston, Feng/Wang quasi-potential; snapshot-bimodality
-identifiability) before freezing the population-solve architecture. It is the one
-place worth more rigor, and it directly shapes both `inference/population.py` and
-the decoy battery. (Areas 3/6/7 were also flagged partially-ungrounded, but the
-count-model spine above is firm enough to build the observation layer now.)
+**Decision — the Tier-0 / Tier-0.5 split is confirmed and now rigorously grounded.**
+
+- **Tier-0 = deterministic-`vmap`.** Ochab-Marcinek & Tabaka 2010 (PNAS) is
+  *exactly* our mechanism: a deterministic nonlinear transfer function acting as a
+  noise filter maps a **unimodal** extrinsic input into a **bimodal** output in a
+  monostable, non-cooperative cascade — genuine bimodality with a **controllable,
+  designed-in mode split**, ideal as exact ground truth. Named limitation:
+  occupancy is *imposed by our input distribution*, not landscape-set, so Tier-0
+  cannot produce noise-induced switching, barrier-height occupancy scaling, or
+  promoter-rate bifurcations. Generation integrates to convergence (robust); the
+  near-bifurcation fragility is a **fit-time** concern only.
+- **Tier-0.5 = independent stochastic simulator** (SERGIO chemical-Langevin /
+  Gillespie toggle / BoolODE-with-noise) with **emergent** bimodality — the honest
+  test that NUDGE's deterministic fit generalizes to landscape-set occupancy.
+  (Which simulator best reproduces correct occupancy scaling is itself open; the
+  split is a physics-grounded inference, not a Perturb-seq-validated claim.)
+
+**Two decisions this hands us beyond the split:**
+
+1. **New, scientifically-validated decoys — "bimodality is NOT proof of a
+   switch"** (To & Maheshri 2010, the key interpretive caveat). The battery gains
+   three *real* bimodal-but-not-bistable negatives NUDGE must not misread as
+   ultrasensitivity:
+   - **Noise-induced feedback bimodality** (To & Maheshri 2010): non-cooperative
+     (Hill `n ≈ 1`) positive feedback + short-lived TF + bursty promoter → bimodal
+     with **no gain** → NUDGE must decline a gain/threshold switch call.
+   - **Bursting bimodality** (Shahrezaei & Swain 2008): slow promoter switching,
+     no feedback, first-order kinetics → bimodal (analytically NB) → `technical` /
+     no switch.
+   - **Steep-monostable transfer-function bimodality** (Ochab-Marcinek & Tabaka
+     2010): a steep *monostable* dose-response on a unimodal input → bimodal
+     without bistability. The hardest decoy — NUDGE must distinguish "steep
+     monostable dose-response" from "bistable switch".
+   - **(Reverse, open)** a deterministically bistable system can look *unimodal*
+     in a snapshot (one basin dominant) — NUDGE must not over-claim its absence.
+2. **A literature-grounded abstention trigger.** Near a saddle-node the Jacobian
+   is near-singular → **threshold vs gain is genuinely non-identifiable on
+   near-critical snapshot data**. This is the concrete, physics-based trigger for
+   the `unresolved` verdict, dovetailing with the borrowed blindness diagnostic:
+   detect critical slowing down (Jacobian condition number) and abstain. A
+   Fisher-information / identifiability analysis to place that boundary is the
+   recommended next derisking step.
+
+**Net.** Tier-0 is a controllable deterministic ground-truth generator (occupancy
+is a *knob* — a feature for benchmarking); Tier-0.5 supplies emergent-occupancy
+realism; bimodality-without-bistability becomes a first-class decoy class; and
+near-criticality becomes a principled abstention boundary. This shapes
+`inference/population.py`, `inference/classify.py` (the abstention gate), and the
+decoy battery.
 
 ---
 
@@ -189,3 +233,15 @@ count-model spine above is firm enough to build the observation layer now.)
 - Swain, Elowitz & Siggia 2002, *PNAS* — noise-decomposition theory. 10.1073/pnas.162041399
 - Replogle et al. 2022, *Cell* — genome-scale Perturb-seq empirics. S0092867422005979
 - Norman et al. 2019, *Science* — Perturb-seq of genetic interactions. 10.1126/science.aax4438
+
+**Bistability / noise (the resolved crux):**
+
+- Kepler & Elston 2001, *Biophys J* — stochastic vs deterministic (non)bistability; promoter-rate bifurcations. 10.1016/S0006-3495(01)75949-8
+- Wang, Xu & Wang 2008, *PNAS* — quasi-potential landscape U = −ln P_ss; non-gradient flux. 10.1073/pnas.0800579105
+- Zhou, Aliyu, Aurell & Huang 2012, *J R Soc Interface* — GRNs non-gradient; attractor relative stability. 10.1098/rsif.2012.0434
+- Zheng, Yang & Tao 2011, *PLoS ONE* — autoactivation ρ_ss ∝ exp(−U/D²); landscape-set occupancy. 10.1371/journal.pone.0017104
+- To & Maheshri 2010, *Science* — bimodality without bistability (noise-induced). 10.1126/science.1178962
+- Shahrezaei & Swain 2008, *PNAS* — three-stage bursting; bimodality from slow promoter switching; NB. 10.1073/pnas.0803850105
+- Ochab-Marcinek & Tabaka 2010, *PNAS* — deterministic transfer function → bimodal from unimodal input (= Tier-0 mechanism). 10.1073/pnas.1008965107
+- Elf & Ehrenberg 2003, *Genome Res* — linear noise approximation; validity + failure near critical points. 10.1101/gr.1196503
+- Thomas, Matuschek & Grima 2013, *BMC Genomics* — LNA severe qualitative failure at low copy number. PMC3849541
