@@ -15,12 +15,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from nudge.core.circuit import Circuit, EdgeDef, SpeciesDef
 from nudge.core.vocabulary import MechanismClass
 from nudge.data.decoy_generators import (
     generate_dropout_decoy,
     generate_mixture_decoy,
 )
 from nudge.data.stochastic import generate_telegraph_perturbseq
+from nudge.data.synthetic import PerturbationSpec, generate_synthetic_perturbseq
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,22 @@ class DecoyCase:
     limitation_ref: str = ""  # the NUDGE-LIM-* it maps to
     authored_by: Literal["human", "ai"] = "human"
     prompt_ref: str = ""  # for AI-authored decoys: prompt/model hash (idea 1)
+    #: The circuit hypothesis to fit (a naive method's switch model). ``None`` → the
+    #: battery's default 1-species self-activation switch. Cases whose data is a real
+    #: (detectable) switch carry their matching topology here so the fit dimensions line
+    #: up and the *right* gate (e.g. no-effect) is exercised.
+    hypothesis: Circuit | None = None
+
+
+def _feedforward_switch(n: float = 6.0) -> Circuit:
+    """A 2-species feedforward switch (IN → SW) — a reliably *detected* switch."""
+    return Circuit(
+        [
+            SpeciesDef("IN", basal=1.0, decay=1.0),
+            SpeciesDef("SW", basal=0.05, decay=1.0),
+        ],
+        [EdgeDef(0, 1, "hill_activation", K=1.0, n=n, vmax=2.0)],
+    )
 
 
 def _telegraph_decoy() -> Any:
@@ -49,6 +67,24 @@ def _mixture_decoy() -> Any:
 def _dropout_decoy() -> Any:
     """Technical dropout zero-peak on a monostable population — not a switch."""
     return generate_dropout_decoy(n_cells_per_condition=2000, seed=0)
+
+
+def _no_effect_decoy() -> Any:
+    """A REAL switch with a NULL (factor-1.0 / dead-guide) perturbation → no-effect."""
+    return generate_synthetic_perturbseq(
+        _feedforward_switch(6.0),
+        [PerturbationSpec("null", "edge", 0, "K", 1.0)],
+        n_cells_per_condition=2000, seed=0,
+    )
+
+
+def _marginal_hill_decoy() -> Any:
+    """A barely-nonlinear (n=1.2) circuit — a marginal Hill the gate must not call."""
+    return generate_synthetic_perturbseq(
+        _feedforward_switch(1.2),
+        [PerturbationSpec("kd", "edge", 0, "vmax", 0.5)],
+        n_cells_per_condition=2000, seed=0,
+    )
 
 
 #: The decoy battery. Grows with the mechanism library and the AI decoy generator.
@@ -85,5 +121,29 @@ DECOY_BATTERY: list[DecoyCase] = [
         generate=_dropout_decoy,
         expected_verdict=MechanismClass.OFF_MODEL,
         limitation_ref="NUDGE-LIM-003",
+    ),
+    DecoyCase(
+        decoy_id="NUDGE-DECOY-004",
+        summary=(
+            "Dead guide / no-effect: a genuine switch with a NULL perturbation "
+            "(targeted but no knockdown). NUDGE must return no-effect — not report a "
+            "mechanism just because the WT is a switch. Exercises the no-effect gate."
+        ),
+        generate=_no_effect_decoy,
+        expected_verdict=MechanismClass.NO_EFFECT,
+        limitation_ref="NUDGE-LIM-004",
+        hypothesis=_feedforward_switch(6.0),
+    ),
+    DecoyCase(
+        decoy_id="NUDGE-DECOY-005",
+        summary=(
+            "Marginal-overfit Hill: data from a barely-nonlinear (n=1.2) circuit. The "
+            "mechanistic model must not be over-called as a switch — the parsimony "
+            "gate's noise margin must reject a nonlinearity within the loss floor."
+        ),
+        generate=_marginal_hill_decoy,
+        expected_verdict=MechanismClass.OFF_MODEL,
+        limitation_ref="NUDGE-LIM-005",
+        hypothesis=_feedforward_switch(6.0),
     ),
 ]

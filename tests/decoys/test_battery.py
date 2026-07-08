@@ -36,7 +36,7 @@ def test_battery_is_a_registry_of_decoycases() -> None:
 @pytest.mark.parametrize("case", DECOY_BATTERY, ids=lambda c: c.decoy_id)
 def test_decoy_returns_expected_verdict(case: DecoyCase) -> None:
     adata = case.generate()
-    circuit = _switch_hypothesis()
+    circuit = case.hypothesis or _switch_hypothesis()
     # Single-basin path: every call must be the expected abstention verdict.
     mm = fit(adata, circuit, n_cells=384, steps=400, margin_k=1.7, seed=0)
     for call in mm.calls:

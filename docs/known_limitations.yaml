@@ -62,3 +62,34 @@ anomalies:
       NUDGE owns the negative-binomial count model but does not model an explicit
       capture/dropout process; severe, structured depth variation could still bias a
       fit. The decoy keeps the gate honest against depth-driven pseudo-bimodality.
+
+  - anomaly_id: NUDGE-LIM-004
+    title: A targeted-but-ineffective perturbation must not be reported as a mechanism
+    description: >-
+      A guide can target a switch gene yet produce no knockdown (a "dead guide"). The
+      condition then looks like WT. NUDGE must return no-effect for that perturbation —
+      not report threshold/gain/ceiling merely because the WT is a switch. The per-
+      perturbation no-effect gate (perturbed distribution ≈ WT, within the effect
+      margin) handles this. Exercised by NUDGE-DECOY-004.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      A false mechanism call on an ineffective guide would waste a follow-up. The gate
+      depends on the effect margin (a multiple of the WT self-distance); a mis-set margin
+      could miss a small-but-real effect or over-call noise. The decoy pins the gate.
+
+  - anomaly_id: NUDGE-LIM-005
+    title: A marginal nonlinearity must not be over-called as a switch
+    description: >-
+      Data from a barely-nonlinear circuit (Hill n only slightly above 1) is close to
+      linear. A greedy fitter would still fit a Hill and claim ultrasensitivity. NUDGE
+      must decline: the circuit-level parsimony gate requires the mechanistic model to
+      beat a linear baseline beyond the loss noise floor, which a marginal Hill does not,
+      so it returns off-model. This is the calibration test for the gate's noise margin
+      (margin_k). Exercised by NUDGE-DECOY-005.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      The whole "fails safely" claim rests on this margin: too loose and marginal
+      nonlinearities become false switches. NUDGE-DECOY-005 is the regression test that
+      the calibrated margin_k (1.7) rejects a within-floor nonlinearity.

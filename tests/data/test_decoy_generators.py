@@ -35,6 +35,8 @@ def test_dropout_decoy_is_bimodal_raw_counts() -> None:
     assert float((wt >= 5).mean()) > 0.15  # the expression mode
 
 
-def test_new_decoys_registered() -> None:
+def test_battery_covers_diverse_decoys() -> None:
     ids = {c.decoy_id for c in DECOY_BATTERY}
-    assert {"NUDGE-DECOY-002", "NUDGE-DECOY-003"} <= ids
+    assert {f"NUDGE-DECOY-00{i}" for i in range(1, 6)} <= ids
+    # Every case cross-references a known limitation.
+    assert all(c.limitation_ref for c in DECOY_BATTERY)
