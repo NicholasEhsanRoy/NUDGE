@@ -32,10 +32,16 @@ from nudge.core.vocabulary import POSITIVE_CLASSES, MechanismClass
 from nudge.data.ingest import check_counts
 from nudge.data.synthetic import _per_cell_params
 from nudge.inference.classify import decide, switch_detected
-from nudge.inference.losses import energy_distance
+from nudge.inference.losses import energy_distance, energy_distance_weighted
 from nudge.mechanisms.readout import Readout
 
-__all__ = ["FreeParam", "fit", "fit_parameters"]
+__all__ = [
+    "FreeParam",
+    "fit",
+    "fit_multibasin",
+    "fit_multibasin_parameters",
+    "fit_parameters",
+]
 
 #: A parameter to optimize: ``(scope, index, name)`` — e.g. ``("edge", 0, "K")``.
 FreeParam = tuple[str, int, str]
@@ -150,6 +156,143 @@ def fit_parameters(
 
     recovered = {f: float(v) for f, v in zip(free, jnp.exp(log_theta), strict=True)}
     return recovered, history
+
+
+def _simulate_basin(
+    circuit: Circuit,
+    params: dict,
+    readout: Readout,
+    key: Array,
+    x0: Array,
+    *,
+    dispersion: float,
+    library_sigma: float,
+) -> Array:
+    """Moment-matched continuous observation, solved from a given ``x0`` (basin seed).
+
+    Identical to ``_simulate`` but with the initial condition exposed, so the
+    multi-basin model can solve the same population from the LOW (``x0 = 0``) and
+    HIGH (``x0 = high_ic``) basins of a bistable circuit.
+    """
+    activity = circuit.solve_population(params, x0)
+    expression = readout.expression(activity)
+    n_cells = params["species"]["basal"].shape[0]
+    k_lib, k_obs = jax.random.split(key)
+    library = jnp.exp(library_sigma * jax.random.normal(k_lib, (n_cells, 1)))
+    mean = library * expression
+    nb_var = mean + dispersion * mean**2
+    noise = jnp.sqrt(nb_var + 1e-8) * jax.random.normal(k_obs, mean.shape)
+    return jnp.maximum(mean + noise, 0.0)
+
+
+def fit_multibasin_parameters(
+    adata: Any,
+    circuit: Circuit,
+    free: list[FreeParam],
+    *,
+    condition: str = "WT",
+    readout: Readout | None = None,
+    n_cells: int = 256,
+    steps: int = 300,
+    learning_rate: float = 0.05,
+    extrinsic_sigma: float = 0.3,
+    dispersion: float = 0.1,
+    library_sigma: float = 0.2,
+    transform: str = "log1p",
+    high_ic: float = 10.0,
+    p_init: float = 0.5,
+    fixed_p: float | None = None,
+    seed: int = 0,
+) -> tuple[dict[FreeParam, float], float, list[float]]:
+    """Like ``fit_parameters`` but with a **basin-occupancy latent** ``p``.
+
+    The forward model solves the population from BOTH basins — low (``x0 = 0``) and
+    high (``x0 = high_ic``) — and forms the mixture ``(1−p)·low + p·high`` as a
+    weighted empirical distribution (the ``p``-weighted energy distance). This lets
+    the deterministic fit *represent* an emergent-bistable population that a single
+    ``x0 = 0`` solve cannot (the Tier-0.5 gap; the Fable-5 spike showed ``p`` is
+    recoverable because the modes are pinned to the ODE fixed points). ``p`` is fit
+    jointly with the kinetics via an unconstrained logit ``p = sigmoid(p_raw)``.
+
+    ``fixed_p`` pins the occupancy (skips optimizing it) — used for attribution, where
+    letting every restricted fit re-optimize ``p`` lets the occupancy latent absorb the
+    shape signal that should discriminate the mechanisms (``FINDINGS.md`` §T0.5-4). Pin
+    ``p`` to a per-condition estimate so the kinetic params compete on residual shape.
+
+    Returns the recovered kinetics, the recovered ``p`` (fraction in the HIGH basin),
+    and the loss history.
+    """
+    check_counts(adata)
+    if readout is None:
+        readout = Readout.identity(circuit.n_species)
+
+    mask = np.asarray(adata.obs["condition"] == condition)
+    raw = jnp.asarray(np.asarray(adata.X, dtype=np.float32)[mask])
+    observed = _apply_transform(raw, transform)
+    # Optimize [log kinetics..., p_raw] jointly. p_raw is linear (a logit), kinetics
+    # log-space (positive); Adam's per-coordinate scaling handles the mixed geometry.
+    # With fixed_p, p is held constant and only the kinetics are optimized.
+    fit_p = fixed_p is None
+    log_kin = jnp.log(jnp.array([_param_value(circuit, f) for f in free]))
+    p_raw0 = jnp.asarray(float(np.log(p_init / (1.0 - p_init))))
+    theta = jnp.concatenate([log_kin, p_raw0[None]]) if fit_p else log_kin
+    p_const = jnp.asarray(0.5 if fit_p else float(fixed_p))
+
+    optimizer = optax.adam(learning_rate)
+    opt_state = optimizer.init(theta)
+    n_free = len(free)
+
+    def loss_fn(vec: Array, key: Array) -> Array:
+        log_vals = vec[:n_free]
+        p = jax.nn.sigmoid(vec[n_free]) if fit_p else p_const
+        k_ext, k_pick, k_low, k_high = jax.random.split(key, 4)
+        params = _per_cell_params(circuit, k_ext, n_cells, extrinsic_sigma)
+        for f, value in zip(free, jnp.exp(log_vals), strict=True):
+            _override(params, f, value)
+        x0_low = jnp.zeros((n_cells, circuit.n_species))
+        x0_high = jnp.full((n_cells, circuit.n_species), high_ic)
+        sim_low = _simulate_basin(
+            circuit, params, readout, k_low, x0_low,
+            dispersion=dispersion, library_sigma=library_sigma,
+        )
+        sim_high = _simulate_basin(
+            circuit, params, readout, k_high, x0_high,
+            dispersion=dispersion, library_sigma=library_sigma,
+        )
+        sim = jnp.concatenate(
+            [
+                _apply_transform(sim_low, transform),
+                _apply_transform(sim_high, transform),
+            ],
+            axis=0,
+        )
+        weights = jnp.concatenate(
+            [jnp.full((n_cells,), 1.0 - p), jnp.full((n_cells,), p)]
+        )
+        idx = jax.random.choice(k_pick, observed.shape[0], (n_cells,), replace=False)
+        return energy_distance_weighted(sim, weights, observed[idx])
+
+    @jax.jit
+    def step(
+        vec: Array, state: optax.OptState, key: Array
+    ) -> tuple[Array, optax.OptState, Array]:
+        loss, grad = jax.value_and_grad(loss_fn)(vec, key)
+        updates, state = optimizer.update(grad, state)
+        new_vec = jnp.asarray(optax.apply_updates(vec, updates))
+        return new_vec, state, loss
+
+    key = jax.random.key(seed)
+    history: list[float] = []
+    for _ in range(steps):
+        key, sub = jax.random.split(key)
+        theta, opt_state, loss = step(theta, opt_state, sub)
+        history.append(float(loss))
+
+    recovered = {
+        f: float(v) for f, v in zip(free, jnp.exp(theta[:n_free]), strict=True)
+    }
+    p_hat = float(jax.nn.sigmoid(theta[n_free])) if fit_p else float(fixed_p)
+    return recovered, p_hat, history
 
 
 def _condition_counts(adata: Any, condition: str) -> Array:
@@ -312,4 +455,134 @@ def fit(
         calls=calls,
         beats_linear_baseline=beats,
         provenance={"conditions": ",".join(conditions), "seed": str(seed)},
+    )
+
+
+def fit_multibasin(
+    adata: Any,
+    circuit: Circuit,
+    *,
+    target_edge: int = 0,
+    wt_condition: str = "WT",
+    conditions: list[str] | None = None,
+    readout: Readout | None = None,
+    steps: int = 300,
+    n_cells: int = 256,
+    margin_k: float = 1.7,
+    off_model_k: float = 5.0,
+    high_ic: float = 10.0,
+    seed: int = 0,
+) -> MechanismMap:
+    """``fit`` with a **basin-occupancy latent** — for emergent-bistable circuits.
+
+    ⚠️ **EXPERIMENTAL — not fail-safe. Do not use for production attribution.** The
+    two-basin mixture *represents* emergent bistability well (10× lower loss than the
+    single-basin ``fit``; ``p`` recovers), but **attribution degenerates**: a two-mode
+    model conflates a *gain* reduction (which makes the switch graded — intermediate
+    cells the two modes can't hold) with a *ceiling* reduction (which just lowers the
+    high mode), so it can emit a **confident wrong mechanism** where single-basin
+    ``fit`` correctly abstains (``FINDINGS.md`` §T0.5-4). Kept as a validated
+    *representation* building block and a documented negative; the Tier-0.5 guard stays
+    on single-basin ``fit``. A three-mode (saddle) extension is under investigation.
+
+    Orchestration mirrors :func:`fit` (WT parsimony gate → per-perturbation restricted
+    fits → ``classify.decide``), but the mechanistic fits use
+    :func:`fit_multibasin_parameters`, solving from BOTH basins (low ``x0 = 0`` and high
+    ``x0 = high_ic``) and fitting occupancy ``p``. Per condition ``p`` is estimated once
+    (all kinetics free) then PINNED for the restricted fits, so the kinetic params
+    discriminate on residual shape rather than re-absorbing the occupancy change; the
+    linear baseline stays single-basin (a linear circuit is monostable). Built alongside
+    :func:`fit`, which is unchanged.
+    """
+    check_counts(adata)
+    if readout is None:
+        readout = Readout.identity(circuit.n_species)
+    labels = list(dict.fromkeys(np.asarray(adata.obs["condition"]).tolist()))
+    if conditions is None:
+        conditions = [c for c in labels if c != wt_condition]
+
+    mb: dict[str, Any] = {
+        "readout": readout, "steps": steps, "n_cells": n_cells, "high_ic": high_ic,
+    }
+    lin: dict[str, Any] = {"readout": readout, "steps": steps, "n_cells": n_cells}
+    wt_counts = _condition_counts(adata, wt_condition)
+    floor_key = jax.random.key(seed + 50)
+    floor_mean, floor_std = _self_distance(wt_counts, n_cells, floor_key)
+    noise_margin = margin_k * floor_std
+    effect_margin = floor_mean + 3.0 * floor_std
+    off_model_loss = off_model_k * floor_mean
+
+    # 1. WT: multi-basin mechanistic (free K, n, vmax + p) vs single-basin linear.
+    wt_free: list[FreeParam] = [("edge", target_edge, p) for p in ("K", "n", "vmax")]
+    wt_values, _wt_p, wt_mech_history = fit_multibasin_parameters(
+        adata, circuit, wt_free, condition=wt_condition, seed=seed, **mb
+    )
+    wt_circuit = _updated_circuit(circuit, wt_values)
+    _, wt_lin_history = fit_parameters(
+        adata, wt_circuit.linear_baseline(), [("edge", target_edge, "weight")],
+        condition=wt_condition, seed=seed + 1, **lin,
+    )
+    wt_mech_loss, _ = _loss_stats(wt_mech_history)
+    wt_lin_loss, _ = _loss_stats(wt_lin_history)
+
+    # 2. The linear-baseline parsimony gate — is there a switch to attribute?
+    if not switch_detected(wt_mech_loss, wt_lin_loss, noise_margin=noise_margin):
+        calls = [
+            MechanismCall(
+                perturbation=c,
+                mechanism=MechanismClass.OFF_MODEL,
+                confidence=0.0,
+                rationale="no switch detected — linear baseline explains WT",
+            )
+            for c in conditions
+        ]
+        return MechanismMap(
+            calls=calls,
+            beats_linear_baseline=False,
+            provenance={
+                "conditions": ",".join(conditions), "seed": str(seed),
+                "model": "multibasin",
+            },
+        )
+
+    # 3. A switch exists — attribute each perturbation via restricted multi-basin fits
+    #    (each frees one kinetic param + the occupancy p, which absorbs mode shifts).
+    key = jax.random.key(seed + 100)
+    calls = []
+    for i, condition in enumerate(conditions):
+        key, k_dist = jax.random.split(key)
+        perturbed = _condition_counts(adata, condition)
+        wt_distance = _log1p_distance(perturbed, wt_counts, n_cells, k_dist)
+        # Estimate this condition's basin occupancy p* once (all kinetics free), then
+        # PIN it for the restricted fits so the kinetic params discriminate on residual
+        # shape rather than re-absorbing the occupancy change (the T0.5-4 degeneracy).
+        _, p_star, _ = fit_multibasin_parameters(
+            adata, wt_circuit, wt_free,
+            condition=condition, seed=seed + 10 * (i + 1), **mb,
+        )
+        param_losses: dict[str, float] = {}
+        for j, param in enumerate(("K", "n", "vmax")):
+            _, _p, history = fit_multibasin_parameters(
+                adata, wt_circuit, [("edge", target_edge, param)],
+                condition=condition, seed=seed + 10 * (i + 1) + j + 1,
+                fixed_p=p_star, **mb,
+            )
+            param_losses[param] = _loss_stats(history)[0]
+        calls.append(
+            decide(
+                condition, param_losses, wt_distance,
+                noise_margin=noise_margin,
+                effect_margin=effect_margin,
+                off_model_loss=off_model_loss,
+            )
+        )
+
+    beats = any(c.mechanism in POSITIVE_CLASSES for c in calls)
+    return MechanismMap(
+        calls=calls,
+        beats_linear_baseline=beats,
+        provenance={
+            "conditions": ",".join(conditions), "seed": str(seed),
+            "model": "multibasin",
+        },
     )

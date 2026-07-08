@@ -153,3 +153,42 @@ elevated-loss self-diagnostic (0.2+ vs 0.003) as an abstention check.
 > an autonomous Fable-5 agent running an isolated numerical spike in parallel with the
 > main build — the "wrong place for the instability" diagnosis is the kind of result that
 > reframes an architecture decision cheaply.
+
+## T0.5-4. Multi-basin integrated into NUDGE — representation works, attribution degenerates
+
+Acting on T0.5-3, the multi-basin model was built *inside* NUDGE (`inference/losses.py`
+`energy_distance_weighted`; `inference/fit.py` `fit_multibasin_parameters` +
+`fit_multibasin`, alongside the unchanged `fit`). Two clear results:
+
+**Representation — a validated win.** On the Tier-0.5 WT data, the two-basin weighted
+mixture cuts the fit loss from **0.166 → 0.016 (≈10×)** vs the single-basin `fit`, and
+recovers occupancy `p̂ = 0.644` vs a true ON-fraction ≈ 0.62 (and `vmax̂ = 2.09` vs 2.0).
+The Fable-5 spike's conclusion holds in the real codebase: because the modes are pinned
+to the ODE fixed points, `p` is recoverable and the bimodality is representable.
+
+**Attribution — a real degeneracy (fail-safe violation).** Pointing the full
+orchestration at the Tier-0.5 movers, `fit_multibasin` **recovered gain at seed 0** where
+single-basin `fit` abstained (a genuine gain) — **but at seed 2 it emitted `gain→ceiling`,
+a confident WRONG call** where single-basin `fit` was correct. The error is consistent
+(present both before and after the fix below), so it is structural, not noise. Root cause:
+a **two-fixed-mode mixture cannot represent *graded* data**. A gain reduction (n↓) makes
+the switch graded — intermediate cells the two modes can't hold — so the model fits it as
+a *ceiling* reduction (vmax↓, which also lowers the high mode). Gain and ceiling become
+degenerate.
+
+Attempted fix — **decouple occupancy from kinetics** (estimate per-condition `p*` once,
+then PIN it while the restricted kinetic fits compete on residual shape, `fixed_p`): this
+*recovered gain at seed 0* but did **not** fix seed 2. The degeneracy is in the two-mode
+representation itself, not just the `p` latent.
+
+**Disposition.** `fit_multibasin` is kept as a **validated representation building block
+and a documented negative**, marked EXPERIMENTAL / not-fail-safe; the Tier-0.5 guard test
+stays on single-basin `fit` (never wrong). Single-basin trades attribution for
+conservative abstention and keeps the fail-safe guarantee; multi-basin represents more but
+can be confidently wrong — the classic sensitivity/safety trade, now measured.
+
+**Next (under investigation).** Add a **third "transition" mode at the unstable saddle**
+(the ODE has an unstable fixed point exactly between the two stable basins). A gain
+reduction should pile intermediate cells near the saddle (raising a `p_transition` weight)
+while a ceiling reduction should not — a candidate signal to break the gain/ceiling
+degeneracy. An isolated subagent is prototyping this on a worktree copy.

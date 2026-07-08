@@ -9,7 +9,11 @@ import pytest
 
 from nudge.core.circuit import Circuit, EdgeDef, SpeciesDef
 from nudge.data.synthetic import PerturbationSpec, generate_synthetic_perturbseq
-from nudge.inference.losses import energy_distance, rbf_mmd
+from nudge.inference.losses import (
+    energy_distance,
+    energy_distance_weighted,
+    rbf_mmd,
+)
 
 
 def test_energy_distance_zero_for_identical() -> None:
@@ -32,6 +36,38 @@ def test_energy_distance_differentiable() -> None:
     y = jnp.asarray(rng.normal(size=(30, 2)) + 1.0)
     grad = jax.grad(lambda a: energy_distance(a, y))(x)
     assert bool(jnp.all(jnp.isfinite(grad)))
+
+
+def test_weighted_energy_distance_matches_uniform() -> None:
+    # Uniform weights must reproduce the unweighted energy distance.
+    rng = np.random.default_rng(4)
+    x = jnp.asarray(rng.normal(size=(40, 2)))
+    y = jnp.asarray(rng.normal(size=(60, 2)) + 2.0)
+    wx = jnp.ones(x.shape[0])
+    plain = float(energy_distance(x, y))
+    weighted = float(energy_distance_weighted(x, wx, y))
+    assert weighted == pytest.approx(plain, abs=1e-5)
+
+
+def test_weighted_energy_distance_grad_flows_to_weights() -> None:
+    # The mixture use-case: gradient w.r.t. the occupancy p (via the weights) is finite.
+    rng = np.random.default_rng(5)
+    low = jnp.asarray(rng.normal(size=(30, 1)))
+    high = jnp.asarray(rng.normal(size=(30, 1)) + 5.0)
+    x = jnp.concatenate([low, high], axis=0)
+    obs = jnp.asarray(rng.normal(size=(50, 1)) + 5.0)  # mostly the high mode
+
+    def loss(p_raw: jnp.ndarray) -> jnp.ndarray:
+        p = jax.nn.sigmoid(p_raw)
+        n = low.shape[0]
+        wx = jnp.concatenate([jnp.full((n,), 1.0 - p), jnp.full((n,), p)])
+        return energy_distance_weighted(x, wx, obs)
+
+    g = jax.grad(loss)(jnp.asarray(0.0))
+    assert bool(jnp.isfinite(g))
+    # Observed is the high mode → increasing p (more high-basin mass) should reduce
+    # loss, so dL/dp_raw < 0 at p=0.5.
+    assert float(g) < 0.0
 
 
 def test_rbf_mmd_zero_for_identical_and_nonnegative() -> None:

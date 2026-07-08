@@ -129,10 +129,15 @@ fit → can misclassify (the fail-safe boundary is topology). See `FINDINGS.md`
 §Tier-0.5. **Deferred follow-ons:** the To & Maheshri bimodality-without-bistability
 *decoy* (needs a telegraph/promoter mechanism + a short lit search — user-confirmed
 fast-follow), and a **multi-basin IC seeding** extension to the fit so it can
-*represent* emergent feedback bistability — an autonomous Fable-5 async spike found
-this **feasible** (basin-occupancy `p` recovers robustly because NUDGE pins modes to
-ODE fixed points, unlike a free GMM; joint `p+K` recovered), a promising direction to
-prototype. Full verdict in `scripts/vv/FINDINGS.md` §T0.5-3.
+*represent* emergent feedback bistability — a Fable-5 async spike found it feasible,
+and it is now **built into NUDGE** (`inference/losses.py::energy_distance_weighted`,
+`inference/fit.py::{fit_multibasin_parameters, fit_multibasin}`, alongside the unchanged
+`fit`). **Result: representation works (≈10× lower loss, `p` recovers) but attribution
+degenerates** — a two-fixed-mode mixture conflates *gain* (graded) with *ceiling*
+(shifted high mode), a confident wrong call → so `fit_multibasin` is EXPERIMENTAL /
+not-fail-safe and the Tier-0.5 guard stays on single-basin `fit`. Full arc in
+`scripts/vv/FINDINGS.md` §T0.5-3/§T0.5-4. **Under investigation:** a 3rd "transition"
+mode at the unstable saddle to break the gain/ceiling degeneracy (user's idea).
 
 The original plan is retained below for reference.
 

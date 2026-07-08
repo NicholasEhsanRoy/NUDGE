@@ -16,7 +16,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-__all__ = ["energy_distance", "rbf_mmd"]
+__all__ = ["energy_distance", "energy_distance_weighted", "rbf_mmd"]
 
 _EPS = 1e-12
 
@@ -45,6 +45,32 @@ def energy_distance(x: Array, y: Array) -> Array:
     """
     x, y = _as_2d(x), _as_2d(y)
     return 2.0 * _mean_distance(x, y) - _mean_distance(x, x) - _mean_distance(y, y)
+
+
+def _weighted_mean_distance(a: Array, wa: Array, b: Array, wb: Array) -> Array:
+    """Weighted mean pairwise Euclidean distance ``Σ_ij wa_i·wb_j·‖a_i − b_j‖``."""
+    d = jnp.sqrt(_pairwise_sq_dists(a, b) + _EPS)
+    return wa @ d @ wb
+
+
+def energy_distance_weighted(
+    x: Array, wx: Array, y: Array, wy: Array | None = None
+) -> Array:
+    """Energy distance with per-sample weights on ``x`` (and optionally ``y``).
+
+    Lets ``x`` be a *mixture* empirical measure ``Σ wx_i δ(x_i)`` — the multi-basin
+    forward model stacks the low- and high-basin samples and weights them by the
+    basin-occupancy ``p``, so the gradient flows to ``p`` through ``wx``. Weights are
+    renormalized to sum to 1; ``wy`` defaults to uniform (the observed sample).
+    """
+    x, y = _as_2d(x), _as_2d(y)
+    wx = wx / wx.sum()
+    wy = jnp.full((y.shape[0],), 1.0 / y.shape[0]) if wy is None else wy / wy.sum()
+    return (
+        2.0 * _weighted_mean_distance(x, wx, y, wy)
+        - _weighted_mean_distance(x, wx, x, wx)
+        - _weighted_mean_distance(y, wy, y, wy)
+    )
 
 
 def rbf_mmd(x: Array, y: Array, *, sigma: float = 1.0) -> Array:
