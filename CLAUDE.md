@@ -8,9 +8,20 @@ perturbations that move a switch's **threshold** from ones that change its
 to propose untested interventions. Built on **MADDENING** (a differentiable
 graph-physics engine) for the [Built with Claude: Life Sciences] hackathon.
 
-Design docs (read these for context before substantive work):
+## ⭐ Start here each session: `design/STATE.md`
+
+**`design/STATE.md` is the single source of truth for where the project is and what's
+next** — operational essentials (uv toolchain, checks), current state (Phases 0–2 done,
+proof of concept closed + calibrated), the full roadmap, architecture decisions &
+gotchas, empirical findings, and the ready-to-execute **Tier-0.5 stochastic simulator**
+plan. Read it before substantive work.
+
+Design docs (deeper reasoning):
+- `design/GENERATOR_DESIGN.md` — literature-grounded generator design (count model +
+  the resolved bistability crux; the two `/deep-research` syntheses)
 - `design/WORKING_BACKWARDS.md` — full PR/FAQ + engineering reasoning
 - `design/PITCH.md` — plain-language version
+- `scripts/vv/FINDINGS.md` — overnight V&V calibration results
 - `brief.md` — the original concept brief
 
 ## Commits — always credit Claude explicitly
