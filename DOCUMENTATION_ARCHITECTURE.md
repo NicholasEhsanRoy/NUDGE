@@ -20,10 +20,11 @@ split, provenance) at a fraction of the weight.
   `check-anomalies` CLI, run over `docs/known_limitations.yaml` with the
   `NUDGE-LIM-` prefix.
 
-NUDGE pins `maddening>=0.3.0,<0.4`. (Note: the published 0.3.0 wheel ships the
-compliance surface but **not** `ift_linear_solve`; the zero-order integrator and
-the re-expressed blindness diagnostic that want it are gated on a MADDENING
-release that includes `core.solver_utils`, or a local build.)
+NUDGE pins `maddening[ift]>=0.3.1,<0.4`. The `ift` extra pulls `lineax` and makes
+`maddening.core.solver_utils.ift_linear_solve` available — the primitive the
+zero-order (Goldbeter–Koshland) integrator and the re-expressed blindness
+diagnostic differentiate through. (0.3.0 shipped the compliance surface but not
+`ift_linear_solve`; 0.3.1 adds it.)
 
 ## Provided by NUDGE
 

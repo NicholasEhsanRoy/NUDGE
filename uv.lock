@@ -2241,7 +2241,7 @@ wheels = [
 
 [[package]]
 name = "maddening"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
@@ -2251,9 +2251,14 @@ dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/65/808936c8fd52d36cb6e93953cc8fd25ba5f56485c2639aa1ecf93b30649a/maddening-0.3.0.tar.gz", hash = "sha256:b98918d98005e61b65db17283a2b5379f88443e8a9089123c169560ee23795eb", size = 898116, upload-time = "2026-06-10T19:53:17.922Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/81/53/da93f48dc07b28aa50a100cd85ad89fa4ffe3a44e4d16b7d52e89a9801ee/maddening-0.3.1.tar.gz", hash = "sha256:465365cec7a1606bb0ff35aae864a84544bc21dcbc5148c5b29d038c5476d112", size = 906978, upload-time = "2026-07-08T02:06:32.046Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/08/36/a4449db408083081313ea4e4036fdfade6c43846f8e3a0794c9b6729fb61/maddening-0.3.0-py3-none-any.whl", hash = "sha256:a5a67421613c87aed5abb8b1324a4029e4df0bbd4213682242e5138399d919a1", size = 533821, upload-time = "2026-06-10T19:53:16.198Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/96/4290ac34f347502d575a72119f3fdbb76a63766fd3128d2a87e89667bf86/maddening-0.3.1-py3-none-any.whl", hash = "sha256:665a54834cfd94ca5cd811dfb848aecd679afea3c1c4f8e673cbcd89f18cc367", size = 537772, upload-time = "2026-07-08T02:06:30.004Z" },
+]
+
+[package.optional-dependencies]
+ift = [
+    { name = "lineax" },
 ]
 
 [[package]]
@@ -2911,7 +2916,7 @@ dependencies = [
     { name = "anndata", version = "0.13.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "jax" },
     { name = "jaxlib" },
-    { name = "maddening" },
+    { name = "maddening", extra = ["ift"] },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "optax" },
@@ -2963,7 +2968,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'" },
     { name = "jax", specifier = "==0.5.1" },
     { name = "jaxlib", specifier = "==0.5.1" },
-    { name = "maddening", specifier = ">=0.3.0,<0.4" },
+    { name = "maddening", extras = ["ift"], specifier = ">=0.3.1,<0.4" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "nudge-bio", extras = ["ci", "bio", "mcp", "ai"], marker = "extra == 'dev'" },
     { name = "numpy", specifier = ">=1.24" },
