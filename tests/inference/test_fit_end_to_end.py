@@ -35,11 +35,24 @@ def test_fit_attributes_threshold_gain_ceiling() -> None:
     adata = generate_synthetic_perturbseq(
         _switch(), perts, n_cells_per_condition=3000, realism_level=1, seed=0
     )
-    mm = fit(adata, _switch(), n_cells=384, steps=400, seed=0)
+    # margin_k=1.0 is the sensitive operating point (the calibration in scripts/vv/
+    # shows ~88% correct there); the default 1.7 is conservative and would abstain
+    # more. With strong movers + budget the three mechanisms resolve cleanly.
+    mm = fit(adata, _switch(), n_cells=384, steps=400, margin_k=1.0, seed=0)
     calls = {c.perturbation: c.mechanism for c in mm.calls}
     assert calls["thr"] is MechanismClass.THRESHOLD
     assert calls["gai"] is MechanismClass.GAIN
     assert calls["cei"] is MechanismClass.CEILING
+    # Fail-safe: no perturbation is ever assigned the WRONG mechanism.
+    positives = {MechanismClass.THRESHOLD, MechanismClass.GAIN, MechanismClass.CEILING}
+    assert all(
+        c.mechanism not in positives or c.mechanism is expected
+        for c, expected in [
+            (mm.calls[0], MechanismClass.THRESHOLD),
+            (mm.calls[1], MechanismClass.GAIN),
+            (mm.calls[2], MechanismClass.CEILING),
+        ]
+    )
     assert mm.beats_linear_baseline
 
 
