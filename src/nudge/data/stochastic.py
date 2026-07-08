@@ -32,7 +32,7 @@ sets the barrier height between basins (smaller ``Ω`` → more noise-induced ho
 This module also provides the **telegraph decoy** (``generate_telegraph_perturbseq``):
 a two-state promoter model whose bimodality is *noise-induced without deterministic
 bistability* (To & Maheshri 2010) — the adversarial negative that a naive bimodality
-detector calls a switch and NUDGE must decline (``data/decoys.py``, ``NUDGE-DECOY-001``).
+detector calls a switch and NUDGE must decline (``NUDGE-DECOY-001``).
 """
 
 from __future__ import annotations
