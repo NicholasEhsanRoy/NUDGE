@@ -211,7 +211,7 @@ def fit_multibasin_parameters(
     high (``x0 = high_ic``) — and forms the mixture ``(1−p)·low + p·high`` as a
     weighted empirical distribution (the ``p``-weighted energy distance). This lets
     the deterministic fit *represent* an emergent-bistable population that a single
-    ``x0 = 0`` solve cannot (the Tier-0.5 gap; the Fable-5 spike showed ``p`` is
+    ``x0 = 0`` solve cannot (the Tier-0.5 gap; an autonomous R&D spike showed ``p`` is
     recoverable because the modes are pinned to the ODE fixed points). ``p`` is fit
     jointly with the kinetics via an unconstrained logit ``p = sigmoid(p_raw)``.
 

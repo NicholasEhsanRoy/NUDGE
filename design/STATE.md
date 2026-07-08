@@ -131,12 +131,12 @@ fit → can misclassify (the fail-safe boundary is topology). See `FINDINGS.md`
 fast-follow), and a **multi-basin IC seeding** extension to the fit so it can
 *represent* emergent feedback bistability, now **built into NUDGE** and taken all the way
 to a fail-safe fix. The arc (full detail in `scripts/vv/FINDINGS.md` §T0.5-3→5):
-1. Fable-5 spike found multi-basin representation feasible (`p` recovers, ≈10× lower loss).
+1. An autonomous R&D subagent found multi-basin representation feasible (`p` recovers, ≈10× lower loss).
 2. Built `energy_distance_weighted` + `fit_multibasin_parameters` + `fit_multibasin`: it
    *represents* bistability but plain 2-basin **attribution degenerates** (conflates gain
    with ceiling → a confident wrong call) — so `fit_multibasin(transition_mode=False)` is
    EXPERIMENTAL / not-fail-safe.
-3. **RESOLVED** via the user's saddle idea (a 2nd Fable-5 spike → integrated): a **third
+3. **RESOLVED** via the user's saddle idea (a 2nd autonomous spike → integrated): a **third
    transition mode at the unstable saddle** (`Circuit.fixed_points`/`transition_state`,
    `fit_transition_parameters`, `classify.decide_with_transition`). The free-`n` transition
    weight is a fail-safe gain detector (0.89 gain vs 0.01 else). **`fit_multibasin(

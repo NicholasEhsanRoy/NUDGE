@@ -36,21 +36,21 @@ which is why the product is built to **abstain** instead.
   (T-cell SOS/RasGRP1) validation is designed but not yet run. We would rather show
   a measured fail-safe guarantee than an unbacked biological claim.
 
-## 2. Claude Use (25%) — an async, multi-model R&D lab
+## 2. Claude Use (25%) — an async, multi-agent R&D lab
 
 This project was built *with* Claude Code as an active engineering participant, and
-the git history is deliberately an auditable record of that (see `CLAUDE.md`: every
-commit names the exact model that did the work).
+the git history is deliberately an auditable record of that (see `CLAUDE.md`: commits
+credit the Claude work explicitly).
 
 - **Multi-agent async R&D — the part that surprised us.** When we hit a hard research
   question — *can the fit represent emergent bistability?* — the main agent (Opus 4.8)
-  spawned an **autonomous Fable 5 subagent** to run an isolated JAX/Optax numerical
-  spike *in parallel* while the main build continued, then folded the verdict back in.
-  It did this **twice**: once to scope multi-basin feasibility (**§T0.5-3**), and once
-  to prototype the saddle fix (**§T0.5-5**). The second spike produced a genuinely
-  non-obvious scientific diagnosis — *the optimizer instability lives in the free mode
-  locations, not the basin mixture* — that reframed the whole approach. A different
-  model, running unsupervised, scoped a core architecture decision cheaply.
+  spawned an **autonomous subagent** to run an isolated JAX/Optax numerical spike *in
+  parallel* while the main build continued, then folded the verdict back in. It did this
+  **twice**: once to scope multi-basin feasibility (**§T0.5-3**), and once to prototype
+  the saddle fix (**§T0.5-5**). The second spike produced a genuinely non-obvious
+  scientific diagnosis — *the optimizer instability lives in the free mode locations, not
+  the basin mixture* — that reframed the whole approach. A separate agent context,
+  running unsupervised in the background, scoped a core architecture decision cheaply.
 - **`/deep-research` literature synthesis.** Two adversarially-verified research
   workflows resolved the two hardest design cruxes (the negative-binomial vs
   zero-inflation count-model debate; when deterministic-plus-noise breaks down near a
@@ -120,5 +120,5 @@ uv run python scripts/vv/overnight_sweep.py --smoke
 NUDGE's core promise is a **fail-safe guarantee** — never confidently wrong, abstain
 loudly — and this week we did the hard thing: we *attacked* that guarantee with
 independent stochastic data and a genuinely harder problem (emergent bistability), found
-where it bent, and **extended it rather than quietly breaking it** — with a multi-model
+where it bent, and **extended it rather than quietly breaking it** — with a multi-agent
 Claude workflow doing real, verified R&D in the loop.

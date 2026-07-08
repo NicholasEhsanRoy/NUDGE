@@ -114,9 +114,9 @@ correct topology; report attribution as topology-conditional.* Mitigations to ex
 a topology-adequacy check, a multi-reporter readout, and **multi-basin IC seeding** so
 the fit can represent emergent feedback bistability directly (see the async R&D spike).
 
-## T0.5-3. Async R&D spike (Fable 5) — multi-basin IC relaxation is FEASIBLE
+## T0.5-3. Async R&D spike (autonomous subagent) — multi-basin IC relaxation is FEASIBLE
 
-An **autonomous Fable-5 subagent** ran a standalone JAX/Optax investigation (no NUDGE
+An **autonomous background subagent** ran a standalone JAX/Optax investigation (no NUDGE
 code imported; `scratchpad/spike_multibasin_fit.py` + `spike_multibasin_REPORT.md`)
 into the root cause of finding T0.5-1: the fit solves from a fixed `x0 = 0`, so it
 only reaches the LOW basin and can't represent emergent bistability. Could a
@@ -150,7 +150,7 @@ guardrails: derive basin seeds from the fitted fixed points (never free); keep t
 elevated-loss self-diagnostic (0.2+ vs 0.003) as an abstention check.
 
 > Meta (creative-AI angle): the feasibility of a core fit-engine extension was scoped by
-> an autonomous Fable-5 agent running an isolated numerical spike in parallel with the
+> an autonomous background agent running an isolated numerical spike in parallel with the
 > main build — the "wrong place for the instability" diagnosis is the kind of result that
 > reframes an architecture decision cheaply.
 
@@ -163,7 +163,7 @@ Acting on T0.5-3, the multi-basin model was built *inside* NUDGE (`inference/los
 **Representation — a validated win.** On the Tier-0.5 WT data, the two-basin weighted
 mixture cuts the fit loss from **0.166 → 0.016 (≈10×)** vs the single-basin `fit`, and
 recovers occupancy `p̂ = 0.644` vs a true ON-fraction ≈ 0.62 (and `vmax̂ = 2.09` vs 2.0).
-The Fable-5 spike's conclusion holds in the real codebase: because the modes are pinned
+The spike's conclusion holds in the real codebase: because the modes are pinned
 to the ODE fixed points, `p` is recoverable and the bimodality is representable.
 
 **Attribution — a real degeneracy (fail-safe violation).** Pointing the full
@@ -189,7 +189,7 @@ can be confidently wrong — the classic sensitivity/safety trade, now measured.
 
 **Next → resolved in T0.5-5.** Add a **third "transition" mode at the unstable saddle** —
 a gain reduction piles intermediate cells near the saddle while a ceiling reduction does
-not, a candidate signal to break the degeneracy. Prototyped by a Fable-5 subagent, then
+not, a candidate signal to break the degeneracy. Prototyped by an autonomous subagent, then
 integrated and verified (T0.5-5).
 
 ## T0.5-5. The saddle transition-mode gain gate — degeneracy BROKEN, fail-safe
@@ -251,6 +251,6 @@ specifically for the gain/ceiling *confusion*, not K/vmax recovery). N-D saddle 
 (mutual-inhibition toggle switches) is future work — a natural next subagent spike.
 
 > The arc, all in the git history: single-basin abstains (safe) → 2-basin represents but
-> misclassifies (T0.5-4) → a user hypothesis (saddle) scoped by a Fable-5 spike →
+> misclassifies (T0.5-4) → a user hypothesis (saddle) scoped by an autonomous spike →
 > integrated with six anticipated failure modes → fail-safe gain attribution on emergent
 > bistability. The crown-jewel fail-safe guarantee was extended, not compromised.
