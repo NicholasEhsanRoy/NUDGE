@@ -101,8 +101,13 @@ witness, not a hidden blind spot, precisely bounding the guarantee: *fails safel
 approximately-affine readout.* Its discovery is also a **case study in verifying an AI
 collaborator** — an autonomous spike claimed the failure; independent reproduction
 reconciled it *twice* (a fit-budget confound, then confirmed a residual structural
-failure) before we believed and documented it. We're now spiking whether a
-constitutive-reporter control can turn that limitation into a capability.
+failure) before we believed and documented it. Then we turned the bound into a
+**validated contribution**: an identifiability study (audited + reproduced) showed the
+readout/circuit confound is a fundamental degeneracy (a single population cannot even tell
+a circuit switch exists), and that a **constitutive-reporter control** breaks it — letting
+the fit reject "no switch." That is both a candidate NUDGE capability and a concrete
+experimental-design suggestion to the field for making mechanism attribution survive a
+nonlinear readout (`FINDINGS.md`, NUDGE-LIM-006 + mitigation).
 
 ## 4. Demo (30%) — reproducible science you can run
 

@@ -332,3 +332,38 @@ whether a **constitutive-reporter control** (a calibration population that drive
 reporter independent of the circuit) anchors the readout and breaks the degeneracy — which
 would be both a candidate NUDGE capability and a concrete experimental-design suggestion to
 the field.
+
+## NUDGE-LIM-006 mitigation — VALIDATED: a constitutive control separates readout from circuit
+
+Turning the bound into a contribution. A standalone JAX identifiability study (a latent
+lognormal input → Hill circuit `a=g(u)` → saturating Hill readout `Λ=R(a)` → NB counts,
+fit by energy distance) — **audited for leakage and independently reproduced** — tested
+whether the readout/circuit confound can be broken:
+
+- **Single population → genuinely degenerate (why LIM-006 exists).** Fitting the circuit
+  Hill `n` and readout Hill `h` jointly to one population: the composition `R∘g` is pinned
+  (observed-map rel-RMSE 6.6%) but the *split* is not. The profile over circuit `n` is
+  **FLAT** (loss span 0.0003 across n∈[1,10]); a graded `n=1` circuit (no switch — all
+  nonlinearity in the reporter) fits within 0.0001 of the true `n=3`. `corr(circuit n,
+  readout h) = −0.905` among near-optimal fits. **You cannot even tell a circuit switch
+  exists.** LIM-006 is thus a fundamental identifiability degeneracy, not a fitting weakness.
+
+- **Add a constitutive-reporter control → the degeneracy breaks.** A calibration population
+  that drives the reporter at known activity doses (bypassing the circuit) anchors the
+  readout. Re-profiling: `n=1` is now **REJECTED** (Δloss 0.017 ≫ floor; the `n`-profile
+  span grows ~50×), the ridge collapses (near-optimal multistart fraction 0.07 → 1.00), and
+  the data now say the ultrasensitivity is **biological**. **Honest caveat (confirmed):**
+  the control rejects "no switch" but does *not* point-identify the exact `n` (recovered
+  ≈5 vs true 3 — the circuit's internal K/n/vmax trade-off persists). Full point-ID would
+  need a second anchor (an input titration / circuit dose-response).
+
+**Verification:** I read the forward model + control (the control uses only readout params
+at known doses — no circuit-param leak) and independently reproduced the headline (no-ctrl
+`n`-profile flat 0.0003; with-ctrl `n=1` rejected 0.017). Standalone artifacts in
+`scratchpad/spike_ident_*` (not in the repo).
+
+**Contribution.** (i) A concrete NUDGE feature candidate: an optional calibration-control
+channel; absent one, abstain on the circuit-vs-readout axis rather than mis-attribute.
+(ii) A concrete screen-design suggestion to the field: include a constitutively-driven
+reporter titration when trustworthy mechanism attribution is needed. The limitation
+(LIM-006) and its validated mitigation are, together, a publishable methodological result.

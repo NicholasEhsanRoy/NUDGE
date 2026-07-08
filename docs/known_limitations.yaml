@@ -115,5 +115,7 @@ anomalies:
       This is the sharpest bound on the core fail-safe guarantee: under a strongly
       nonlinear reporter NUDGE can be confidently wrong, not merely abstain. Mitigation
       requires a calibrated (non-affine) Readout in the forward model or an independent
-      reporter-linearity control (e.g. a constitutive-reporter calibration that anchors
-      the readout separately from the circuit) — under investigation; not in this release.
+      reporter-linearity control. A constitutive-reporter calibration (driving the reporter
+      at known doses, bypassing the circuit) is VALIDATED to break the degeneracy — it lets
+      the fit reject "no switch" and conclude the ultrasensitivity is biological (see
+      FINDINGS "NUDGE-LIM-006 mitigation"). Not yet wired into the release forward model.
