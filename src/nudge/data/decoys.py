@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from nudge.core.vocabulary import MechanismClass
+from nudge.data.stochastic import generate_telegraph_perturbseq
 
 
 @dataclass(frozen=True)
@@ -31,5 +32,22 @@ class DecoyCase:
     prompt_ref: str = ""  # for AI-authored decoys: prompt/model hash (idea 1)
 
 
-#: The decoy battery. Populated in Phase 3 and by ``scripts/ai/generate_decoy.py``.
-DECOY_BATTERY: list[DecoyCase] = []
+def _telegraph_decoy() -> Any:
+    """Bimodal-but-monostable telegraph data (To & Maheshri 2010) — not a switch."""
+    return generate_telegraph_perturbseq(n_cells_per_condition=2000, seed=0)
+
+
+#: The decoy battery. Grows with the mechanism library and the AI decoy generator.
+DECOY_BATTERY: list[DecoyCase] = [
+    DecoyCase(
+        decoy_id="NUDGE-DECOY-001",
+        summary=(
+            "Noise-induced bimodality without bistability: a non-cooperative "
+            "positive-feedback loop with slow promoter switching is deterministically "
+            "monostable yet bimodal. NUDGE must return off-model (not-a-switch)."
+        ),
+        generate=_telegraph_decoy,
+        expected_verdict=MechanismClass.OFF_MODEL,
+        limitation_ref="NUDGE-LIM-001",
+    ),
+]

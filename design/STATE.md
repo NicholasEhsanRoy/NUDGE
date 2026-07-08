@@ -45,7 +45,7 @@ JAX graph-physics engine) — reuses its `ift_linear_solve` primitive and
 | 1 Generative backbone | ✅ | `core/circuit.py`, `mechanisms/` (species, integrators, regulatory, readout), `data/synthetic.py`, `data/noise.py`, `data/ingest.py` |
 | 2 Fit | ✅ (PoC) | `inference/losses.py`, `inference/fit.py`, `inference/classify.py` |
 | V&V calibration | ✅ | `scripts/vv/` (harness + results + `FINDINGS.md`) |
-| 3 Fail-loud | ◑ ~35% | gate logic + linear decoy + Tier-0.5 stochastic simulator (`data/stochastic.py`) + its inverse-crime guard test; battery/suite/Laplace NOT built |
+| 3 Fail-loud | ◑ ~45% | gate logic + Tier-0.5 simulator + saddle gain gate + decoy battery started (`NUDGE-DECOY-001` telegraph, `NUDGE-LIM-001`); verification suite/Laplace + more decoys NOT built |
 | 4 Validation + provenance | ⬜ | T-cell SOS/RasGRP1; `provenance.py` is a stub |
 | Stretch | ⬜ (homes reserved) | `design/invert.py`, `mcp/server.py`, `mechanisms/integrators/zero_order.py`, `data/loaders/tier{1,2}.py`, docs site, `scripts/ai/` (5 creative-AI hooks) |
 

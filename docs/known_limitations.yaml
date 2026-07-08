@@ -12,4 +12,22 @@
 schema_version: "1.0"
 nudge_version: "0.1.0"
 generated_date: "2026-07-08"
-anomalies: []
+anomalies:
+  - anomaly_id: NUDGE-LIM-001
+    title: Noise-induced bimodality can masquerade as a switch
+    description: >-
+      A bimodal single-cell distribution is not, by itself, evidence of a bistable
+      switch. A non-cooperative positive-feedback loop with slow promoter switching
+      (the telegraph / bursting regime; To & Maheshri 2010, Kepler & Elston 2001) is
+      deterministically MONOSTABLE yet produces a clearly bimodal snapshot. A naive
+      bimodality detector would call ultrasensitivity. NUDGE must decline: its
+      circuit-level linear-baseline parsimony gate requires the mechanistic switch
+      model to beat a linear baseline beyond the loss noise floor, which telegraph data
+      does not — so NUDGE returns off-model ("no switch detected") on both the
+      single-basin and the transition-mode paths. Exercised by NUDGE-DECOY-001.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      Handled correctly today (NUDGE abstains), but the guarantee rests on the
+      parsimony gate's calibration (margin_k). A mis-tuned gate could false-positive on
+      noise-induced bimodality; the decoy is the regression test that keeps it honest.

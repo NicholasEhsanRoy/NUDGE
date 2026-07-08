@@ -30,6 +30,10 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   `fit_multibasin` / `fit_transition_parameters`, `Circuit.fixed_points` /
   `transition_state`, and `classify.decide_with_transition` — fail-safe mechanism
   attribution on emergent-bistable stochastic data.
+- **Decoy battery (started):** `NUDGE-DECOY-001` — the telegraph / noise-induced
+  bimodality decoy (`generate_telegraph_perturbseq`, To & Maheshri 2010): bimodal but
+  deterministically monostable data that NUDGE must decline as not-a-switch (it does,
+  on both fit paths). Registry `data/decoys.py`; limitation `NUDGE-LIM-001`.
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`); PEP 561.
 

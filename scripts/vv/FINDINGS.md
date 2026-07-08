@@ -254,3 +254,30 @@ specifically for the gain/ceiling *confusion*, not K/vmax recovery). N-D saddle 
 > misclassifies (T0.5-4) → a user hypothesis (saddle) scoped by an autonomous spike →
 > integrated with six anticipated failure modes → fail-safe gain attribution on emergent
 > bistability. The crown-jewel fail-safe guarantee was extended, not compromised.
+
+---
+
+# Decoy battery — bimodality that is NOT a switch (NUDGE-DECOY-001)
+
+The "fails safely and loudly" claim is only real if NUDGE declines on adversarial
+negatives. The first battery case is the scientifically-flagged one:
+
+**NUDGE-DECOY-001 — telegraph / noise-induced bimodality (To & Maheshri 2010).** A
+two-state promoter with **slow switching** and **non-cooperative (n=1) positive feedback**
+is deterministically **monostable** (a single mean-field fixed point, verified — count
+units ≈ 88.6) yet produces a **clearly bimodal** snapshot (a large OFF spike + a populated
+ON mode) because the protein sees a quasi-static promoter. A naive bimodality detector
+would call ultrasensitivity.
+
+**Result: NUDGE correctly abstains, on both engines.** Fitting the bistable-switch
+hypothesis, the circuit-level linear-baseline parsimony gate finds the mechanistic model
+does not beat linear beyond the noise floor → `beats_linear_baseline = False` → every
+condition is `off-model` ("no switch detected"). This holds for **both** the single-basin
+`fit` and the powerful `fit_multibasin(transition_mode=True)` — the parsimony gate fires
+first, so the saddle gain gate never even gets the chance to misread the telegraph's
+intermediate cells. Guarded by `tests/decoys/test_battery.py` (slow) + a fast
+generator check (`tests/data/test_telegraph.py`); limitation `NUDGE-LIM-001`.
+
+> Takeaway: **bimodal ≠ switch**, and NUDGE encodes that distinction structurally (the
+> parsimony gate), not by eyeballing a histogram. The same reasoning underwrites trusting
+> a *positive* call on real bimodal data.

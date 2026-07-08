@@ -28,6 +28,11 @@ degradation ``decay·X``, so the concentration fixed points match the determinis
 circuit while molecule counts land in the tens-to-hundreds — the regime where
 Poisson noise gives cleanly separated modes rather than swamping them. ``Ω`` also
 sets the barrier height between basins (smaller ``Ω`` → more noise-induced hopping).
+
+This module also provides the **telegraph decoy** (``generate_telegraph_perturbseq``):
+a two-state promoter model whose bimodality is *noise-induced without deterministic
+bistability* (To & Maheshri 2010) — the adversarial negative that a naive bimodality
+detector calls a switch and NUDGE must decline (``data/decoys.py``, ``NUDGE-DECOY-001``).
 """
 
 from __future__ import annotations
@@ -46,7 +51,7 @@ from nudge.data.noise import sample_counts, sample_library_sizes
 from nudge.data.synthetic import PerturbationSpec
 from nudge.mechanisms.readout import Readout
 
-__all__ = ["generate_stochastic_perturbseq"]
+__all__ = ["generate_stochastic_perturbseq", "generate_telegraph_perturbseq"]
 
 # Extrinsic (per-cell) variation scales the expression-level rate constants only,
 # NOT the switch shape params (K, n) — matching Tier-0's population model so the
@@ -216,5 +221,131 @@ def generate_stochastic_perturbseq(
         "seed": int(seed),
         "omega": float(omega),
         "kinetics": {k: float(v) for k, v in kin.items()},
+    }
+    return adata
+
+
+# ── The telegraph decoy: bimodality WITHOUT deterministic bistability ─────────
+
+
+def _telegraph_mean_field_roots(
+    *, P: float, decay: float, kon0: float, kon1: float,
+    K: float, koff: float, omega: float, n_grid: int = 4000,
+) -> list[float]:
+    """Fixed points of the *deterministic* mean-field telegraph ODE (count units).
+
+    ``dX/dt = P·f(c) − decay·X`` with ``c = X/Ω`` and promoter-ON fraction
+    ``f = kon(c)/(kon(c)+koff)``, ``kon(c) = kon0 + kon1·c/(K+c)`` (NON-cooperative,
+    ``n = 1``). A single root ⇒ **monostable**: no deterministic switch to attribute.
+    """
+    hi = 1.3 * P / decay
+    xs = np.linspace(1e-6, hi, n_grid)
+    c = xs / omega
+    kon = kon0 + kon1 * c / (K + c)
+    g = P * (kon / (kon + koff)) - decay * xs
+    return [
+        float(0.5 * (xs[i] + xs[i + 1]))
+        for i in range(len(xs) - 1)
+        if g[i] * g[i + 1] < 0
+    ]
+
+
+def _simulate_telegraph(
+    rng: np.random.Generator,
+    *,
+    n_cells: int, P: float, decay: float, kon0: float, kon1: float,
+    K: float, koff: float, omega: float, dt: float, n_steps: int,
+) -> np.ndarray:
+    """Tau-leap a two-state promoter + protein per cell → concentration ``X/Ω``.
+
+    SLOW promoter switching (``kon, koff ≪ decay``) makes the protein see a
+    quasi-static promoter, so cells cluster low (promoter mostly OFF) or high
+    (mostly ON) — bimodal — even though the deterministic system is monostable
+    (To & Maheshri 2010; Kepler & Elston 2001).
+    """
+    x = rng.uniform(0.0, 2.0 * P / decay, size=n_cells)
+    g = (rng.uniform(size=n_cells) < 0.5).astype(float)
+    for _ in range(n_steps):
+        c = x / omega
+        kon = kon0 + kon1 * c / (K + c)
+        u = rng.uniform(size=n_cells)
+        turn_on = (g == 0) & (u < kon * dt)
+        turn_off = (g == 1) & (u < koff * dt)
+        g = np.where(turn_on, 1.0, np.where(turn_off, 0.0, g))
+        x = np.maximum(x + rng.poisson(g * P * dt) - rng.poisson(decay * x * dt), 0.0)
+    return x / omega
+
+
+def generate_telegraph_perturbseq(
+    *,
+    n_cells_per_condition: int = 1000,
+    P: float = 120.0,
+    decay: float = 1.0,
+    kon0: float = 0.03,
+    kon1: float = 0.5,
+    K: float = 0.4,
+    koff: float = 0.15,
+    omega: float = 60.0,
+    perturbation_kon1: float = 0.2,
+    dt: float = 0.05,
+    n_steps: int = 6000,
+    dispersion: float = 0.1,
+    library_sigma: float = 0.2,
+    readout: Readout | None = None,
+    seed: int = 0,
+    gene_names: Sequence[str] | None = None,
+) -> ad.AnnData:
+    """A **decoy**: bimodal Perturb-seq data whose bimodality is *not* a switch.
+
+    Generates telegraph data (a WT plus a weaker-feedback ``pert`` condition) where
+    the deterministic system is **monostable** but slow promoter switching yields a
+    bimodal snapshot — the To & Maheshri (2010) noise-induced bimodality that a naive
+    bimodality-detector misreads as ultrasensitivity. The correct verdict is
+    not-a-switch: the circuit-level parsimony gate must decline (``off-model``), not a
+    mechanism. Registered in ``data/decoys.py`` (``NUDGE-DECOY-001``). Output schema
+    matches the other generators; ``.uns['ground_truth']`` records the mean-field fixed
+    points (monostability) and ``tier='0.5-telegraph-decoy'``.
+    """
+    if readout is None:
+        readout = Readout.identity(1)
+    n = n_cells_per_condition
+    conditions = [("WT", kon1), ("pert", perturbation_kon1)]
+    rng = np.random.default_rng(seed)
+    key = jax.random.key(seed)
+    count_blocks: list[np.ndarray] = []
+    obs_condition: list[str] = []
+    for name, cond_kon1 in conditions:
+        activity = _simulate_telegraph(
+            rng, n_cells=n, P=P, decay=decay, kon0=kon0,
+            kon1=cond_kon1, K=K, koff=koff, omega=omega, dt=dt, n_steps=n_steps,
+        )
+        expression = readout.expression(jnp.asarray(activity[:, None]))
+        key, k_lib, k_counts = jax.random.split(key, 3)
+        library = sample_library_sizes(k_lib, n, log_sd=library_sigma)
+        counts = sample_counts(k_counts, expression, library, dispersion=dispersion)
+        count_blocks.append(np.asarray(counts))
+        obs_condition.extend([name] * n)
+
+    counts_matrix = np.concatenate(count_blocks, axis=0)
+    names = list(gene_names) if gene_names is not None else ["SW"]
+    obs = pd.DataFrame(
+        {
+            "condition": obs_condition,
+            "true_mechanism": [MechanismClass.OFF_MODEL.value] * len(obs_condition),
+        },
+        index=pd.Index([f"cell_{i}" for i in range(counts_matrix.shape[0])]),
+    )
+    var = pd.DataFrame(index=pd.Index(names))
+    adata = ad.AnnData(X=counts_matrix, obs=obs, var=var)
+    roots = _telegraph_mean_field_roots(
+        P=P, decay=decay, kon0=kon0, kon1=kon1, K=K, koff=koff, omega=omega
+    )
+    adata.uns["ground_truth"] = {
+        "tier": "0.5-telegraph-decoy",
+        "expected_verdict": MechanismClass.OFF_MODEL.value,
+        "mean_field_fixed_points": [float(r) for r in roots],
+        "deterministically_monostable": len(roots) <= 1,
+        "seed": int(seed),
+        "omega": float(omega),
     }
     return adata
