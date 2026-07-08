@@ -38,6 +38,7 @@ detector calls a switch and NUDGE must decline (``NUDGE-DECOY-001``).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import anndata as ad
 import jax
@@ -51,7 +52,11 @@ from nudge.data.noise import sample_counts, sample_library_sizes
 from nudge.data.synthetic import PerturbationSpec
 from nudge.mechanisms.readout import Readout
 
-__all__ = ["generate_stochastic_perturbseq", "generate_telegraph_perturbseq"]
+__all__ = [
+    "generate_stochastic_perturbseq",
+    "generate_telegraph_perturbseq",
+    "generate_toggle_perturbseq",
+]
 
 # Extrinsic (per-cell) variation scales the expression-level rate constants only,
 # NOT the switch shape params (K, n) — matching Tier-0's population model so the
@@ -345,6 +350,151 @@ def generate_telegraph_perturbseq(
         "expected_verdict": MechanismClass.OFF_MODEL.value,
         "mean_field_fixed_points": [float(r) for r in roots],
         "deterministically_monostable": len(roots) <= 1,
+        "seed": int(seed),
+        "omega": float(omega),
+    }
+    return adata
+
+
+# ── N-node stochastic feedback (e.g. the 2-node mutual-inhibition toggle) ─────
+
+
+@dataclass
+class _EdgeKin:
+    """Typed, mutable per-edge kinetics for the independent numpy SSA."""
+
+    source: int
+    target: int
+    effect: str
+    K: float
+    n: float
+    vmax: float
+    weight: float
+
+
+def _edge_kinetics(circuit: Circuit) -> list[_EdgeKin]:
+    ed = circuit.base_params()["edges"]
+    return [
+        _EdgeKin(
+            source=int(e.source), target=int(e.target), effect=e.effect,
+            K=float(ed["K"][i]), n=float(ed["n"][i]),
+            vmax=float(ed["vmax"][i]), weight=float(ed["weight"][i]),
+        )
+        for i, e in enumerate(circuit.edges)
+    ]
+
+
+def _numpy_drive(
+    conc: np.ndarray, basal: np.ndarray, edges: list[_EdgeKin]
+) -> np.ndarray:
+    """Independent numpy production ``basal + Σ edge effects`` (Tier-0.5, not the fit's
+    jax solve). ``conc``/``basal`` are ``(n_cells, n_species)``; returns that shape."""
+    drive = np.array(basal, dtype=float, copy=True)
+    for e in edges:
+        xs = np.maximum(conc[:, e.source], 0.0)
+        kn = e.K**e.n
+        if e.effect == "hill_repression":
+            r = e.vmax * kn / (kn + xs**e.n)
+        elif e.effect == "hill_activation":
+            r = e.vmax * xs**e.n / (kn + xs**e.n)
+        else:
+            r = e.weight * xs
+        drive[:, e.target] += r
+    return drive
+
+
+def generate_toggle_perturbseq(
+    circuit: Circuit,
+    perturbations: Sequence[PerturbationSpec] = (),
+    readout: Readout | None = None,
+    *,
+    n_cells_per_condition: int = 1000,
+    omega: float = 50.0,
+    dt: float = 0.05,
+    n_steps: int = 3000,
+    dispersion: float = 0.1,
+    library_sigma: float = 0.2,
+    extrinsic_sigma: float = 0.1,
+    seed: int = 0,
+    gene_names: Sequence[str] | None = None,
+) -> ad.AnnData:
+    """Tier-0.5 stochastic simulator for a MULTI-NODE feedback circuit — e.g. a 2-node
+    mutual-inhibition toggle switch — with emergent bimodality across its attractors.
+
+    An **independent** numpy tau-leaping SSA (not the fitter's jax solve, preserving the
+    inverse-crime break), driven by the circuit's edges. An edge ``PerturbationSpec``
+    scales one edge parameter, and which fixes the ground-truth mechanism (``K`` →
+    threshold, ``n`` → gain, ``vmax`` → ceiling). Output schema matches the other
+    generators (``n_species`` genes; ground truth in ``.uns``).
+    """
+    if readout is None:
+        readout = Readout.identity(circuit.n_species)
+    ns = circuit.n_species
+    base = circuit.base_params()
+    basal0 = np.asarray(base["species"]["basal"], dtype=float)
+    decay0 = np.asarray(base["species"]["decay"], dtype=float)
+    vmax_tot = (
+        float(np.sum(np.asarray(base["edges"]["vmax"], dtype=float)))
+        if circuit.n_edges
+        else 0.0
+    )
+    hi = 2.0 * omega * (float(basal0.max()) + vmax_tot) / float(decay0.min()) + 1.0
+
+    conditions: list[PerturbationSpec | None] = [None, *perturbations]
+    rng = np.random.default_rng(seed)
+    key = jax.random.key(seed)
+    count_blocks: list[np.ndarray] = []
+    obs_condition: list[str] = []
+    obs_mechanism: list[str] = []
+    ground_truth: list[dict[str, object]] = []
+
+    for cond in conditions:
+        edges = _edge_kinetics(circuit)
+        if cond is not None and cond.scope == "edge":
+            e = edges[cond.index]
+            setattr(e, cond.param, getattr(e, cond.param) * cond.factor)
+        n = n_cells_per_condition
+        basal = np.broadcast_to(basal0, (n, ns)).astype(float)
+        decay = np.broadcast_to(decay0, (n, ns)).astype(float)
+        if extrinsic_sigma > 0:
+            basal = basal * np.exp(extrinsic_sigma * rng.standard_normal((n, ns)))
+            decay = decay * np.exp(extrinsic_sigma * rng.standard_normal((n, ns)))
+        x = rng.uniform(0.0, hi, size=(n, ns))
+        for _ in range(n_steps):
+            drive = _numpy_drive(x / omega, basal, edges)
+            born = rng.poisson(omega * drive * dt)
+            died = rng.poisson(decay * x * dt)
+            x = np.maximum(x + born - died, 0.0)
+        expression = readout.expression(jnp.asarray(x / omega))
+        key, k_lib, k_counts = jax.random.split(key, 3)
+        library = sample_library_sizes(k_lib, n, log_sd=library_sigma)
+        counts = sample_counts(k_counts, expression, library, dispersion=dispersion)
+        count_blocks.append(np.asarray(counts))
+        name = "WT" if cond is None else cond.name
+        mech = MechanismClass.NO_EFFECT if cond is None else cond.mechanism
+        obs_condition.extend([name] * n)
+        obs_mechanism.extend([mech.value] * n)
+        ground_truth.append({"name": name, "mechanism": mech.value})
+
+    counts_matrix = np.concatenate(count_blocks, axis=0)
+    n_genes = counts_matrix.shape[1]
+    if gene_names is None:
+        gene_names = (
+            list(circuit.names)
+            if n_genes == circuit.n_species
+            else [f"gene_{i}" for i in range(n_genes)]
+        )
+    obs = pd.DataFrame(
+        {"condition": obs_condition, "true_mechanism": obs_mechanism},
+        index=pd.Index([f"cell_{i}" for i in range(counts_matrix.shape[0])]),
+    )
+    adata = ad.AnnData(
+        X=counts_matrix, obs=obs, var=pd.DataFrame(index=pd.Index(list(gene_names)))
+    )
+    adata.uns["ground_truth"] = {
+        "tier": "0.5-toggle",
+        "conditions": ground_truth,
+        "species": list(circuit.names),
         "seed": int(seed),
         "omega": float(omega),
     }

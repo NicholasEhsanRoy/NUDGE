@@ -376,11 +376,19 @@ def fit_transition_parameters(
     optimizer = optax.adam(learning_rate)
     opt_state = optimizer.init(theta)
 
-    def loss_fn(vec: Array, key: Array, center: Array, valid: Array) -> Array:
-        # The saddle center/valid are per-step constants from the eager finder — never
-        # differentiate through the root-finder (XLA would trace its backward pass).
+    def loss_fn(
+        vec: Array, key: Array, center: Array, valid: Array,
+        seed_low: Array, seed_high: Array,
+    ) -> Array:
+        # The saddle center/valid + basin seeds are per-step constants from the eager
+        # finder — never differentiate through it (XLA would trace its backward pass).
+        # Per-step stop-gradient constants from the eager finder: the transition-mode
+        # centre + validity, and the two basin seeds (stable fixed points for a toggle;
+        # 0 / high_ic for a 1-species switch — see _modes).
         center = jax.lax.stop_gradient(center)
         valid = jax.lax.stop_gradient(valid)
+        seed_low = jax.lax.stop_gradient(seed_low)
+        seed_high = jax.lax.stop_gradient(seed_high)
         log_vals = vec[:n_free]
         logits = vec[n_free : n_free + 3]
         log_width = vec[n_free + 3]
@@ -392,8 +400,8 @@ def fit_transition_parameters(
         params = _per_cell_params(circuit, k_ext, n_cells, extrinsic_sigma)
         for f, value in zip(free, jnp.exp(log_vals), strict=True):
             _override(params, f, value)
-        x0_low = jnp.zeros((n_cells, n_species))
-        x0_high = jnp.full((n_cells, n_species), high_ic)
+        x0_low = jnp.broadcast_to(seed_low, (n_cells, n_species))
+        x0_high = jnp.broadcast_to(seed_high, (n_cells, n_species))
         sim_low = _simulate_basin(
             circuit, params, readout, k_low, x0_low,
             dispersion=dispersion, library_sigma=library_sigma,
@@ -426,40 +434,68 @@ def fit_transition_parameters(
 
     @jax.jit
     def step(
-        vec: Array, state: optax.OptState, key: Array, center: Array, valid: Array
+        vec: Array, state: optax.OptState, key: Array, center: Array, valid: Array,
+        seed_low: Array, seed_high: Array,
     ) -> tuple[Array, optax.OptState, Array]:
-        loss, grad = jax.value_and_grad(loss_fn)(vec, key, center, valid)
+        loss, grad = jax.value_and_grad(loss_fn)(
+            vec, key, center, valid, seed_low, seed_high
+        )
         updates, state = optimizer.update(grad, state)
         new_vec = jnp.asarray(optax.apply_updates(vec, updates))
         return new_vec, state, loss
 
-    def _saddle(vec: Array) -> tuple[Array, Array]:
-        # Recompute the saddle from the current concrete kinetics per step (eager, then
-        # fed into the jitted step as a stop-gradient constant). `transition_state()`
-        # returns an (n_species,) vector (length-1 for a 1-species switch) or None.
+    def _modes(vec: Array) -> tuple[Array, Array, Array, Array]:
+        """Per-step mixture geometry from the current concrete kinetics (eager; fed into
+        the jitted step as stop-gradient constants). Returns
+        ``(seed_low, seed_high, saddle_center, valid)`` — the two basin seeds, the
+        transition-mode centre, and a 0/1 mask (0 when there is no saddle).
+
+        1-species keeps the exact proven seeding (``0`` / ``high_ic``). N-species seeds
+        the two basin slots at the STABLE fixed points (sorted by ``fixed_points`` →
+        deterministic slot identity across steps, so Optax momentum on the mixture
+        weights is not thrashed). Static slot count with a dynamic fallback: ≥2 stable →
+        the two extremes; exactly 1 (monostable excursion) → both slots at it; 0 (finder
+        miss) → the safe ``0``/``high_ic`` seeds. Transition masked when no saddle.
+        """
         vals = np.exp(np.asarray(vec[:n_free]))
         cur = _updated_circuit(
             circuit, {f: float(v) for f, v in zip(free, vals, strict=True)}
         )
-        state = cur.transition_state()
-        if state is None:
-            # monostable/no saddle → safe finite centre, transition masked off
-            return jnp.ones((n_species,)), jnp.asarray(0.0)
-        return jnp.asarray(state), jnp.asarray(1.0)
+        low_default = jnp.zeros((n_species,))
+        high_default = jnp.full((n_species,), high_ic)
+        if n_species == 1:
+            saddle = cur.transition_state()
+            center = jnp.ones((1,)) if saddle is None else jnp.asarray(saddle)
+            valid = jnp.asarray(0.0 if saddle is None else 1.0)
+            return low_default, high_default, center, valid
+        fps = cur.fixed_points()
+        stable = [s for s, lab in fps if lab == "stable"] if fps else []
+        saddles = [s for s, lab in fps if lab == "saddle-index1"] if fps else []
+        if len(stable) >= 2:
+            seed_low, seed_high = jnp.asarray(stable[0]), jnp.asarray(stable[-1])
+        elif len(stable) == 1:
+            seed_low = seed_high = jnp.asarray(stable[0])
+        else:
+            seed_low, seed_high = low_default, high_default
+        center = jnp.asarray(saddles[0]) if saddles else jnp.ones((n_species,))
+        valid = jnp.asarray(1.0 if saddles else 0.0)
+        return seed_low, seed_high, center, valid
 
     key = jax.random.key(seed)
     history: list[float] = []
     for _ in range(steps):
         key, sub = jax.random.split(key)
-        center, valid = _saddle(theta)
-        theta, opt_state, loss = step(theta, opt_state, sub, center, valid)
+        seed_low, seed_high, center, valid = _modes(theta)
+        theta, opt_state, loss = step(
+            theta, opt_state, sub, center, valid, seed_low, seed_high
+        )
         history.append(float(loss))
 
     recovered = {
         f: float(v) for f, v in zip(free, jnp.exp(theta[:n_free]), strict=True)
     }
     w_final = np.asarray(jax.nn.softmax(theta[n_free : n_free + 3]))
-    _, valid_final = _saddle(theta)
+    _, _, _, valid_final = _modes(theta)
     w_trans_eff = float(w_final[2]) * float(valid_final)
     total = float(w_final[0]) + float(w_final[1]) + w_trans_eff + 1e-8
     return recovered, w_trans_eff / total, history
