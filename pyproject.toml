@@ -107,8 +107,8 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.ruff.lint.per-file-ignores]
-# V&V analysis scripts: throwaway compute + plotting, not library code.
-"scripts/vv/*" = ["E501", "B905", "B007"]
+# V&V analysis scripts (incl. nested): throwaway compute + plotting, not library code.
+"scripts/vv/**" = ["E501", "B905", "B007", "E402", "E702", "E731", "E741", "I001"]
 
 [tool.pyright]
 include = ["src"]

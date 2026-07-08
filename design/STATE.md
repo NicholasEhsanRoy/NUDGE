@@ -27,6 +27,8 @@ overnight V&V calibration.
   repo). The design docs (`design/WORKING_BACKWARDS.md`, `PITCH.md`,
   `GENERATOR_DESIGN.md`) hold the reasoning; `GENERATOR_DESIGN.md` especially — it
   has the two literature-review syntheses (count model + the bistability crux).
+  `design/CONSTITUTIVE_CONTROL.md` documents the `NUDGE-LIM-006` readout-nonlinearity
+  limitation + its validated constitutive-control mitigation (a stretch feature).
 
 ## 1. What NUDGE is (one paragraph)
 
@@ -47,7 +49,7 @@ JAX graph-physics engine) — reuses its `ift_linear_solve` primitive and
 | V&V calibration | ✅ | `scripts/vv/` (harness + results + `FINDINGS.md`) |
 | 3 Fail-loud | ◑ ~45% | gate logic + Tier-0.5 simulator + saddle gain gate + decoy battery started (`NUDGE-DECOY-001` telegraph, `NUDGE-LIM-001`); verification suite/Laplace + more decoys NOT built |
 | 4 Validation + provenance | ⬜ | T-cell SOS/RasGRP1; `provenance.py` is a stub |
-| Stretch | ⬜ (homes reserved) | `design/invert.py`, `mcp/server.py`, `mechanisms/integrators/zero_order.py`, `data/loaders/tier{1,2}.py`, docs site, `scripts/ai/` (5 creative-AI hooks) |
+| Stretch | ⬜ (homes reserved) | `design/invert.py`, `mcp/server.py`, `mechanisms/integrators/zero_order.py`, `data/loaders/tier{1,2}.py`, **constitutive-control channel** (validated — `design/CONSTITUTIVE_CONTROL.md`), N-D saddle integration (spike done), docs site, `scripts/ai/` |
 
 **The PoC works end to end** (`tests/inference/test_fit_end_to_end.py`, slow lane):
 generate ground-truth data → `fit()` → recover kinetics → attribute
