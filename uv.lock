@@ -2943,6 +2943,7 @@ ci = [
 dev = [
     { name = "anthropic" },
     { name = "build" },
+    { name = "matplotlib" },
     { name = "mcp" },
     { name = "pertpy", version = "0.10.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pertpy", version = "1.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
@@ -2969,6 +2970,7 @@ requires-dist = [
     { name = "jax", specifier = "==0.5.1" },
     { name = "jaxlib", specifier = "==0.5.1" },
     { name = "maddening", extras = ["ift"], specifier = ">=0.3.1,<0.4" },
+    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "nudge-bio", extras = ["ci", "bio", "mcp", "ai"], marker = "extra == 'dev'" },
     { name = "numpy", specifier = ">=1.24" },
