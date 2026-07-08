@@ -45,7 +45,7 @@ JAX graph-physics engine) — reuses its `ift_linear_solve` primitive and
 | 1 Generative backbone | ✅ | `core/circuit.py`, `mechanisms/` (species, integrators, regulatory, readout), `data/synthetic.py`, `data/noise.py`, `data/ingest.py` |
 | 2 Fit | ✅ (PoC) | `inference/losses.py`, `inference/fit.py`, `inference/classify.py` |
 | V&V calibration | ✅ | `scripts/vv/` (harness + results + `FINDINGS.md`) |
-| 3 Fail-loud | ◑ ~20% | gate logic + linear decoy + 2 verification tests exist; battery/suite/Tier-0.5/Laplace NOT built |
+| 3 Fail-loud | ◑ ~35% | gate logic + linear decoy + Tier-0.5 stochastic simulator (`data/stochastic.py`) + its inverse-crime guard test; battery/suite/Laplace NOT built |
 | 4 Validation + provenance | ⬜ | T-cell SOS/RasGRP1; `provenance.py` is a stub |
 | Stretch | ⬜ (homes reserved) | `design/invert.py`, `mcp/server.py`, `mechanisms/integrators/zero_order.py`, `data/loaders/tier{1,2}.py`, docs site, `scripts/ai/` (5 creative-AI hooks) |
 
@@ -62,6 +62,13 @@ threshold/gain/ceiling → and `off-model` when a linear model suffices.
 - **Identifiability:** needs **≥~1000 cells/condition**; **gain > ceiling ≈
   threshold**; **ceiling is the most noise-fragile**; threshold hardest (K/v_max
   partial degeneracy — both shrink the ON signal).
+- **Tier-0.5 (independent stochastic data) — fail-safe survives, with a boundary.**
+  On data from the new tau-leaping SSA (`data/stochastic.py`, emergent bimodality),
+  a matched-topology fit emits **0 wrong positives across seeds 0–3** (abstains, or
+  recovers only gain) — the fail-safe property holds off the inverse crime. BUT
+  fitting a *wrong* (feedforward) topology to the feedback data produced a confident
+  wrong call (`gain→threshold`, every `margin_k`): **the guarantee is conditional on
+  approximately-correct topology.** Full write-up in `scripts/vv/FINDINGS.md` §Tier-0.5.
 
 ## 4. Architecture decisions & gotchas (a fresh context MUST know these)
 
@@ -109,7 +116,27 @@ rbf_mmd}`, `data.ingest.check_counts` (the raw-counts bouncer).
 
 ---
 
-## 6. NEXT: the Tier-0.5 independent stochastic simulator (ready to execute)
+## 6. Tier-0.5 independent stochastic simulator — ✅ LANDED (simulator + guard)
+
+**Status (updated after build).** Built: `data/stochastic.py`
+(`generate_stochastic_perturbseq`, a tau-leaping SSA of a self-activating gene,
+emergent bimodality, reusing the `Readout`+NB observation layer verbatim; re-exported
+via `data/loaders/tier05.py` and `nudge.__init__`) and its guard test
+`tests/verification/test_stochastic_inverse_crime.py` (a fast bimodality check +
+the slow never-wrong fit assertion). **Result:** matched-topology fit → **0 wrong
+positives across seeds 0–3** (fail-safe holds off the inverse crime); wrong-topology
+fit → can misclassify (the fail-safe boundary is topology). See `FINDINGS.md`
+§Tier-0.5. **Deferred follow-ons:** the To & Maheshri bimodality-without-bistability
+*decoy* (needs a telegraph/promoter mechanism + a short lit search — user-confirmed
+fast-follow), and a **multi-basin IC seeding** extension to the fit so it can
+*represent* emergent feedback bistability — an autonomous Fable-5 async spike found
+this **feasible** (basin-occupancy `p` recovers robustly because NUDGE pins modes to
+ODE fixed points, unlike a free GMM; joint `p+K` recovered), a promising direction to
+prototype. Full verdict in `scripts/vv/FINDINGS.md` §T0.5-3.
+
+The original plan is retained below for reference.
+
+### (original plan) the Tier-0.5 independent stochastic simulator
 
 **Why (the one caveat the whole PoC can't escape):** everything so far is **Tier-0
 inverse crime** — the generator and the fitter share the same deterministic model +

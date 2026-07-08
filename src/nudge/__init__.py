@@ -14,6 +14,7 @@ from nudge.core.builder import CircuitBuilder
 from nudge.core.circuit import Circuit
 from nudge.core.results import MechanismCall, MechanismMap
 from nudge.core.vocabulary import MechanismClass
+from nudge.data.stochastic import generate_stochastic_perturbseq
 from nudge.data.synthetic import PerturbationSpec, generate_synthetic_perturbseq
 from nudge.design.invert import design
 from nudge.inference.fit import fit
@@ -30,5 +31,6 @@ __all__ = [
     "__version__",
     "design",
     "fit",
+    "generate_stochastic_perturbseq",
     "generate_synthetic_perturbseq",
 ]
