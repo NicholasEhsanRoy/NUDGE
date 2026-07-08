@@ -16,6 +16,10 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from nudge.core.vocabulary import MechanismClass
+from nudge.data.decoy_generators import (
+    generate_dropout_decoy,
+    generate_mixture_decoy,
+)
 from nudge.data.stochastic import generate_telegraph_perturbseq
 
 
@@ -37,6 +41,16 @@ def _telegraph_decoy() -> Any:
     return generate_telegraph_perturbseq(n_cells_per_condition=2000, seed=0)
 
 
+def _mixture_decoy() -> Any:
+    """Two-population (cell-type / doublet) mixture faking bimodality — not a switch."""
+    return generate_mixture_decoy(n_cells_per_condition=2000, seed=0)
+
+
+def _dropout_decoy() -> Any:
+    """Technical dropout zero-peak on a monostable population — not a switch."""
+    return generate_dropout_decoy(n_cells_per_condition=2000, seed=0)
+
+
 #: The decoy battery. Grows with the mechanism library and the AI decoy generator.
 DECOY_BATTERY: list[DecoyCase] = [
     DecoyCase(
@@ -49,5 +63,27 @@ DECOY_BATTERY: list[DecoyCase] = [
         generate=_telegraph_decoy,
         expected_verdict=MechanismClass.OFF_MODEL,
         limitation_ref="NUDGE-LIM-001",
+    ),
+    DecoyCase(
+        decoy_id="NUDGE-DECOY-002",
+        summary=(
+            "Two-population mixture (cell types / doublets): a static mix of a low- "
+            "and a high-expressing subpopulation is bimodal but has no switch. "
+            "NUDGE must return off-model, not attribute ultrasensitivity."
+        ),
+        generate=_mixture_decoy,
+        expected_verdict=MechanismClass.OFF_MODEL,
+        limitation_ref="NUDGE-LIM-002",
+    ),
+    DecoyCase(
+        decoy_id="NUDGE-DECOY-003",
+        summary=(
+            "Dropout zero-peak: a monostable population read out at bimodal library "
+            "depth (a fraction captured at very low depth → near-all-zeros) mimics an "
+            "OFF/ON switch. The bimodality is a measurement artifact — off-model."
+        ),
+        generate=_dropout_decoy,
+        expected_verdict=MechanismClass.OFF_MODEL,
+        limitation_ref="NUDGE-LIM-003",
     ),
 ]

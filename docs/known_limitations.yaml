@@ -31,3 +31,34 @@ anomalies:
       Handled correctly today (NUDGE abstains), but the guarantee rests on the
       parsimony gate's calibration (margin_k). A mis-tuned gate could false-positive on
       noise-induced bimodality; the decoy is the regression test that keeps it honest.
+
+  - anomaly_id: NUDGE-LIM-002
+    title: A cell-type / doublet mixture can fake a bimodal switch
+    description: >-
+      Bimodality in a snapshot can come from a static mixture of two subpopulations
+      (distinct cell types, or doublets) at different fixed expression levels — no
+      dynamical switch is present. A naive bimodality detector would call
+      ultrasensitivity. NUDGE must decline: the circuit-level parsimony gate finds the
+      mechanistic switch model does not beat a linear baseline beyond the noise floor,
+      so it returns off-model ("no switch detected"). Exercised by NUDGE-DECOY-002.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      Handled today, but NUDGE assumes each condition is one population at steady state.
+      Genuine cell-type heterogeneity is the caller's responsibility to control (cluster
+      first); the decoy guards the gate against being fooled by population structure.
+
+  - anomaly_id: NUDGE-LIM-003
+    title: Technical dropout can produce a switch-like zero-peak
+    description: >-
+      A monostable population read out at bimodal library depth (some cells captured at
+      very low depth read as near-all-zeros) produces a zero-peak plus an expression
+      mode that mimics an OFF/ON switch. The bimodality is a measurement artifact, not
+      biology. NUDGE must decline (off-model) via the parsimony gate. Exercised by
+      NUDGE-DECOY-003.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      NUDGE owns the negative-binomial count model but does not model an explicit
+      capture/dropout process; severe, structured depth variation could still bias a
+      fit. The decoy keeps the gate honest against depth-driven pseudo-bimodality.
