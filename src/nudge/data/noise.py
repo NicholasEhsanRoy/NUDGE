@@ -85,6 +85,9 @@ def sample_counts(
     Integer counts, shape ``(n_cells, n_genes)``. No dropout mask is applied.
     """
     mean = library_size[:, None] * expression  # μ
+    if not callable(dispersion) and float(dispersion) == 0.0:
+        # φ = 0 → no overdispersion → pure Poisson capture (realism level 0).
+        return jax.random.poisson(key, mean).astype(jnp.int32)
     r = 1.0 / _phi(dispersion, mean)  # NB "size" (number of failures)
     key_gamma, key_pois = jax.random.split(key)
     # Gamma(shape=r, scale=μ/r) has mean μ and variance μ²/r; Poisson-sampling it

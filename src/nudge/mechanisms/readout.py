@@ -43,3 +43,8 @@ class Readout:
     def expression(self, activity: Array) -> Array:
         """Map activity ``(n_cells, n_species)`` → expression ``Λ``."""
         return jnp.maximum(self.base + activity @ self.weight.T, 0.0)
+
+    @classmethod
+    def identity(cls, n: int, *, scale: float = 5.0, base: float = 0.2) -> Readout:
+        """A 1-gene-per-species reporter ``Λ_g = base + scale · activity_g``."""
+        return cls(weight=scale * jnp.eye(n), base=base * jnp.ones(n))
