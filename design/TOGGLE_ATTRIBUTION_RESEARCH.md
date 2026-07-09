@@ -197,6 +197,26 @@ N=20 000/seed, sloppy-eigenvalue seed-std 3×10⁻⁴. (Reproduce:
 - It also explains, from the information geometry, *why* a single-snapshot toggle fit should
   **abstain between gain and threshold** (they are ~unidentifiable) — consistent with the
   fail-safe correct-or-abstain behaviour we ship. The gain gate NO-GO was the right call.
-- **Caveat:** measured on the clean *intrinsic-noise* LNA model at the symmetric nominal
-  point. Extrinsic log-normal spread (in the real generator) and the LNA's breakdown near
-  the bifurcation could shift the numbers; the m·ln(K/B) *structure* is model-independent.
+- **Extrinsic noise is not a threat (measured; `scripts/vv/fisher_extrinsic.py`).** Adding
+  the generator's per-cell log-normal spread on `basal`+`decay` (faithful to
+  `_per_cell_params`; propagated to `Σ_ext = σ²(J_b J_bᵀ + J_d J_dᵀ)`, MC-checked to ~18%)
+  and modeling it as a *known* nuisance leaves the picture qualitatively intact and
+  quantitatively slightly *better*: over σ∈{0…0.5} the gain⇄threshold confound does not
+  deepen (`corr(m,K)` −0.986→−0.980 at σ=0.3), ceiling stays off the null space (loading
+  −0.01), and the identifiability floor rises ×1.5 at σ=0.3 (a heteroscedastic information
+  channel). **Caveat:** assumes σ known — misspecified/unknown extrinsic σ is untested.
+- **Caveat:** measured on the LNA model at the symmetric nominal point; the LNA's breakdown
+  near the bifurcation could shift the numbers. The m·ln(K/B) *structure* is
+  model-independent.
+
+## In-pipeline confirmation (Tier-0.5, not the LNA surrogate)
+
+Running NUDGE's *actual* `fit_transition_parameters` restricted fits on independent SSA
+toggle data (`scratchpad/pipeline_two_operating_points.py`) reproduces the confound outside
+the LNA model: for one true gain perturbation, the single-snapshot mechanism *call flips
+with operating point* — free-`n` wins at basal-B=0.05 (→ gain), free-`K` wins at basal-B=0.30
+(→ threshold), outside the seed noise. No single operating point is reliable; the two
+disagree. Recovered-value consistency is too noisy to use as the signal on toggle fits — the
+loss-based call flip is the robust fingerprint — and *resolving* it (a shared parameter fit
+jointly across operating points, or genuine multi-target real data) is what the
+Lyapunov-covariance loss + a multi-condition objective are for.

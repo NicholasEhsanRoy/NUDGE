@@ -446,3 +446,15 @@ axis). This also explains from information geometry *why* a single-snapshot togg
 **abstain between gain and threshold** — consistent with the fail-safe behaviour we ship.
 Researched + measured; the covariance attribution loss itself is not yet built. Full write-up:
 `design/TOGGLE_ATTRIBUTION_RESEARCH.md`.
+
+**The degeneracy is robust to extrinsic noise (measured; `scripts/vv/fisher_extrinsic.py`).** We
+extended the FIM with the generator's **extrinsic** cell-to-cell spread — a per-cell log-normal
+factor on species `basal` and `decay` (faithful to `data/synthetic.py::_per_cell_params`),
+propagated to a per-mode covariance `Σ_ext = σ²(J_b J_bᵀ + J_d J_dᵀ)` (a Monte-Carlo re-solve
+confirms the first-order form to ~18%). Modeled as a *known* nuisance, extrinsic noise is
+**benign — mildly beneficial**: sweeping σ∈{0…0.5}, the gain⇄threshold confound does *not*
+deepen (`corr(m,K)` −0.986→−0.980 at σ=0.3), ceiling never rotates into the null space (its
+loading on the sloppy eigenvector stays −0.01 → stays identifiable), and the identifiability
+floor actually *rises* ×1.5 at σ=0.3 (a heteroscedastic `dΣ_ext/dθ` information channel).
+Independently reproduced (subagent → main-loop). **Caveat:** this assumes σ is *known*; a
+misspecified/unknown extrinsic σ is the untested next check.
