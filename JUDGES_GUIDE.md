@@ -51,10 +51,16 @@ credit the Claude work explicitly).
   scientific diagnosis — *the optimizer instability lives in the free mode locations, not
   the basin mixture* — that reframed the whole approach. A separate agent context,
   running unsupervised in the background, scoped a core architecture decision cheaply.
-- **`/deep-research` literature synthesis.** Two adversarially-verified research
-  workflows resolved the two hardest design cruxes (the negative-binomial vs
-  zero-inflation count-model debate; when deterministic-plus-noise breaks down near a
-  bifurcation). Captured in [`design/GENERATOR_DESIGN.md`](design/GENERATOR_DESIGN.md).
+- **`/deep-research` literature synthesis.** Adversarially-verified research workflows
+  resolved hard cruxes: the two count-model / near-bifurcation design questions
+  ([`design/GENERATOR_DESIGN.md`](design/GENERATOR_DESIGN.md)), and — when a measured
+  NO-GO left an open question (how mechanism manifests in a *toggle* snapshot) — a
+  cross-disciplinary sweep (non-equilibrium stat-mech: linear-noise covariance,
+  Freidlin–Wentzell quasi-potential) that diagnosed *why* the saddle gain gate can't
+  extend and named the signature that would, tying it back to the constitutive control we
+  already validated ([`design/TOGGLE_ATTRIBUTION_RESEARCH.md`](design/TOGGLE_ATTRIBUTION_RESEARCH.md)).
+  Each ran 25+ sources through a 2/3-refute verifier (one headline claim was *refuted*,
+  and we kept it out).
 - **Honest AI collaboration.** Claude's output was *independently verified*, not
   trusted: we audited the subagent's spike code for ground-truth leakage and
   reproduced its headline result before integrating it (§T0.5-5).

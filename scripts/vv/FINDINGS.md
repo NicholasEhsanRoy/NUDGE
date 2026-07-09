@@ -404,6 +404,31 @@ classes stay ≤0.04. So the gate stays guarded to `n_species == 1`.
 rather than misclassifying — locked in by `tests/verification/test_toggle_nd_safety.py` (no
 wrong positive on toggle threshold/gain/ceiling data). The N-D finder + representation are
 reusable infrastructure (they make multi-species attribution *approachable*, and unblock the
-T-cell circuits); a **toggle-specific attribution signature** — how each mechanism manifests
-in a multi-attractor snapshot — is honest open future work, a natural next spike. We shipped
-the finder + representation and *declined* to ship an unreliable N-D gate.
+T-cell circuits). We shipped the finder + representation and *declined* to ship an unreliable
+N-D gate.
+
+**Performance — the finder is jitted (byte-identical, ~300× cheaper per call).** The N-D
+finder is recomputed every optimizer step (the saddle/basin seeds move as the kinetics do).
+Profiling showed the per-step cost was *not* re-compilation or Newton solve-count but **Python
+re-tracing** of the un-jitted `vmap(jacfwd-Newton)` plus per-root host syncs — ~0.3 s/step. The
+Newton/dedupe/eigenvalue core is now a **jitted, per-topology-cached kernel** with the kinetics
+as a *traced argument* (`_nd_kernel`): it traces once and only executes thereafter (~1 ms/call,
+**333× per-call**; a full toggle transition fit **26 s → 4.1 s, 6.3× end-to-end** — the forward
+simulation is now the floor). Results are **byte-identical** to the eager finder (same roots →
+same fit trajectory: recovered `n`/`w_trans` unchanged), so this is a pure speedup, not a
+behaviour change. (A warm-start/trust-region attempt was tried first and *rejected*: it gave
+~1× — because tracing, not solve-count, was the cost — and introduced a reproducibility
+divergence. Jitting subsumes it.)
+
+**Why the gain gate failed, and the signature that should work (researched — `design/`).** An
+adversarially-verified `/deep-research` sweep (non-equilibrium stat-mech, not just comp-bio)
+explains the NO-GO and points past it, in **`design/TOGGLE_ATTRIBUTION_RESEARCH.md`**: mixture
+*weights* (basin occupancy) are set by a **non-gradient quasi-potential barrier balance**, not
+the deterministic saddle — so a saddle-centred `w_trans` was always the wrong channel for a
+toggle (the "gain zeroes a lobe" claim was the one *refuted* finding). The gain signal for a
+toggle lives in each lobe's **covariance** (the linear-noise **Lyapunov** solve `AΣ+ΣAᵀ+D=0`:
+gain enters `A` via the repression elasticity ∝ `m`, ceiling via mean copy number — different
+channels) and in **separatrix orientation**. Residual **gain⇄ceiling** degeneracy is best broken
+by a **constitutive control** — the *same* control already validated for NUDGE-LIM-006. This is a
+researched direction, not yet built (natural first step: a Fisher-information sloppiness analysis
+of the LNA mixture to *measure* the confound).

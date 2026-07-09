@@ -153,9 +153,20 @@ to a fail-safe fix. The arc (full detail in `scripts/vv/FINDINGS.md` §T0.5-3→
 **1-D-specific** and does NOT extend to the toggle (a single-edge gain reduction doesn't
 collapse it to the saddle) — so the gate stays guarded to `n_species == 1` and NUDGE
 **abstains** (never misclassifies) on toggles (`tests/verification/test_toggle_nd_safety.py`).
-Finder + representation are reusable infra; a toggle-specific attribution signature is open.
-Full write-up: `scripts/vv/FINDINGS.md` "N-D saddle". **Other open follow-ons:** sweep the
-1-D gain-factor/τ calibration; the To&Maheshri telegraph decoy is done (`NUDGE-DECOY-001`).
+Finder + representation are reusable infra. **Performance:** the N-D finder (recomputed every
+optimizer step) is now a **jitted, per-topology-cached kernel** (`_nd_kernel`; kinetics as a
+traced arg) — byte-identical roots, ~1 ms/call (**333×** per-call; a toggle transition fit
+**26 s → 4.1 s**). A warm-start/trust-region attempt was tried and *rejected* (tracing, not
+solve-count, was the cost → ~1× + a reproducibility divergence; jit subsumes it).
+**The toggle attribution signature is now researched** (`design/TOGGLE_ATTRIBUTION_RESEARCH.md`,
+from an adversarially-verified `/deep-research`): `w_trans`/occupancy was the wrong channel
+(mixture weights are set by a non-gradient quasi-potential, not the saddle); the gain signal
+lives in each lobe's **covariance** (linear-noise Lyapunov `AΣ+ΣAᵀ+D=0`) + separatrix
+orientation, with the residual **gain⇄ceiling** degeneracy broken by the *same* **constitutive
+control** already validated for LIM-006. Researched, not built. Full write-up:
+`scripts/vv/FINDINGS.md` "N-D saddle". **Other open follow-ons:** a Fisher-information/sloppiness
+analysis of the LNA mixture (to *measure* the gain⇄ceiling confound before building the loss);
+sweep the 1-D gain-factor/τ calibration.
 
 The original plan is retained below for reference.
 

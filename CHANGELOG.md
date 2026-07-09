@@ -41,6 +41,14 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   gate is 1-D-specific and does *not* extend to the toggle (measured), so it stays guarded
   to `n_species == 1`; NUDGE abstains (never misclassifies) on toggles. See FINDINGS
   "N-D saddle".
+- **N-D finder jitted (performance):** the per-optimizer-step Newton/dedupe/eigenvalue core
+  is now a jitted, per-topology-cached kernel (`_nd_kernel`; kinetics as a traced argument)
+  — **byte-identical** roots, ~1 ms/call (333× per-call; a toggle transition fit 26 s → 4.1 s).
+- **Toggle attribution — researched (`design/TOGGLE_ATTRIBUTION_RESEARCH.md`):** an
+  adversarially-verified `/deep-research` synthesis of why the saddle gain gate does not
+  extend to a toggle (mixture weights are non-gradient-quasi-potential-set, not saddle-set)
+  and the signature that would (linear-noise Lyapunov mode covariance + separatrix
+  orientation; gain⇄ceiling broken by a constitutive control). Researched, not built.
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`); PEP 561.
 

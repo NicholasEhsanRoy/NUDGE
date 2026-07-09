@@ -21,7 +21,7 @@ combination is a later extension.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
 import jax
@@ -176,7 +176,10 @@ class Circuit:
           (unchanged math), ordered ``[low, saddle, high]`` (bistable) or ``[low]``
           (monostable) and labelled by that order;
         - **N-species (>=2)**: multi-start Newton + Jacobian-eigenvalue index
-          classification (``_nd_fixed_points``, under a local x64 context);
+          classification (``_nd_fixed_points``, under a local x64 context). The heavy
+          Newton/dedupe/eigenvalue kernel is **jitted and cached per topology** (base
+          kinetics enter as a traced argument), so recomputing it every optimizer step
+          costs ~1 ms — it traces once and only *executes* thereafter;
         - **any other 1-species topology**: ``None`` (caller abstains).
 
         Never raises (``None`` on any numerical failure) — safe in an optimizer step.
@@ -259,37 +262,64 @@ def _self_activation_roots(
     return deduped
 
 
-def _nd_fixed_points(
+def _nd_box_hi(circuit: Circuit) -> float:
+    """Upper corner of the start box: ``1.2·max((basal + Σvmax)/decay)`` (+ ε)."""
+    base = circuit.base_params()
+    basal = np.asarray(base["species"]["basal"], dtype=float)
+    dec = np.asarray(base["species"]["decay"], dtype=float)
+    vmax_sum = (
+        float(np.sum(np.asarray(base["edges"]["vmax"], dtype=float)))
+        if circuit.n_edges
+        else 0.0
+    )
+    return float(np.max((basal + vmax_sum) / dec)) * 1.2 + 1e-3
+
+
+#: Per-topology cache of the jitted Newton/dedupe/eigenvalue kernel. Keyed on the
+#: circuit's *structure* (species count, integrators, edge source/target/effect) — not
+#: its kinetic values, which enter the kernel as a traced ``base`` argument. So one
+#: compiled program serves every optimizer step (any kinetics, same topology).
+_NDKernel = Callable[[Array, Params], tuple[Array, Array, Array]]
+_ND_KERNEL_CACHE: dict[tuple, _NDKernel] = {}
+
+
+def _nd_topology_key(circuit: Circuit) -> tuple:
+    """Structural signature that determines ``Circuit.production``'s traced graph."""
+    return (
+        circuit.n_species,
+        tuple(s.integrator for s in circuit.species),
+        tuple((e.source, e.target, e.effect) for e in circuit.edges),
+    )
+
+
+def _nd_kernel(
     circuit: Circuit,
     *,
-    n_grid: int = 9,
-    n_rand: int = 200,
-    seed: int = 0,
     tol: float = 1e-5,
     reg: float = 1e-6,
     dedup_tol: float = 1e-3,
-    eig_tol: float = 1e-4,
     max_iter: int = 100,
     box_hi: float = 1e4,
-) -> list[tuple[np.ndarray, str]]:
-    """Enumerate + classify the steady states of an N-species circuit.
+) -> _NDKernel:
+    """The jitted N-D root kernel for ``circuit``'s topology (built once, then cached).
 
-    Recipe (validated in a spike; endorsed by the saddle literature review): fixed-point
-    enumeration via vmap'd multi-start Newton, masked-distance dedupe, then a Jacobian-
-    eigenvalue index classification (index-1 saddle = exactly one eigenvalue with a
-    positive real part). Energy-landscape path methods are wrong here (GRN ODEs are
-    non-gradient). The vector field reuses ``Circuit.production`` (any topology).
-
-    Numerics: run under a **local x64 context** (f32 Newton cancels catastrophically on
-    an ill-conditioned Jacobian near a saddle-node), casting to f32 on return. The heavy
-    work (vmap ridge Newton, masked dedupe) stays in ``jnp`` on-device with static
-    shapes (``[n_starts, n]`` + a keep mask; no dynamic root lists in XLA, no host
-    round-trip); only the small unique set crosses to numpy. Never raises. Returns
-    ``[(state, label), ...]`` sorted lexicographically for a deterministic slot order.
+    Returns a jitted ``(starts, base) → (roots, keep, eig_real)`` where the kinetics
+    ``base`` is a **traced argument**, not a baked constant — so it compiles a single
+    XLA program that every optimizer step reuses (the ~1 ms/step path; the un-jitted
+    version re-traced the ``vmap(jacfwd-Newton)`` in Python each call, ~0.3 s).
+    ``roots``/``keep`` are static ``[n_starts, n]`` / ``[n_starts]`` (no dynamic root
+    lists in XLA); ``eig_real`` is the Jacobian eigenvalue real parts at every
+    candidate, so the caller classifies eagerly with no per-root host round-trip.
     """
+    key = _nd_topology_key(circuit)
+    cached = _ND_KERNEL_CACHE.get(key)
+    if cached is not None:
+        return cached
     n = circuit.n_species
-    with enable_x64():
-        base = circuit.base_params()
+    eye = jnp.eye(n)
+
+    @jax.jit
+    def kernel(starts: Array, base: Params) -> tuple[Array, Array, Array]:
         decay = base["species"]["decay"]
 
         def field(state: Array) -> Array:
@@ -297,22 +327,6 @@ def _nd_fixed_points(
             return circuit.production(jnp.maximum(state, 0.0), base) - decay * state
 
         jac = jax.jacfwd(field)
-
-        # start cloud: capped grid + random over [~0, hi]^n
-        basal = np.asarray(base["species"]["basal"], dtype=float)
-        dec = np.asarray(decay, dtype=float)
-        vmax_sum = (
-            float(np.sum(np.asarray(base["edges"]["vmax"], dtype=float)))
-            if circuit.n_edges
-            else 0.0
-        )
-        hi = float(np.max((basal + vmax_sum) / dec)) * 1.2 + 1e-3
-        per_dim = n_grid if n_grid**n <= 1000 else max(2, round(1000 ** (1.0 / n)))
-        g = np.linspace(1e-3, hi, per_dim)
-        grid = np.stack([a.ravel() for a in np.meshgrid(*([g] * n))], axis=-1)
-        rand = np.random.default_rng(seed).uniform(0.0, hi, size=(n_rand, n))
-        starts = jnp.asarray(np.vstack([grid, rand]))
-        eye = jnp.eye(n)
 
         def newton(x0: Array) -> tuple[Array, Array]:
             def cond(c: tuple[Array, Array, Array]) -> Array:
@@ -337,28 +351,71 @@ def _nd_fixed_points(
 
         roots, oks = jax.vmap(newton)(starts)  # (S, n), (S,) static shapes
 
-        # jnp masked-distance dedupe: keep a converged root iff no earlier converged
-        # root lies within dedup_tol (static (S, S) matrix; no host round-trip).
+        # masked-distance dedupe: keep a converged root iff no earlier converged root
+        # lies within dedup_tol (static (S, S) matrix; entirely on-device).
         diff = roots[:, None, :] - roots[None, :, :]
         dist = jnp.sqrt(jnp.sum(diff * diff, axis=-1) + 1e-30)
         s = roots.shape[0]
         earlier = jnp.tril(jnp.ones((s, s), dtype=bool), k=-1)
         is_dup = jnp.any((dist < dedup_tol) & earlier & oks[None, :], axis=1)
-        uniq = roots[oks & jnp.logical_not(is_dup)]  # eager gather → concrete
+        keep = oks & jnp.logical_not(is_dup)
+        eig_real = jax.vmap(lambda r: jnp.real(jnp.linalg.eigvals(jac(r))))(roots)
+        return roots, keep, eig_real
 
-        out: list[tuple[np.ndarray, str]] = []
-        for r in uniq:
-            re = jnp.real(jnp.linalg.eigvals(jac(r)))
-            n_pos = int(jnp.sum(re > eig_tol))
-            n_neg = int(jnp.sum(re < -eig_tol))
-            if n_neg == n:
-                label = "stable"
-            elif n_pos == 1 and n_neg == n - 1:
-                label = "saddle-index1"
-            elif n_pos == n:
-                label = "source"
-            else:
-                label = "other"
-            out.append((np.asarray(r, dtype=np.float32), label))
+    _ND_KERNEL_CACHE[key] = kernel
+    return kernel
+
+
+def _nd_fixed_points(
+    circuit: Circuit,
+    *,
+    n_grid: int = 9,
+    n_rand: int = 200,
+    seed: int = 0,
+    eig_tol: float = 1e-4,
+) -> list[tuple[np.ndarray, str]]:
+    """Enumerate + classify the steady states of an N-species circuit.
+
+    Recipe (validated in a spike; endorsed by the saddle literature review): fixed-point
+    enumeration via vmap'd multi-start Newton, masked-distance dedupe, then a Jacobian-
+    eigenvalue index classification (index-1 saddle = exactly one eigenvalue with a
+    positive real part). Energy-landscape path methods are wrong here (GRN ODEs are
+    non-gradient). The vector field reuses ``Circuit.production`` (any topology).
+
+    Numerics: run under a **local x64 context** (f32 Newton cancels catastrophically on
+    an ill-conditioned Jacobian near a saddle-node), casting to f32 on return. The heavy
+    Newton/dedupe/eigenvalue work is the **jitted, per-topology-cached** kernel
+    (:func:`_nd_kernel`) — kinetics enter as a traced arg, so per-step cost is ~1 ms.
+    Only the small unique set + its precomputed eigenvalues cross to numpy for eager
+    labelling. Returns ``[(state, label), ...]`` sorted lexicographically for a
+    deterministic slot order.
+    """
+    n = circuit.n_species
+    per_dim = n_grid if n_grid**n <= 1000 else max(2, round(1000 ** (1.0 / n)))
+    with enable_x64():
+        base = circuit.base_params()
+        hi = _nd_box_hi(circuit)
+        g = np.linspace(1e-3, hi, per_dim)
+        grid = np.stack([a.ravel() for a in np.meshgrid(*([g] * n))], axis=-1)
+        rand = np.random.default_rng(seed).uniform(0.0, hi, size=(n_rand, n))
+        starts = jnp.asarray(np.vstack([grid, rand]))
+        roots_j, keep_j, eig_j = _nd_kernel(circuit)(starts, base)
+        roots = np.asarray(roots_j)
+        keep = np.asarray(keep_j)
+        eig = np.asarray(eig_j)
+
+    out: list[tuple[np.ndarray, str]] = []
+    for r, re in zip(roots[keep], eig[keep], strict=True):
+        n_pos = int(np.sum(re > eig_tol))
+        n_neg = int(np.sum(re < -eig_tol))
+        if n_neg == n:
+            label = "stable"
+        elif n_pos == 1 and n_neg == n - 1:
+            label = "saddle-index1"
+        elif n_pos == n:
+            label = "source"
+        else:
+            label = "other"
+        out.append((np.asarray(r, dtype=np.float32), label))
     out.sort(key=lambda sl: tuple(float(v) for v in sl[0]))
     return out
