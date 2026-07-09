@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "nudge": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "nudge-mcp"]
+    }
+  }
+}
