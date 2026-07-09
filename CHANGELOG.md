@@ -34,6 +34,27 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   `design` MCP tool + `service.design_circuit`/`design_file` + a Mechanism Card +
   `notebooks/Inverse_Design.ipynb`. Additive/opt-in — it touches neither the energy-distance
   `fit()` default nor the decoy battery.
+- **Laplace posterior uncertainty — curvature error bars on the recovered kinetics
+  (`nudge.inference.uncertainty`):** turns the fit's point estimate `θ*` (log-space kinetics)
+  into a *local* Gaussian posterior `θ ~ N(θ*, H⁻¹)` from the loss Hessian `H = ∇²L(θ*)`
+  (Laplace's approximation). The Hessian target is the **deterministic** Lyapunov
+  Gaussian-mixture NLL (`lyapunov_nll_loss`) — *not* the stochastic energy distance — so `H`
+  is the observed Fisher information and `H⁻¹/N` the covariance. Gives **(a)** natural-unit
+  marginal CIs on `K` / `n` / `v_max` (log-space Gaussian → exact lognormal interval),
+  **(b)** the parameter correlation structure, and **(c)** a `mechanism_confidence` that
+  **abstains**. **Fail-safe first (the load-bearing honesty point):** the inverse is a
+  **guarded ridge-regularized eigen-inverse** — never a plain pseudo-inverse, which would
+  *zero* a flat direction's variance (false precision) — so a flat / degenerate direction
+  widens to a large-but-finite, PSD variance (no NaN), sets `LaplacePosterior.degenerate`,
+  and marks the affected knob **unidentifiable / CI unbounded**; a non-positive-definite
+  Hessian → cond ∞ → abstain. **Validated (FINDINGS "Laplace posterior"):** the marginal CI
+  covers the true ceiling **20/20** across seeds; the measured **gain⇄threshold degeneracy
+  reproduces as a near-singular Hessian** (condition number ≈ 210, `|corr(n, K)| ≈ 0.99` —
+  the *inverse* of the FIM's −0.99, same degeneracy) with `n` + `K` flagged unidentifiable;
+  and a **second operating point breaks it** (condition number ≈ 210 → ≈ 27, resolving),
+  mirroring the covariance-attribution ×16 Fisher result. **Additive / opt-in:** it computes
+  over a caller-supplied loss and touches neither the energy-distance `fit()` default output
+  contract nor the decoy battery. Tests: `tests/inference/test_uncertainty.py`.
 
 - **Bifurcation / tipping-point proximity — the "robustness dial" (`nudge.inference.bifurcation`,
   `NUDGE-METHOD-006`):** answers a new question — **how close is a bistable switch to

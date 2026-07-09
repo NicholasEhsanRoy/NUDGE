@@ -851,3 +851,47 @@ the optimizer stalled; that surfaces as a reachability abstention, never a force
 is a **model-bound hypothesis to test**, valid only within the fit's identifiable region
 (`NUDGE-LIM-013`) — never a guaranteed outcome. Wired into `nudge design` CLI + the `design` MCP tool
 + `nudge.service.design_circuit` / `design_file`; Mechanism Card `NUDGE-METHOD-007` (`inverse_design`).
+# Laplace posterior — curvature CIs + the gain/threshold degeneracy reproduced
+
+An **additive, opt-in, guarded** uncertainty layer (`nudge.inference.uncertainty`) turns the
+fit's point estimate `θ*` (the log-space kinetics the fit recovers) into **curvature-based
+error bars**: at the optimum the loss Hessian `H = ∇²L(θ*)` is the precision of a *local*
+Gaussian posterior `θ ~ N(θ*, H⁻¹)` (Laplace's approximation). The Hessian target is the
+**deterministic** Lyapunov Gaussian-mixture NLL (`lyapunov_nll_loss`), **not** the stochastic
+energy distance — whose minibatch-noisy Hessian is not a likelihood curvature — so `H` is the
+observed Fisher information and `H⁻¹/N` the covariance of the recovered kinetics. It touches
+neither `fit()`'s default output contract nor the decoy battery.
+
+**Curvature CIs cover the truth.** Fitting the identifiable knob (ceiling / `vmax`) on
+inverse-crime toggle data across 20 seeds (N=1500) and building the log-space→lognormal
+marginal CI at each `θ*` (the delta method for a log transform, done exactly), the interval
+covers the true `vmax` **20/20** — ≥ the nominal 95%, and conservative, which is the fail-safe
+direction (a wider honest interval is fine; a too-narrow one is not).
+
+**The gain⇄threshold degeneracy reproduces as a near-singular Hessian.** On the 2-node toggle
+over `(n, vmax, K)` at one operating point, the Laplace covariance has **condition number ≈ 211**
+(N≈4000) — matching the FIM's ≈ 210 (§"N-D saddle") — and **corr(n, K) ≈ +0.99**. The condition
+number is a *finite-sample* quantity: the flat direction is so barely curved that its empirical
+curvature is noisy (≈ 150–250+ at N≈2000, occasionally singular), but it robustly far exceeds the
+guard, which is the load-bearing point. Note the **sign**: the
+covariance correlation is **+0.99** while the *Fisher* correlation is **−0.99** — inverting a 2×2
+with a negative off-diagonal flips the sign; it is the *same* degeneracy, seen through `H⁻¹` rather
+than `H`. The guard sets `degenerate=True` and marks **gain (`n`) and threshold (`K`)
+unidentifiable / CI unbounded** (ceiling stays identifiable), so `mechanism_confidence` **abstains
+to confidence 0.0** rather than report a false-precise interval.
+
+**A second operating point breaks it (the ×16 mirror).** Summing the NLL over a second basal-B
+operating point collapses the condition number **≈ 211 → ≈ 27** (mirroring the FIM's cond 210→22 /
+smallest-eigenvalue ×16), `degenerate` flips to `False`, and every knob becomes identifiable
+(confidence ≈ 0.98). Same result the covariance-attribution M3 breaker reports — now visible
+directly in the posterior geometry.
+
+**Fail-safe engineering (the load-bearing honesty point).** The inverse is a **guarded
+ridge-regularized eigen-inverse**, never a plain pseudo-inverse — a plain `pinv` would *zero* a
+flat direction's variance (false precision), the *opposite* of safe; the relative ridge instead
+widens it to a **large-but-finite, PSD** variance (no NaN). A non-positive-definite Hessian (`θ*`
+not a minimum) → cond = ∞ → abstain. The Laplace Gaussian is *local* and worst exactly at
+degeneracies / near bifurcations, so the layer is engineered to **widen and abstain** there rather
+than trust a bad Gaussian. Tests: `tests/inference/test_uncertainty.py` (analytic-Hessian CI;
+singular / partial / non-PSD guards; the degeneracy reproduction + two-operating-point break; the
+coverage calibration).
