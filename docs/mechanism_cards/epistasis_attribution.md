@@ -5,7 +5,7 @@ role: attribution-method
 registry_name: SynergyAttribution
 vulnerable_to_decoys: []
 documented_limitation: [NUDGE-LIM-006, NUDGE-LIM-009]
-validated_in_regime: {min_cells_per_condition: 30, notes: "Both single arms must be measurable (a combo inherits its weakest arm) and the readout approximately affine. Effects are measured in log-fold-change space, so the additive null is Bliss independence. Validated on Norman 2019 (GSE133344, CRISPRa, K562): CBL+CNN1 and CBL+UBASH3B call SYNERGISTIC (the paper's emergent erythroid synergy); DUSP9+ETS2 calls BUFFERING (the paper's DUSP9-dominant epistatic suppression of ETS2); FOXA1+FOXA3 calls ADDITIVE (interaction CI straddles 0)."}
+validated_in_regime: {min_cells_per_condition: 30, notes: "Both single arms must be measurable (a combo inherits its weakest arm) and the readout approximately affine. Effects are in log-fold-change space, so the additive null is Bliss independence. Applied to Norman 2019 (GSE133344, CRISPRa, K562); an independent literature fact-check graded 2/5 pairs EXPLICITLY confirmed against the paper: DUSP9+ETS2 BUFFERING (paper's DUSP9-dominant suppression of ETS2, Fig 5) and CBL+CNN1 SYNERGISTIC (flagship erythroid synergy, Fig 3). CBL+UBASH3B / CNN1+UBASH3B SYNERGISTIC are cluster-consistent but unlabeled; FOXA1+FOXA3 ADDITIVE is a paralog control Norman does not analyse. Agreement is at interaction type/direction (Bliss scalar null vs Norman's regression GI), not a reproduction; NUDGE 'buffering' = negative interaction = the same antagonism as Norman's fitness-GI 'buffering' but the opposite numeric sign."}
 references: [Norman2019, Bliss1939, HuangFerrell1996]
 ---
 
@@ -100,14 +100,24 @@ lock-in; a synthetic epistasis decoy battery is future work.
 
 - **≥ `min_cells` cells per condition** (default 30) in all four of {control, A, B, A+B},
   or the call abstains — the interaction inherits its weakest single arm.
-- **Verified on real data (GSE133344, Norman 2019 CRISPRa in K562).** With the
-  additive-axis projection extractor: **CBL+CNN1** interaction `+0.95` (95% CI
-  `[+0.48, +1.42]`, ΔBIC 19) and **CBL+UBASH3B** `+1.09` (CI `[+0.75, +1.45]`, ΔBIC 44)
-  call **synergistic** — the paper's emergent erythroid synergy. **DUSP9+ETS2**
-  interaction `−2.14` (CI `[−2.64, −1.60]`, ΔBIC 156) calls **buffering**: the combo
-  lands near DUSP9-alone (`+4.31` vs DUSP9's `+4.79`), matching the paper's report that
-  the DUSP9 phenotype dominates and antagonises ETS2. **FOXA1+FOXA3** interaction `−0.61`
-  (CI `[−1.37, +0.25]`, ΔBIC `−2`) calls **additive** — the CI straddles 0. See
+- **Applied to real data (GSE133344, Norman 2019 CRISPRa in K562); an independent
+  literature fact-check graded 2/5 pairs as *explicitly* confirmed against the paper, the
+  rest cluster-consistent or a paralog control.** The two explicit matches:
+  **DUSP9+ETS2** interaction `−2.14` (95% CI `[−2.64, −1.60]`, ΔBIC 156) calls
+  **buffering** — the combo lands near DUSP9-alone (`+4.31` vs DUSP9's `+4.79`), matching
+  the paper's explicit report (Fig 5) that DUSP9 dominates and antagonises ETS2 (DUSP9 is a
+  MAP-kinase phosphatase ⊣ ERK→ETS2 — textbook epistasis); **CBL+CNN1** `+0.95`
+  (`[+0.48, +1.42]`, ΔBIC 19) calls **synergistic** — the paper's flagship emergent
+  erythroid synergy (Fig 3). **CBL+UBASH3B** / **CNN1+UBASH3B** (both synergistic) fall in
+  the paper's erythroid RTK-regulator cluster (Fig 2B) but carry **no explicit per-pair GI
+  label** — consistent with, not validated against, a stated result. **FOXA1+FOXA3** `−0.61`
+  (`[−1.37, +0.25]`, ΔBIC `−2`) calls **additive** (CI straddles 0) — a paralog control
+  Norman does not analyse (additive is expected from paralogy, not a recovered label).
+  **Two caveats:** NUDGE's "buffering" (negative interaction) is antagonism/sub-additive —
+  the *same concept* as Norman's fitness-GI "buffering" but the **opposite numeric sign**;
+  and the Bliss log-additive *scalar* null is a coarse approximation of Norman's full-
+  transcriptome-regression GI, so agreement is at interaction **type/direction**, not a
+  reproduction of GI scores (it cannot see purely off-axis emergent states). See
   `scripts/vv/FINDINGS.md` "Phase 4d".
 
 ## Implementation Mapping
@@ -139,8 +149,9 @@ reference must resolve to a real attribute.)*
 
 ## References
 
-- [@Norman2019] — the genetic-interaction manifold and taxonomy (the validation source,
-  GSE133344; CBL/CNN1/UBASH3B synergy, DUSP9-dominant ETS2 suppression).
+- [@Norman2019] — the genetic-interaction manifold and taxonomy (GSE133344; the two
+  explicitly-characterised pairs used here are CBL+CNN1 erythroid synergy and the
+  DUSP9-dominant ETS2 suppression — see FINDINGS "Phase 4d" for the honest per-pair grading).
 - [@Bliss1939] — Bliss independence: the multiplicative (log-additive) null this method
   uses as its additive baseline.
 - [@HuangFerrell1996] — ultrasensitivity / the response-magnitude vocabulary shared with

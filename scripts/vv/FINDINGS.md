@@ -608,7 +608,7 @@ and signal still — is downloading and will be folded in for completeness; it i
 the verdict.)
 
 
-# Phase 4d — synergy / epistasis attribution (Norman 2019): NUDGE matches the paper's taxonomy
+# Phase 4d — synergy / epistasis attribution (Norman 2019): agrees on the labeled pairs
 
 Capability 2 (`nudge.inference.epistasis`, `NUDGE-METHOD-003`) reads a two-perturbation
 combination A / B / A+B as three operating points against a shared control, reduces each to a
@@ -620,25 +620,40 @@ The per-cell score projects each cell onto the **additive axis fixed by the two 
 combo, so a positive interaction is unambiguously super-additive — no circularity, no manual sign
 convention).
 
-**Validated on Norman 2019 (GSE133344, CRISPRa in K562, ~111k cells).** Four paper-characterised
-pairs, one per interaction class, called with `n_boot=500` (projection over the 2000 most-variable
-genes). NUDGE's call matches the paper on all four — *not* cherry-picked; the pairs were chosen for
-their published labels, then run:
+**Applied to Norman 2019 (GSE133344, CRISPRa in K562, ~111k cells).** Five pairs across the
+interaction classes, called with `n_boot=500` (projection over the 2000 most-variable genes). An
+**independent literature fact-check** (adversarial, sourced to the paper's PMC full text
+[PMC6746554] + secondary sources) graded each call — and the honest score is **2/5 explicitly
+confirmed against a per-pair statement in Norman 2019, 2/5 consistent with the paper's clusters but
+without an explicit per-pair label, and 1/5 a paralog control the paper never analyses**:
 
-| Pair | effect A / B | additive pred | observed A+B | interaction (95% CI) | ΔBIC | NUDGE call | Paper |
-|---|---|---|---|---|---|---|---|
-| **CBL+CNN1** | +1.48 / +1.86 | +3.34 | +4.29 | **+0.95** [+0.48, +1.42] | 19 | **synergistic** | synergy (emergent erythroid) |
-| **CBL+UBASH3B** | +1.54 / +1.13 | +2.67 | +3.76 | **+1.09** [+0.75, +1.45] | 44 | **synergistic** | synergy (erythroid markers) |
-| **CNN1+UBASH3B** | +1.88 / +1.09 | +2.97 | +4.22 | **+1.25** [+0.94, +1.58] | 67 | **synergistic** | same synergy cluster |
-| **DUSP9+ETS2** | +4.79 / +1.66 | +6.45 | +4.31 | **−2.14** [−2.64, −1.60] | 156 | **buffering** | DUSP9 dominates / antagonises ETS2 |
-| **FOXA1+FOXA3** | +2.24 / +2.79 | +5.04 | +4.42 | **−0.61** [−1.37, +0.25] | −2 | **additive** | paralogs, near-additive |
+| Pair | interaction (95% CI) | ΔBIC | NUDGE call | Norman 2019 grounding |
+|---|---|---|---|---|
+| **CBL+CNN1** | **+0.95** [+0.48, +1.42] | 19 | **synergistic** | ✅ explicit — flagship emergent-erythroid synergy (Fig 3), validated in HUDEP2 |
+| **DUSP9+ETS2** | **−2.14** [−2.64, −1.60] | 156 | **buffering** | ✅ explicit — "DUSP9 phenotype dominated … antagonized ETS2" (Fig 5) |
+| **CBL+UBASH3B** | **+1.09** [+0.75, +1.45] | 44 | **synergistic** | ⚠ erythroid RTK-regulator cluster (Fig 2B); no per-pair GI score |
+| **CNN1+UBASH3B** | **+1.25** [+0.94, +1.58] | 67 | **synergistic** | ⚠ shared erythroid assoc. only (CNN1 not in the RTK group) — weakest grounding |
+| **FOXA1+FOXA3** | **−0.61** [−1.37, +0.25] | −2 | **additive** | ❗ not in Norman; paralog control — additive expected from paralogy + CellCap (2024), not Norman |
 
-The **DUSP9+ETS2** call is the sharpest: the observed combo (+4.31) lands **at DUSP9-alone**
-(+4.79), far below the additive prediction (+6.45) — NUDGE reads the paper's *DUSP9-dominant
-epistatic suppression* as `buffering` (interaction clearly < 0, ΔBIC 156). **FOXA1+FOXA3** sits on
-the additive line (CI straddles 0, ΔBIC −2) and is *not* over-called. Locked in by
+The two **explicit** matches are the real result: **DUSP9+ETS2** is the sharpest — the observed
+combo (+4.31) lands **at DUSP9-alone** (+4.79), far below the additive prediction (+6.45), and DUSP9
+(a MAP-kinase phosphatase, ⊣ ERK→ETS2) suppressing ETS2 is textbook epistasis; **CBL+CNN1** is the
+paper's flagship *unexpected* erythroid synergy. **FOXA1+FOXA3** is a paralog negative control NUDGE
+correctly declines to over-call (CI straddles 0). Locked in by
 `tests/inference/test_epistasis.py::test_norman_synergy_lockin_real_data`; demo in
 `notebooks/Norman_Synergy.ipynb`.
+
+**Two caveats the fact-check surfaced (do not drop these).** (1) **Sign-convention collision:**
+Norman inherits the *fitness*-GI convention where "buffering = *positive* GI = antagonism"; NUDGE
+uses "buffering" for a *negative* interaction coefficient (sub-additive). The two agree
+*conceptually* (buffering = antagonism / sub-additive) but carry **opposite numeric signs** — a
+reader must not think NUDGE inverted the paper. (2) **Null comparability:** NUDGE's Bliss
+(log-additive) *scalar* null is a **coarse approximation** of Norman's fitness-map + full-
+transcriptome-regression GI magnitude — agreement is at the level of interaction **type/direction**,
+**not** a reproduction of Norman's GI scores, and the scalar-along-the-additive-axis structurally
+**cannot see purely off-axis emergent states** (it can only under-count such synergy). The honest
+claim is *"agrees with Norman 2019 on the two explicitly-labeled pairs and is consistent with the
+paper's clusters on the rest,"* never *"recovers the published taxonomy."*
 
 **Honest bounds (NUDGE-LIM-009).** A combo inherits its weakest single arm (abstain when an arm is
 underpowered); the additive null is effect-space-dependent (log-FC / Bliss, reported with every

@@ -30,11 +30,16 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   underpowered or the CI is too wide, and a super-additive residual is **not** a hidden-node
   claim (new `NUDGE-LIM-009`). The per-cell score projects onto the additive axis fixed by
   the two single arms (direction-safe; `nudge.inference.bridge.combo_effect_scores`). Wired
-  into the `nudge synergy` CLI verb + the `synergy` MCP tool + a Mechanism Card. Validated
-  on Norman 2019 (GSE133344): CBL+CNN1 and CBL+UBASH3B → **synergistic** (the paper's
-  emergent erythroid synergy), DUSP9+ETS2 → **buffering** (DUSP9-dominant suppression of
-  ETS2), FOXA1+FOXA3 → **additive** — matching the paper's taxonomy (see FINDINGS
-  "Phase 4c"); demo in `notebooks/Norman_Synergy.ipynb`.
+  into the `nudge synergy` CLI verb + the `synergy` MCP tool + a Mechanism Card. Applied to
+  Norman 2019 (GSE133344); an independent literature fact-check graded **2/5 pairs
+  explicitly confirmed** against the paper — DUSP9+ETS2 → **buffering** (Fig 5
+  DUSP9-dominant suppression of ETS2) and CBL+CNN1 → **synergistic** (Fig 3 emergent
+  erythroid synergy) — with CBL+UBASH3B / CNN1+UBASH3B → synergistic cluster-consistent but
+  unlabeled, and FOXA1+FOXA3 → additive a paralog control Norman does not analyse. Agreement
+  is at interaction type/direction (a Bliss scalar null vs Norman's regression GI), not a
+  reproduction; note "buffering" here = a negative interaction = the same antagonism as
+  Norman's fitness-GI "buffering" but the opposite sign. See FINDINGS "Phase 4d"; demo in
+  `notebooks/Norman_Synergy.ipynb`.
 - **Dose-response attribution (`nudge.inference.dose_response`, `NUDGE-METHOD-001`):**
   a second measurement of the same circuit — fits the *same* Hill primitive
   (`hill_repression`/`hill_activation`) to a readout's response across a graded dose and
