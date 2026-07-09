@@ -38,6 +38,8 @@ dependencies = [
     "optax>=0.2",
     "pydantic>=2",
     "anndata>=0.10",
+    "typer>=0.12",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -70,7 +72,8 @@ Repository = "https://github.com/NicholasEhsanRoy/NUDGE"
 Issues = "https://github.com/NicholasEhsanRoy/NUDGE/issues"
 
 [project.scripts]
-nudge = "nudge.runner.cli:main"
+nudge = "nudge.cli:app"
+nudge-mcp = "nudge.mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nudge"]
@@ -105,6 +108,10 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# typer's parameter idiom puts Argument()/Option() calls in argument defaults.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.ruff.lint.per-file-ignores]
 # V&V analysis scripts (incl. nested): throwaway compute + plotting, not library code.
