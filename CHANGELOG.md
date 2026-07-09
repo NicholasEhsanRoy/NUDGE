@@ -61,6 +61,16 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   `lna_reliable` (abstains loudly at low depth / near a bifurcation / when monostable).
   Validated on LNA/synthetic ground truth; not yet real data. See FINDINGS "Covariance
   attribution".
+- **Phase 4 — real-data infrastructure (the Gladstone T-cell screen):** a generic,
+  backed-mode Perturb-seq loader (`data/loaders/perturbseq.py` — config-driven, subsets
+  ~150 GB files on disk without loading the matrix; Gladstone config in `tier2.py`); named
+  Ras-switch circuits (`circuits.py` — `ras_switch_1node` / `ras_switch_2node`); the
+  counts→activity bridge (`inference/bridge.py` — depth-normalize + reduce to activity
+  space); **topology model-selection** (`inference/model_select.py` — a BIC parsimony gate
+  over {no-switch, 1-node, 2-node} so the circuit is inferred, not assumed); and the
+  end-to-end attribution pipeline + CLI (`inference/pipeline.py`,
+  `scripts/vv/gladstone_attribution.py`). The real-data attribution run is pending the data
+  download.
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`); PEP 561.
 

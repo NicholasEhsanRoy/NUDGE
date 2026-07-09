@@ -33,8 +33,12 @@ which is why the product is built to **abstain** instead.
 - Scope discipline is stated up front (README "Capabilities NOT provided"): it is a
   hypothesis-prioritizer for a powered screen, not a clinical tool or a hit-caller.
 - **Honest status:** validated on synthetic ground truth today; the real-data
-  (T-cell SOS/RasGRP1) validation is designed but not yet run. We would rather show
-  a measured fail-safe guarantee than an unbacked biological claim.
+  (T-cell SOS/RasGRP1) validation is **built and downloading** — a generic backed-mode
+  Perturb-seq loader (subsets the ~150 GB Gladstone donor files on disk), a BIC
+  topology-model-selection gate (infers the circuit rather than assuming it), and the
+  end-to-end attribution pipeline are all green on synthetic ground truth; the run on the
+  real data is pending the download. We would rather show a measured fail-safe guarantee —
+  and let the parsimony gate say "no switch" if the data warrants — than an unbacked claim.
 
 ## 2. Claude Use (25%) — an async, multi-agent R&D lab
 

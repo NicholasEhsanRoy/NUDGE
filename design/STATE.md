@@ -48,7 +48,7 @@ JAX graph-physics engine) — reuses its `ift_linear_solve` primitive and
 | 2 Fit | ✅ (PoC) | `inference/losses.py`, `inference/fit.py`, `inference/classify.py` |
 | V&V calibration | ✅ | `scripts/vv/` (harness + results + `FINDINGS.md`) |
 | 3 Fail-loud | ◑ ~45% | gate logic + Tier-0.5 simulator + saddle gain gate + decoy battery started (`NUDGE-DECOY-001` telegraph, `NUDGE-LIM-001`); verification suite/Laplace + more decoys NOT built |
-| 4 Validation + provenance | ⬜ | T-cell SOS/RasGRP1; `provenance.py` is a stub |
+| 4 Validation + provenance | ◑ | **infra landed** (generic backed-mode Perturb-seq loader `data/loaders/perturbseq.py` + Gladstone `tier2.py`; Ras circuits `circuits.py`; counts→activity `inference/bridge.py`; BIC topology model-selection `inference/model_select.py`; attribution pipeline `inference/pipeline.py` + `scripts/vv/gladstone_attribution.py`); real-data run pending the D1_Stim8hr download; `provenance.py` still a stub |
 | Stretch | ◑ | **N-D saddle finder + toggle representation DONE** (attribution is 1-D only — see below); **constitutive-control channel** validated (`design/CONSTITUTIVE_CONTROL.md`); `design/invert.py`, `mcp/server.py`, `zero_order.py`, `data/loaders/tier{1,2}.py`, docs site, `scripts/ai/` still homes-reserved |
 
 **The PoC works end to end** (`tests/inference/test_fit_end_to_end.py`, slow lane):
@@ -176,8 +176,20 @@ identifies ceiling and **abstains between gain/threshold** (M2); the multi-opera
 breaker `fit_lyapunov_multi`/`attribute_lyapunov_multi` that **resolves** gain vs threshold
 (M3; NLL gap 0.005→0.098, ×20); and `lna_reliable`, which **abstains loudly** at low depth /
 near a bifurcation / when monostable (M4). Validated on LNA/synthetic ground truth, not yet
-real data. Full write-up: `scripts/vv/FINDINGS.md` "Covariance attribution". **Next:** the
-Gladstone T-cell screen supplies the real multiple operating points this needs.
+real data. Full write-up: `scripts/vv/FINDINGS.md` "Covariance attribution".
+
+**Phase 4 — real-data validation (infra landed; run pending the download).** The pipeline to
+point this at the Gladstone CD4+ T-cell screen is built and green on synthetic ground truth:
+a **generic backed-mode Perturb-seq loader** (`data/loaders/perturbseq.py`, config-driven,
+subsets the ~150 GB donor files *on disk*; Gladstone config in `tier2.py`), the two candidate
+**Ras circuits** (`circuits.py`: `ras_switch_1node` / `ras_switch_2node`), the
+**counts→activity bridge** (`inference/bridge.py`), a **BIC topology model-selection** gate
+(`inference/model_select.py` — infers linear/1-node/2-node rather than assuming it), and the
+**attribution pipeline** (`inference/pipeline.py` + `scripts/vv/gladstone_attribution.py`).
+The real `D1_Stim8hr` file is downloading; the single-condition run (expected: parsimony picks
+no-switch or 1-node, and single-condition attribution abstains between gain/threshold — the
+FIM prediction) runs on arrival. The gain-vs-threshold *breaker* needs ≥2 stim-condition files
+(the operating-point axis). `provenance.py` still a stub.
 
 The original plan is retained below for reference.
 
