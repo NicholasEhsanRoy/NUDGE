@@ -428,7 +428,21 @@ the deterministic saddle — so a saddle-centred `w_trans` was always the wrong 
 toggle (the "gain zeroes a lobe" claim was the one *refuted* finding). The gain signal for a
 toggle lives in each lobe's **covariance** (the linear-noise **Lyapunov** solve `AΣ+ΣAᵀ+D=0`:
 gain enters `A` via the repression elasticity ∝ `m`, ceiling via mean copy number — different
-channels) and in **separatrix orientation**. Residual **gain⇄ceiling** degeneracy is best broken
-by a **constitutive control** — the *same* control already validated for NUDGE-LIM-006. This is a
-researched direction, not yet built (natural first step: a Fisher-information sloppiness analysis
-of the LNA mixture to *measure* the confound).
+channels) and in **separatrix orientation**.
+
+**Measured (Fisher-information spike) — the confound is gain⇄threshold, not gain⇄ceiling.** We
+built the LNA Gaussian mixture (means from the fixed points via an IFT stop-grad step; covariances
+from the autodiff-Jacobian Lyapunov solve) and computed the **FIM** over `(log m, log v, log K)`
+of the perturbed edge (empirical Fisher, 6 seeds × N=20 000; sloppy-eig seed-std 3e-4;
+`scripts/vv/fisher_sloppiness.py`). Result, correcting the medium-confidence synthesis:
+(1) the sloppy direction is **gain(m)⇄threshold(K)** — `corr(log m, log K) = −0.986`, cond# ≈ 210;
+(2) **ceiling(v) is the *most* identifiable** parameter (it sets the high-mode plateau ≈ b+v —
+`dμ/d log v ≈ +2`), *not* confounded; (3) the confound is analytic — the high-repressor Hill term
+is `(K/B)^m`, so the snapshot constrains only `m·ln(K/B)`. **What breaks it:** a **constitutive
+control** does *not* (smallest FIM eigenvalue ×1.01 — it reads the already-identified `v`); a
+**second operating point** (dose/basal shift) does (×16.5; cond# 210→22). So the toggle
+degeneracy-breaker is a **second condition**, not the LIM-006 constitutive control (a different
+axis). This also explains from information geometry *why* a single-snapshot toggle fit should
+**abstain between gain and threshold** — consistent with the fail-safe behaviour we ship.
+Researched + measured; the covariance attribution loss itself is not yet built. Full write-up:
+`design/TOGGLE_ATTRIBUTION_RESEARCH.md`.

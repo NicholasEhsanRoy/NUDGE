@@ -1,12 +1,22 @@
 # Toggle-specific attribution — the physics, and a path past the M3 NO-GO
 
-**Status: researched, not yet implemented.** This is the literature-grounded answer to
+**Status: researched + partially measured.** This is the literature-grounded answer to
 the open question the N-D saddle work surfaced (`scripts/vv/FINDINGS.md`, "N-D saddle";
 the M3 go/no-go). It records *why* the 1-D saddle gain gate does not extend to a 2-node
 toggle and *what* physically-distinguishable signature would — so a future thrust can
 build it deliberately instead of rediscovering the wall. Produced by an adversarially-
 verified `/deep-research` sweep (110 agents; 27 primary sources; 24/25 claims confirmed,
 1 refuted) drawing on non-equilibrium statistical mechanics, not just comp-bio.
+
+> ### ⚠ MEASURED UPDATE — a direct Fisher-information analysis corrected two of the
+> literature-synthesised conclusions below (the synthesis flagged them medium-confidence
+> and *asked* for exactly this measurement). See **"Measured: the FIM says the confound is
+> gain⇄threshold, not gain⇄ceiling"** at the bottom. The verified *physics* (LNA/Lyapunov
+> covariance carries mechanism; weights are non-gradient) stands; the specific **degeneracy
+> direction** and its **breaker** were relocated by measurement. Where this section says
+> "gain⇄ceiling degeneracy, broken by a constitutive control," read the update: the snapshot
+> degeneracy is **gain⇄threshold**, ceiling is the *most* identifiable parameter, the
+> constitutive control does **not** break it, and a **second operating point** does.
 
 ## The question
 
@@ -138,3 +148,55 @@ Attribution then reads gain vs ceiling off the **covariance shape** (2), thresho
 - Gardner, Cantor, Collins 2000, *Nature* 403:339 — the canonical toggle drift.
 - DSGRN toggle analysis, arXiv:2204.13739 — ceiling/threshold set boundary *location*,
   gain sets *whether* it is reached (root of the gain⇄ceiling confound).
+
+---
+
+## Measured: the FIM says the confound is gain⇄threshold, not gain⇄ceiling
+
+We turned the asserted degeneracy into a *measured* one — the open question the synthesis
+itself named. We built the linear-noise Gaussian-mixture model above (mode means from the
+fixed points via an implicit-function-theorem stop-grad step; mode covariances from the
+Lyapunov solve with autodiff Jacobians) and computed the **Fisher Information Matrix** over
+`(log m, log v, log K)` of the perturbed edge — empirical/observed Fisher (mean outer
+product of per-cell scores via `jax.vmap(jax.grad(loglik))`), averaged over 6 seeds,
+N=20 000/seed, sloppy-eigenvalue seed-std 3×10⁻⁴. (Reproduce:
+`scripts/vv/fisher_sloppiness.py`.)
+
+**Result — three things, all measured, one surprising:**
+
+1. **The snapshot sloppy direction is gain (m) ⇄ threshold (K), not gain⇄ceiling.**
+   FIM correlation `corr(log m, log K) = −0.986` (near-perfect confound); `corr(m,v) = −0.11`,
+   `corr(v,K) = +0.14`. Condition number ≈ 210 (~2.3 decades — moderate sloppiness).
+2. **Ceiling (v_max) is the *most* identifiable parameter**, not a confounded one — it
+   dominates the *stiffest* eigenvector. Physically: `dμ/d log v = +2.0` on the high mode's
+   reporter coordinate — v_max sets the high-state plateau (≈ b+v), read straight off the
+   mode location. The synthesis's intuition that "v shifts the mean, m the shape" is right;
+   the inference that this makes v *confounded with m* is backwards — a clean mean shift is
+   exactly what makes v *easy*.
+3. **The analytic root of the m⇄K confound:** at the high-repressor fixed point the edge's
+   Hill term is `(K/B)^m`, whose log is `m·ln(K/B)` — a **single** combination. So the
+   snapshot constrains `m·ln(K/B)`, leaving `m` and `ln K` free along the curve that holds it
+   fixed. This *is* the −0.99 correlation, from first principles.
+
+**What breaks it (measured):**
+
+- **A constitutive control does NOT** — smallest FIM eigenvalue ×1.01 (unchanged). It reads
+  `v` (boosts v's marginal info ×1.4), but `v` was already the identifiable one; the m⇄K
+  direction is untouched. *The synthesis's recommended fix targets the wrong axis.*
+- **A second operating point DOES** — adding a snapshot at a shifted basal (a dose) that
+  moves `B` (hence `ln(K/B)`) stiffens the sloppy direction **×16.5** (eigenvalue
+  0.020→0.32; condition number 210→22; `corr(m,K)` −0.99→−0.85). Sampling the repression
+  curve at a second point separates midpoint (`K`) from steepness (`m`).
+
+**Consequences for NUDGE (honest):**
+- The right degeneracy-breaker for *toggle* attribution is a **second condition / operating
+  point**, not the LIM-006 constitutive control (that remains the right tool for the
+  *readout-nonlinearity* problem — different axis). NUDGE already observes multiple
+  perturbation conditions, so cross-condition Fisher information is a natural lever — a
+  forward hypothesis, not yet built.
+- It also explains, from the information geometry, *why* a single-snapshot toggle fit should
+  **abstain between gain and threshold** (they are ~unidentifiable) — consistent with the
+  fail-safe correct-or-abstain behaviour we ship. The gain gate NO-GO was the right call.
+- **Caveat:** measured on the clean *intrinsic-noise* LNA model at the symmetric nominal
+  point. Extrinsic log-normal spread (in the real generator) and the LNA's breakdown near
+  the bifurcation could shift the numbers; the m·ln(K/B) *structure* is model-independent.
