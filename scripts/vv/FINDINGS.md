@@ -657,6 +657,25 @@ transcriptome-regression GI magnitude — agreement is at the level of interacti
 claim is *"agrees with Norman 2019 on the two explicitly-labeled pairs and is consistent with the
 paper's clusters on the rest,"* never *"recovers the published taxonomy."*
 
+**Forensic deepening (`design/NORMAN_DISCREPANCY_ANALYSIS.md`).** A dedicated audit of the three
+non-explicit pairs (mandate: diagnose, don't p-hack; no margin touched) found **no bug and all
+three calls defensible** — and, notably, **FOXA1+FOXA3 is a real 216-cell measured combo**, which
+*refutes* the fact-check's doubt that the pair even exists. The audit also makes the Bliss-vs-Norman
+relationship **precise and quantified**: NUDGE's scalar interaction is *exactly the on-axis
+projection* of Norman's full-transcriptome regression residual (`δab = c1·δa + c2·δb + ε`), and the
+paper's **neomorphic** dimension is the *off-axis* component NUDGE discards. Measured in NUDGE's own
+coordinates, the off-axis residual is **≥ the on-axis interaction for every synergy pair** (2.1–2.5
+vs +1.1–1.3), and the two pairs that *explicitly* matched are exactly the **on-axis-dominated** ones
+(DUSP9+ETS2 is a clean on-axis masking — the sharpest match). So NUDGE's equal-weight (`c1=c2=1`),
+direction-safe, abstaining Bliss null is a **stricter, principled projection** of Norman's richer
+free-coefficient regression: where both apply it agrees on type/direction, and it can only ever
+**under-count** emergent synergy, **never invert** a call. The one structural blind spot — the
+off-axis/neomorphic residual, and collapsing Norman's *epistasis* (asymmetric masking) vs
+*suppression* into one "buffering" — is a **documented limitation (NUDGE-LIM-009), now measured in
+the paper's terms**, not a defect. A flagged-but-unapplied enhancement: surface that off-axis
+residual as a *"possible neomorphic"* diagnostic on `EpistasisFit` — turning LIM-009 from prose into
+a number shown with every call.
+
 **Honest bounds (NUDGE-LIM-009).** A combo inherits its weakest single arm (abstain when an arm is
 underpowered); the additive null is effect-space-dependent (log-FC / Bliss, reported with every
 call); and the interaction is a **scalar along the additive axis** — a purely orthogonal emergent
