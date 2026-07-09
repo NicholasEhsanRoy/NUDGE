@@ -281,3 +281,51 @@ anomalies:
       bifurcation calibrates the depth from data and reports lna_reliable's verdict as a
       lobe-channel caveat). A point estimate near the fold, or a precise proximity emitted
       on the deep-basin side, would each resurrect a false-precision failure.
+
+  - anomaly_id: NUDGE-LIM-013
+    title: A designed intervention is a model-bound proposal, valid only within the fit
+    description: >-
+      In inverse / intervention design (nudge.design.invert, NUDGE-METHOD-007), NUDGE
+      inverts a RELIABLE attribution to PROPOSE an untested intervention — a change to a
+      kinetic parameter (circuit mode) or a dose (curve mode) that moves the system toward
+      a target. The load-bearing honesty point: a proposal is the inverse of a MODEL, so
+      it is valid only within that fit's identifiable region — it is a hypothesis to test,
+      not a guaranteed outcome, and NUDGE must never extrapolate it into confident false
+      precision. Three guarantees enforce this. (1) Integrity gate: design() refuses to
+      invert an unreliable attribution (an unresolved / no-effect dose-response, a
+      low-confidence fit) — it returns an AbstentionResult rather than prescribe off a fit
+      it does not trust. (2) Reachability gate: if no intervention closes the target gap
+      within tolerance (circuit mode), or the target response y is outside the curve's
+      achievable (floor, floor+amp) range (curve mode), design() ABSTAINS ("the target is
+      unreachable within the fit's identifiable region") rather than extrapolate a dose
+      beyond the fitted saturating asymptotes or a kinetic change the model cannot reach.
+      (3) Safety gate (circuit mode only): design() scores bifurcation_proximity
+      (NUDGE-METHOD-006) on the base vs the intervened circuit and flags an intervention
+      that pushes a bistable switch toward its saddle-node fold (high_risk_of_instability)
+      or that crosses it and destroys bistability (crosses_fold) — inheriting Cap 5's
+      ONE-SIDED LOWER BOUND near the fold (NUDGE-LIM-012), so the risk is reported as "at
+      least this close", never a point estimate. Curve mode carries NO safety gate (there
+      is no circuit / fold to score), which is stated in the plan's reason rather than
+      silently omitted. A further subtlety: gradient inversion sees only the basin it
+      starts in — a knob whose effect on the starting fixed point is weak can leave the
+      optimizer stalled, which is reported as a reachability abstention, never a forced
+      call. Validated on synthetic ground truth (known-intervention recovery to loss ~0;
+      the fold-crossing flip flagged high-risk; a safe nudge cleared; curve round-trip and
+      out-of-range abstention) and a real-data OCT4 fit inversion (tests/design/
+      test_invert.py). design() adds no new fit, so it also inherits the honesty bounds of
+      whatever produced the attribution (e.g. NUDGE-LIM-006 / NUDGE-LIM-007 for a
+      dose-response fit).
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is the capability where a confidently-wrong output would do the most harm: a
+      proposed intervention is an ACTION a user might take (a knockdown dose, an engineered
+      kinetic change), so a false-precise or unreachable proposal — or one that silently
+      destabilizes a switch — is exactly the failure the project exists to avoid. The
+      guarantee rests on three gates: the integrity gate (never design off an unreliable
+      fit), the reachability abstention (never extrapolate to an unreachable target), and
+      the bifurcation safety gate (flag a fold-crossing / fold-approaching intervention,
+      as a one-sided lower bound near the fold). Curve mode's ABSENCE of a safety gate is a
+      deliberate honesty choice, stated with every dose proposal, not a silent gap. Every
+      proposal is a model-bound hypothesis to be tested experimentally, never a
+      guaranteed outcome.

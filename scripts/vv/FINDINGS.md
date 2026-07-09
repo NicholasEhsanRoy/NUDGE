@@ -814,3 +814,40 @@ parameter-sweep ground truth; the populated raw channels) + `tests/test_service.
 `notebooks/Robustness_Dial.ipynb`. **A real-data dose-ladder lock-in is a deferred `needs_data`
 follow-up** (toggle+hysteresis Zenodo 11817798 / morphogen top rung GSE233574); the synthetic
 parameter sweep is the load-bearing validation.
+
+# Phase 4g — inverse / intervention design (`design()`): from diagnosis to prescription
+
+**What.** The flagship (`nudge.design.invert`, `NUDGE-METHOD-007`) delivers the brief's headline
+thesis — NUDGE *inverts the fit to propose untested interventions*. Given a **reliable** attribution
+it runs the same differentiable fit **backwards** to prescribe an intervention (a kinetic Δ, or a
+dose), behind two honesty gates. **Circuit mode:** gradient inversion over a fitted `Circuit` (the
+`fit_parameters` loop backwards — Adam over an additive log-Δ on addressable knobs, minimizing
+`‖PredictedState − target‖² + l1‖Δ‖₁`), then the Cap-5 `bifurcation_proximity` **safety gate** on the
+intervened circuit. **Curve mode:** closed-form inversion of a `DoseResponseFit` to the dose achieving
+a target response `y`.
+
+**Measured (synthetic ground truth, `tests/design/test_invert.py`).**
+- **Known-intervention recovery — loss ≈ 0.** A monostable switch perturbed by a known `×2` on `v_max`
+  is recovered to `factor ≈ 2.0` with residual gap `< 1e-3`. Because the true Δ is known, this is a
+  clean recovery, not a vibe check.
+- **Safety gate partitions safe vs unsafe.** A flip-ON intervention that raises `basal` from the
+  resting basin **crosses the fold** (`crosses_fold=True`, `high_risk_of_instability=True`, proximity
+  0.073 → None = bistability lost); a modest ON-level nudge from the high basin stays bistable
+  (proximity 0.073 → 0.095, **not** high-risk). The near-fold number is a one-sided LOWER bound
+  (inherited from Cap 5, `NUDGE-LIM-012`).
+- **Both abstention gates fire.** An `unresolved` / `no-effect` attribution → integrity abstention; an
+  unreachable target → reachability abstention (no false extrapolation, `NUDGE-LIM-013`).
+- **Curve mode round-trips.** `y = floor + amp/2` inverts to `dose ≈ K`; an out-of-`(floor, floor+amp)`
+  target abstains. **Curve mode carries NO safety gate** (no circuit/fold), stated in every dose plan.
+
+**Real data (lock-in, `needs_data`).** The OCT4 self-renewal dose-response switch fit (`n≈6.7`,
+`R²=0.99`) inverts to a positive knockdown dose (`≈0.61` fraction of POU5F1 silenced) for a reachable
+target, and **abstains** below the fully-silenced floor. Demoed in `notebooks/Inverse_Design.ipynb`
+(Part A synthetic flip-ON + safety dial; Part B real OCT4 inversion + reachability abstention).
+
+**Honesty subtlety (stated, not hidden).** Gradient inversion sees only the basin it starts in — a
+knob whose effect on the starting fixed point is weak (e.g. `K` alone, from the low basin) can leave
+the optimizer stalled; that surfaces as a reachability abstention, never a forced call. Every proposal
+is a **model-bound hypothesis to test**, valid only within the fit's identifiable region
+(`NUDGE-LIM-013`) — never a guaranteed outcome. Wired into `nudge design` CLI + the `design` MCP tool
++ `nudge.service.design_circuit` / `design_file`; Mechanism Card `NUDGE-METHOD-007` (`inverse_design`).

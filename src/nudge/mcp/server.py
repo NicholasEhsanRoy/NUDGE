@@ -9,6 +9,8 @@ verified connection recipes.
 Tools:
 - ``attribute(h5ad_path, target, ...)`` — run covariance attribution at one
   operating point; returns the call(s) + honest skip/abstention reasons.
+- ``design(...)`` — invert a reliable attribution to PROPOSE an intervention (a dose,
+  or a kinetic Δ) reaching a target, behind an integrity + a bifurcation safety gate.
 - ``explain_abstention(context)`` — pull the Mechanism Card + decoy/limitation that
   explains a verdict (``off-model`` / ``unresolved`` / a decoy or limitation id).
 - ``list_mechanisms()`` — the registered mechanism library.
@@ -274,6 +276,70 @@ def build_server() -> Any:
                 path, topology=topology, n=n, k=K, vmax=vmax, basal=basal
             )
         return robustness_circuit(topology, n=n, k=K, vmax=vmax, basal=basal)
+
+    @mcp.tool()
+    def design(
+        path: str = "",
+        target_response: float = float("nan"),
+        topology: str = "",
+        to: str = "high",
+        start: str = "low",
+        n: float = 6.0,
+        K: float = 1.0,
+        vmax: float = 2.0,
+        basal: float = 0.05,
+        direction: str = "repress",
+        dose_col: str = "dose",
+        response_col: str = "response",
+        target: str = "",
+        target_gene: str = "",
+        signature: str = "",
+    ) -> dict[str, Any]:
+        """Propose an untested INTERVENTION that reaches a target — the inverse verb.
+
+        NUDGE's headline: turn a *diagnosis* (which knob a switch turns) into a
+        *prescription* by running the fit **backwards**, behind two honesty
+        gates. Two modes:
+
+        - **Curve mode** (real data): a dose-response ``path`` (a 2-column CSV/TSV or
+          an ``.h5ad`` screen — for ``.h5ad`` set ``target`` / ``target_gene`` /
+          ``signature`` as in ``dose_response``) plus ``target_response`` (the readout
+          ``y`` to reach). NUDGE inverts the fitted Hill to the dose achieving ``y``,
+          behind the **integrity gate** (it refuses to invert an ``unresolved`` /
+          ``no-effect`` fit) with an honest **reachability abstention** when ``y`` is
+          outside the curve's achievable ``(floor, floor+amp)`` range. Curve mode has
+          **no** bifurcation safety gate — there is no circuit/fold (stated honestly).
+        - **Circuit mode**: give ``topology`` (``1node`` / ``2node`` / ``toggle``) + the
+          switch kinetics (``n`` gain, ``K`` threshold, ``vmax`` ceiling, ``basal``).
+          NUDGE gradient-inverts the circuit to flip it ``to`` a basin (from the
+          ``start`` basin) over its addressable kinetic knobs, then runs the **Cap-5
+          bifurcation safety gate**: it flags an intervention that pushes the switch
+          toward / over its fold (``crosses_fold`` / ``high_risk_of_instability`` — the
+          proximity is a ONE-SIDED LOWER BOUND near the fold; ``NUDGE-LIM-012``). It
+          (reachability) if no intervention reaches the target within the fitted region.
+
+        Returns the ``InterventionPlan`` (mode, ranked ``deltas`` or ``dose``, the
+        ``safety`` report) or an ``abstention`` + reason. Every proposal is valid
+        only within the fit's identifiable region — extrapolation is flagged
+        (``NUDGE-LIM-013``). Never designs off a fit it does not trust.
+        """
+        from nudge.service import design_circuit, design_file
+
+        if topology:
+            return design_circuit(
+                topology, n=n, k=K, vmax=vmax, basal=basal, to=to, start=start
+            )
+        sig = [g.strip() for g in signature.split(",") if g.strip()]
+        return design_file(
+            path,
+            target_response=target_response,
+            direction=direction,
+            dose_col=dose_col,
+            response_col=response_col,
+            target=target or None,
+            target_gene=target_gene or None,
+            signature=sig or None,
+        )
 
     return mcp
 

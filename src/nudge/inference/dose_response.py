@@ -221,6 +221,17 @@ class DoseResponseResult:
     call: str
     reason: str
 
+    @property
+    def is_reliable(self) -> bool:
+        """Trustworthy enough to invert (``design()``'s integrity gate).
+
+        A positive dose-response verdict (``switch`` / ``graded``) is a reliable fit to
+        prescribe from; the abstentions (``unresolved`` / ``no-effect``) are not — NUDGE
+        refuses to design off a curve it could not resolve. Satisfies the
+        :class:`~nudge.design.invert.AttributionResult` protocol additively.
+        """
+        return self.call not in {"unresolved", "no-effect"}
+
 
 def fit_dose_response(
     dose: Any,

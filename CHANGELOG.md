@@ -9,6 +9,32 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Inverse / intervention design — the flagship `design()` (`nudge.design.invert`,
+  `NUDGE-METHOD-007`):** delivers the brief's headline thesis — NUDGE *inverts the fit to
+  propose untested interventions*. Given a **reliable** attribution it runs the same
+  differentiable fit **backwards** to prescribe an intervention, behind two honesty gates.
+  **Circuit mode** (flagship): gradient inversion over a fitted `Circuit` (the
+  `fit_parameters` loop backwards — Adam over an additive log-Δ on addressable kinetic
+  knobs, minimizing `‖PredictedState − target‖² + l1‖Δ‖₁`), then a **bifurcation safety
+  gate** reusing the Cap-5 `bifurcation_proximity` dial on the intervened circuit — it
+  flags an intervention that pushes a bistable switch toward its fold
+  (`high_risk_of_instability`) or crosses it and destroys bistability (`crosses_fold`),
+  inheriting the one-sided lower bound near the fold (`NUDGE-LIM-012`). **Curve mode**
+  (real-data surface): closed-form inversion of a `DoseResponseFit` to the dose achieving a
+  target response `y` (no circuit ⇒ **no safety gate**, stated honestly). **Two honesty
+  gates:** an **integrity gate** (refuses to invert an unreliable attribution — a
+  strictly-minimal `AttributionResult` protocol; `DoseResponseResult` / `EpistasisResult`
+  gain an additive `is_reliable` property) and a **reachability abstention** (abstains
+  rather than extrapolate to an unreachable target — `NUDGE-LIM-013`). **Validated on
+  synthetic ground truth:** known-intervention recovery to residual gap `<1e-3` (a known
+  `×2` on `v_max` recovered to `factor≈2.0`); the fold-crossing flip flagged HIGH RISK
+  while a safe nudge clears; curve round-trip (`y=floor+amp/2` → `dose≈K`) + out-of-range
+  abstention (FINDINGS "Phase 4g"). **Real-data lock-in** (`needs_data`): inverts the OCT4
+  self-renewal switch fit to a knockdown dose. Wired into the `nudge design` CLI verb + the
+  `design` MCP tool + `service.design_circuit`/`design_file` + a Mechanism Card +
+  `notebooks/Inverse_Design.ipynb`. Additive/opt-in — it touches neither the energy-distance
+  `fit()` default nor the decoy battery.
+
 - **Bifurcation / tipping-point proximity — the "robustness dial" (`nudge.inference.bifurcation`,
   `NUDGE-METHOD-006`):** answers a new question — **how close is a bistable switch to
   *losing* bistability** (a saddle-node fold)? — as a scalar 0..1 dial from **three

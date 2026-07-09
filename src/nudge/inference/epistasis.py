@@ -153,6 +153,16 @@ class EpistasisResult:
     call: str
     reason: str
 
+    @property
+    def is_reliable(self) -> bool:
+        """Trustworthy enough to invert (``design()``'s integrity gate).
+
+        A resolved interaction call (``additive`` / ``synergistic`` / ``buffering``) is
+        reliable; the abstentions (``unresolved`` / ``no-effect``) are not; satisfies
+        :class:`~nudge.design.invert.AttributionResult` protocol additively.
+        """
+        return self.call not in {"unresolved", "no-effect"}
+
 
 def _percentile_ci(vals: list[float]) -> tuple[float, float]:
     if not vals:

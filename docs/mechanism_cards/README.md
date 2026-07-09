@@ -47,3 +47,4 @@ New cards are added via the `new-mechanism` skill. See `_template.md` for the sk
 | [cross_modality_readout](cross_modality_readout.md) | attribution-method | `NUDGE-METHOD-002` | The same K/n/v_max attribution on a continuous single-channel readout (fluorescence / activity / fold-change) |
 | [epistasis_attribution](epistasis_attribution.md) | attribution-method | `NUDGE-METHOD-003` | Synergy / epistasis of a two-perturbation combo (additive / synergistic / buffering / abstain) |
 | [bifurcation_proximity](bifurcation_proximity.md) | attribution-method | `NUDGE-METHOD-006` | Robustness dial: how close a bistable switch is to a saddle-node fold (near-fold / robust / unresolved / not-bistable) |
+| [inverse_design](inverse_design.md) | attribution-method | `NUDGE-METHOD-007` | Inverse / intervention design: invert a reliable attribution to propose an intervention (a kinetic Δ or a dose), behind an integrity gate + a bifurcation safety gate |

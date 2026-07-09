@@ -55,7 +55,17 @@ Highlights so far:
   confident "you are safe" number it can't support. Validated on the self-activation
   switch's **known analytic fold** (all three channels move monotonically toward it) — see
   [`notebooks/Robustness_Dial.ipynb`](notebooks/Robustness_Dial.ipynb). This is the hard
-  dependency for the future `design()` safety gate.
+  dependency for the `design()` safety gate.
+- **Inverse / intervention design — `design()`** (`NUDGE-METHOD-007`) — the flagship: NUDGE
+  *inverts the fit to **propose untested interventions***. Given a **reliable** attribution
+  it runs the differentiable circuit **backwards** to prescribe an intervention (a kinetic
+  Δ, or a dose), behind an **integrity gate** (never design off an unreliable fit), a
+  **reachability abstention** (never extrapolate to an unreachable target, `NUDGE-LIM-013`),
+  and a **bifurcation safety gate** (flag an intervention that pushes a switch toward its
+  tipping point — a one-sided lower bound near the fold). Recovers a known intervention to
+  loss ≈ 0, flags a fold-crossing flip as HIGH RISK, and inverts the **real OCT4**
+  dose-response fit to a knockdown dose — see
+  [`notebooks/Inverse_Design.ipynb`](notebooks/Inverse_Design.ipynb).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap

@@ -501,6 +501,113 @@ def robustness(
 
 
 # --------------------------------------------------------------------------- #
+# design (inverse / intervention — turn a diagnosis into a prescription)
+# --------------------------------------------------------------------------- #
+@app.command()
+def design(
+    path: str = typer.Argument(
+        "", help="a dose-response CSV/TSV or .h5ad screen (curve mode); omit for a "
+        "parametric circuit (--topology)"
+    ),
+    target_response: float = typer.Option(
+        float("nan"), "--target-response", "-y",
+        help="curve mode: the target readout y to reach (invert the Hill to a dose)",
+    ),
+    topology: str = typer.Option(
+        "", help=f"circuit mode: a bistable motif ({', '.join(_TOPOLOGIES)}) to flip"
+    ),
+    to: str = typer.Option("high", help="circuit mode: target basin ('high' | 'low')"),
+    start: str = typer.Option("low", help="circuit mode: start basin ('low' | 'high')"),
+    knob: list[str] = typer.Option(
+        [], "--knob", help="circuit: an addressable knob to move (repeatable, e.g. "
+        "species0.basal, edge0.K); default = the full set"
+    ),
+    n: float = typer.Option(6.0, "--n", help="circuit: switch cooperativity (Hill n)"),
+    k: float = typer.Option(1.0, "--k", help="circuit mode: switch threshold (K)"),
+    vmax: float = typer.Option(2.0, "--vmax", help="circuit: switch ceiling (v_max)"),
+    basal: float = typer.Option(0.05, "--basal", help="circuit mode: basal production"),
+    direction: str = typer.Option(
+        "repress", help="curve mode: 'repress' (response falls with dose) or 'activate'"
+    ),
+    dose_col: str = typer.Option("dose", help="curve CSV dose column"),
+    response_col: str = typer.Option("response", help="curve CSV response column"),
+    target: str = typer.Option("", "--target", "-t", help="h5ad: guide-group prefix"),
+    target_gene: str = typer.Option("", help="h5ad: gene whose knockdown is the dose"),
+    signature: str = typer.Option("", help="h5ad: comma-separated readout genes"),
+    steps: int = typer.Option(400, help="circuit mode: inversion steps"),
+) -> None:
+    """Propose an untested intervention that reaches a target — the inverse verb.
+
+    Two modes. **Curve mode** (real data): give a dose-response ``path`` + a
+    ``--target-response y`` — NUDGE inverts the fitted Hill to the dose achieving ``y``,
+    behind the integrity gate (won't invert an abstained fit) with a reachability
+    abstention when ``y`` is out of range (no safety gate — no circuit/fold). **Circuit
+    mode**: give ``--topology`` — NUDGE gradient-inverts the bistable circuit to flip it
+    to a basin and runs the Cap-5 **safety gate**, flagging an intervention that pushes
+    the switch toward / over its fold (HIGH RISK OF INSTABILITY). Never designs off an
+    unreliable fit; proposals are valid only within the fitted region (NUDGE-LIM-013).
+    """
+    from nudge.service import ROBUSTNESS_TOPOLOGIES, design_circuit, design_file
+
+    if topology:
+        if topology not in ROBUSTNESS_TOPOLOGIES:
+            raise typer.BadParameter(f"topology must be one of {ROBUSTNESS_TOPOLOGIES}")
+        out = design_circuit(
+            topology, n=n, k=k, vmax=vmax, basal=basal, to=to, start=start,
+            free=list(knob) or None, steps=steps,
+        )
+    elif path and target_response == target_response:  # a real (non-NaN) target
+        sig = [g.strip() for g in signature.split(",") if g.strip()]
+        out = design_file(
+            path, target_response=target_response, direction=direction,
+            dose_col=dose_col, response_col=response_col, target=target or None,
+            target_gene=target_gene or None, signature=sig or None,
+        )
+    else:
+        raise typer.BadParameter(
+            "give either --topology (circuit mode) or a PATH + --target-response "
+            "(curve mode)"
+        )
+
+    if out["kind"] == "abstention":
+        _echo(f"design → ABSTAIN ({out['verdict']})")
+        _echo(f"  {out['reason']}")
+        return
+    if out["mode"] == "dose":
+        _echo(f"design (curve mode)  attribution={out.get('attribution_call', '?')}")
+        _echo(
+            f"  → DOSE = {out['dose']:.3g}  to reach response "
+            f"y = {out['target_response']:.3g}"
+        )
+        _echo(f"  {out['reason']}")
+        return
+    _echo(f"design (circuit)  topology={out['topology']}  flip->{out['target_basin']}")
+    _echo("  proposed intervention (ranked knobs):")
+    for d in out["deltas"]:
+        p = d["param"]
+        _echo(f"    {p['scope']}[{p['index']}].{p['name']}  ×{d['factor']:.3f}")
+    s = out["safety"]
+    if s is None:
+        _echo("  safety: n/a")
+    elif s["crosses_fold"]:
+        _echo("  -> SAFETY: HIGH RISK OF INSTABILITY — CROSSES THE FOLD "
+              "(the switch loses bistability; NUDGE-LIM-013)")
+    elif s["high_risk_of_instability"]:
+        bound = " (one-sided LOWER bound)" if s["one_sided"] else ""
+        _echo(
+            f"  → SAFETY: HIGH RISK — pushes toward the fold "
+            f"(prox {s['proximity_before']:.2f}->{s['proximity_after']:.2f}{bound}; "
+            "NUDGE-LIM-013)"
+        )
+    else:
+        _echo(
+            f"  → SAFETY: OK — stays away from the fold "
+            f"(proximity {s['proximity_before']:.2f}→{s['proximity_after']:.2f})"
+        )
+    _echo(f"\n  {out['reason']}")
+
+
+# --------------------------------------------------------------------------- #
 # mechanisms
 # --------------------------------------------------------------------------- #
 @app.command()

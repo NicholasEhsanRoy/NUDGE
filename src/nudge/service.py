@@ -544,3 +544,171 @@ def bifurcation_file(
     out["lna_reason"] = res.lna_reason
     out["recovered"] = dict(res.recovered)
     return out
+
+
+# --------------------------------------------------------------------------- #
+# inverse / intervention design (the flagship — turn a diagnosis into a
+# prescription: invert a RELIABLE attribution to propose an untested intervention,
+# behind an integrity gate + a bifurcation safety gate — see design.invert).
+# --------------------------------------------------------------------------- #
+def _safety_to_dict(safety: Any) -> dict[str, Any] | None:
+    """Serialise a ``SafetyReport`` (the Cap-5 before/after dial) to a dict."""
+    if safety is None:
+        return None
+    return {
+        "proximity_before": safety.proximity_before,
+        "proximity_after": safety.proximity_after,
+        "delta": safety.delta,
+        "one_sided": safety.one_sided,
+        "high_risk_of_instability": safety.high_risk_of_instability,
+        "crosses_fold": safety.crosses_fold,
+        "channels_before": dict(safety.channels_before),
+        "channels_after": dict(safety.channels_after),
+    }
+
+
+def design_to_dict(plan: Any) -> dict[str, Any]:
+    """Serialise an ``InterventionPlan`` or ``AbstentionResult`` to a JSON-able dict."""
+    from nudge.design.invert import AbstentionResult
+
+    if isinstance(plan, AbstentionResult):
+        return {
+            "kind": "abstention",
+            "verdict": plan.verdict.value,
+            "reason": plan.reason,
+        }
+    out: dict[str, Any] = {
+        "kind": "intervention",
+        "mode": plan.mode,
+        "reason": plan.reason,
+        "achieved_loss": plan.achieved_loss,
+    }
+    if plan.mode == "dose":
+        out["dose"] = plan.dose
+        out["predicted_response"] = plan.predicted_response
+        out["safety"] = None
+    else:
+        out["deltas"] = [
+            {
+                "param": {"scope": s, "index": i, "name": n},
+                "log_delta": ld,
+                "factor": fac,
+            }
+            for (s, i, n), ld, fac in plan.deltas
+        ]
+        out["predicted_state"] = (
+            list(plan.predicted_state) if plan.predicted_state is not None else None
+        )
+        out["safety"] = _safety_to_dict(plan.safety)
+    return out
+
+
+def design_circuit(
+    topology: str = "1node",
+    *,
+    n: float = 6.0,
+    k: float = 1.0,
+    vmax: float = 2.0,
+    basal: float = 0.05,
+    to: str = "high",
+    start: str = "low",
+    free: list[str] | None = None,
+    steps: int = 400,
+    l1: float = 1e-2,
+    tol: float = 0.05,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Invert a named bistable circuit to flip it ``to`` a basin (circuit-mode entry).
+
+    Builds the named motif at the given switch kinetics, targets the high/low stable
+    state (``to``), and runs :func:`nudge.design.invert.design` over the addressable
+    kinetic knobs (``free`` names like ``edge0.K`` / ``species0.basal``; default = the
+    full set), starting from the ``start`` basin. Returns the proposed Δ + the Cap-5
+    **safety** verdict (does the intervention push the switch toward / over its fold?),
+    or an abstention if the target is unreachable within the fitted region.
+    """
+    from nudge.design.invert import CircuitFit, design, flip_target
+
+    circuit = _build_named_circuit(topology, n=n, k=k, vmax=vmax, basal=basal)
+    knobs = _parse_free(free) if free else None
+    target = flip_target(circuit, to=to)
+    plan = design(
+        CircuitFit(circuit=circuit, free=knobs),
+        target,
+        steps=steps,
+        l1=l1,
+        tol=tol,
+        seed=seed,
+        start=start,
+    )
+    out = design_to_dict(plan)
+    out["topology"] = topology
+    out["kinetics"] = {"n": n, "K": k, "vmax": vmax, "basal": basal}
+    out["target_basin"] = to
+    return out
+
+
+def _parse_free(free: list[str]) -> list[tuple[str, int, str]]:
+    """Parse ``edge0.K`` / ``species1.basal`` knob strings into ``FreeParam`` tuples."""
+    out: list[tuple[str, int, str]] = []
+    for spec in free:
+        head, _, name = spec.partition(".")
+        if not name:
+            raise ValueError(f"knob {spec!r} must look like 'edge0.K'/'species0.basal'")
+        if head.startswith("edge"):
+            out.append(("edge", int(head[len("edge") :]), name))
+        elif head.startswith("species"):
+            out.append(("species", int(head[len("species") :]), name))
+        else:
+            raise ValueError(f"knob {spec!r} must start with 'edge' or 'species'")
+    return out
+
+
+def design_file(
+    path: str,
+    *,
+    target_response: float,
+    direction: str = "repress",
+    dose_col: str = "dose",
+    response_col: str = "response",
+    target: str | None = None,
+    target_gene: str | None = None,
+    signature: list[str] | None = None,
+    group_col: str = "guide",
+    control: str = "WT",
+    min_cells: int = 15,
+    n_boot: int = 500,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Invert a **real-data dose-response** fit to a dose achieving ``target_response``.
+
+    Fits the dose-response curve from a CSV/TSV or an ``.h5ad`` screen (the same
+    inputs as :func:`dose_response_file`), then :func:`nudge.design.invert.design`
+    invert it: what dose achieves a target readout ``y``? Behind the **integrity gate**
+    (refuses to invert an ``unresolved`` / ``no-effect`` fit) and with an **honest
+    reachability abstention** when ``y`` is outside the curve's achievable range. Curve
+    mode carries **no** bifurcation safety gate (no circuit/fold), stated in the
+    plan's ``reason``.
+    """
+    from nudge.design.invert import design
+    from nudge.inference.dose_response import attribute_dose_response
+
+    dose, response = _dose_points(
+        path,
+        dose_col=dose_col,
+        response_col=response_col,
+        target=target,
+        target_gene=target_gene,
+        signature=signature,
+        group_col=group_col,
+        control=control,
+        min_cells=min_cells,
+    )
+    res = attribute_dose_response(
+        dose, response, direction=direction, n_boot=n_boot, seed=seed
+    )
+    plan = design(res, target_response)
+    out = design_to_dict(plan)
+    out["attribution_call"] = res.call
+    out["target_response"] = target_response
+    return out

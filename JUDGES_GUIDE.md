@@ -205,6 +205,8 @@ uv run nudge attribute screen.h5ad -t SOS1  # attribute a perturbation, honestly
 uv run nudge dose-response curve.csv         # switch vs graded from a dose axis — or abstain
 uv run nudge cross-modality flow.csv --dose-col IPTGuM --response-col mean \
   --variant-col mutant --control wt --modality foldchange  # K/n/ceiling from FLUORESCENCE
+uv run nudge design --topology 1node --to high   # INVERT the fit: propose a flip-ON
+  # intervention + a bifurcation SAFETY flag (or:  nudge design curve.csv -y 0.5)
 
 # Or hand NUDGE to Claude as a custom MCP server (verified — see the memo):
 uv pip install -e ".[mcp]"
@@ -213,7 +215,8 @@ claude mcp add --scope project nudge -- uv run nudge-mcp
 ```
 
 The MCP server exposes `attribute`, `dose_response`, `synergy`, `cross_modality`,
-`explain_abstention`, `list_mechanisms`, and `get_mechanism_card` — so a scientist asks
+`robustness`, `design`, `explain_abstention`, `list_mechanisms`, and `get_mechanism_card`
+— so a scientist asks
 for a mechanism map *in one sentence*
 and gets back the same honest, abstaining answer a human gets, with the decoy +
 limitation + Mechanism Card that explains any "I can't tell." The exact connection

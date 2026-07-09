@@ -172,3 +172,43 @@ def test_bifurcation_file_npy_wiring(tmp_path) -> None:
     assert out["call"] in {"robust", "unresolved", "near-fold"}
     assert "lna_reason" in out and isinstance(out["lna_reason"], str)
     assert out["scale"] > 0.0
+
+
+def test_design_circuit_wiring_flags_a_fold_crossing_flip() -> None:
+    """The circuit-mode design entry: flip a bistable switch ON → HIGH RISK dict."""
+    from nudge.service import design_circuit
+
+    out = design_circuit("1node", n=6.0, to="high", start="low")
+    assert out["kind"] == "intervention"
+    assert out["mode"] == "circuit"
+    assert out["safety"]["crosses_fold"] is True
+    assert out["safety"]["high_risk_of_instability"] is True
+    assert out["deltas"]  # at least one knob moved
+    # the ranked deltas carry structured (scope, index, name) params.
+    top = out["deltas"][0]["param"]
+    assert set(top) == {"scope", "index", "name"}
+
+
+def test_design_file_curve_wiring_and_reachability(tmp_path) -> None:
+    """The curve-mode design entry (CSV): invert to a dose, and abstain out of range."""
+    from nudge.mechanisms.regulatory import hill_repression
+    from nudge.service import design_file
+
+    dose = np.linspace(0.0, 3.0, 16)
+    floor, amp, k, n = 0.2, 0.8, 1.0, 5.0
+    resp = floor + np.asarray(hill_repression(dose, k, n, amp))
+    csv = tmp_path / "curve.csv"
+    csv.write_text(
+        "dose,response\n"
+        + "\n".join(f"{d},{r}" for d, r in zip(dose, resp, strict=True))
+    )
+    out = design_file(str(csv), target_response=floor + 0.5 * amp)
+    assert out["kind"] == "intervention"
+    assert out["mode"] == "dose"
+    assert out["safety"] is None  # curve mode: no safety gate
+    assert out["dose"] > 0.0
+
+    # A target below the floor is unreachable → abstention dict.
+    bad = design_file(str(csv), target_response=floor - 0.1)
+    assert bad["kind"] == "abstention"
+    assert bad["verdict"] in {"unresolved", "no-effect", "off-model"}
