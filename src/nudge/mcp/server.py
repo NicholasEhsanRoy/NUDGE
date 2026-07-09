@@ -151,6 +151,49 @@ def build_server() -> Any:
             n_boot=n_boot,
         )
 
+    @mcp.tool()
+    def synergy(
+        path: str,
+        a_label: str,
+        b_label: str,
+        ab_label: str,
+        control_label: str = "control",
+        condition_col: str = "condition",
+        signature: str = "",
+        n_top_genes: int = 2000,
+        n_boot: int = 1000,
+        min_cells: int = 30,
+    ) -> dict[str, Any]:
+        """Classify a two-perturbation combination: additive vs synergistic/buffering.
+
+        Reads {control, A, B, A+B} from an ``.h5ad`` (by ``condition_col`` labels
+        ``control_label`` / ``a_label`` / ``b_label`` / ``ab_label``) as three operating
+        points against a shared control, reduces each to a scalar **effect** in
+        log-fold-change space (the additive null is Bliss independence), and returns the
+        **interaction** ``effect(A+B) − [effect(A)+effect(B)]`` with a bootstrap CI. By
+        default the per-cell score projects onto the additive axis fixed by the two
+        single arms (direction-safe; pass ``signature`` for a fixed gene set instead).
+        Returns the verdict (``additive`` / ``synergistic`` / ``buffering`` /
+        ``no-effect`` / ``unresolved``) with the honest reason — it abstains when an arm
+        is underpowered or the CI is too wide rather than force a call. A super-additive
+        residual is NOT by itself a hidden-node claim (NUDGE-LIM-009).
+        """
+        from nudge.service import synergy_file
+
+        sig = [g.strip() for g in signature.split(",") if g.strip()]
+        return synergy_file(
+            path,
+            control_label=control_label,
+            a_label=a_label,
+            b_label=b_label,
+            ab_label=ab_label,
+            condition_col=condition_col,
+            signature=sig or None,
+            n_top_genes=n_top_genes,
+            n_boot=n_boot,
+            min_cells=min_cells,
+        )
+
     return mcp
 
 

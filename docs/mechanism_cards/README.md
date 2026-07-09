@@ -44,3 +44,4 @@ New cards are added via the `new-mechanism` skill. See `_template.md` for the sk
 | Card | Role | ID | Capability |
 |---|---|---|---|
 | [dose_response_attribution](dose_response_attribution.md) | attribution-method | `NUDGE-METHOD-001` | K/n/v_max attribution from a dose-response curve (switch / graded / abstain) |
+| [epistasis_attribution](epistasis_attribution.md) | attribution-method | `NUDGE-METHOD-003` | Synergy / epistasis of a two-perturbation combo (additive / synergistic / buffering / abstain) |

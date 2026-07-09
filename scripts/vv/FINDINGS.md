@@ -606,3 +606,43 @@ the *signaling* (Ras-GTP) level (Das 2009); a steady-state transcriptomic snapsh
 IEGs need not resolve two modes, and doesn't. (Rest — the least-activated timepoint, lower depth
 and signal still — is downloading and will be folded in for completeness; it is unlikely to change
 the verdict.)
+
+
+# Phase 4d — synergy / epistasis attribution (Norman 2019): NUDGE matches the paper's taxonomy
+
+Capability 2 (`nudge.inference.epistasis`, `NUDGE-METHOD-003`) reads a two-perturbation
+combination A / B / A+B as three operating points against a shared control, reduces each to a
+scalar **effect** in **log-fold-change space** (so the additive null `e(A)+e(B)` is **Bliss
+independence**), and classifies the **interaction** `e(A+B) − [e(A)+e(B)]` — with a bootstrap CI
+over cells — as `additive` / `synergistic` / `buffering`, or abstains (`no-effect` / `unresolved`).
+The per-cell score projects each cell onto the **additive axis fixed by the two single arms**
+(`nudge.inference.bridge.combo_effect_scores`; the axis comes from the singles only, never the
+combo, so a positive interaction is unambiguously super-additive — no circularity, no manual sign
+convention).
+
+**Validated on Norman 2019 (GSE133344, CRISPRa in K562, ~111k cells).** Four paper-characterised
+pairs, one per interaction class, called with `n_boot=500` (projection over the 2000 most-variable
+genes). NUDGE's call matches the paper on all four — *not* cherry-picked; the pairs were chosen for
+their published labels, then run:
+
+| Pair | effect A / B | additive pred | observed A+B | interaction (95% CI) | ΔBIC | NUDGE call | Paper |
+|---|---|---|---|---|---|---|---|
+| **CBL+CNN1** | +1.48 / +1.86 | +3.34 | +4.29 | **+0.95** [+0.48, +1.42] | 19 | **synergistic** | synergy (emergent erythroid) |
+| **CBL+UBASH3B** | +1.54 / +1.13 | +2.67 | +3.76 | **+1.09** [+0.75, +1.45] | 44 | **synergistic** | synergy (erythroid markers) |
+| **CNN1+UBASH3B** | +1.88 / +1.09 | +2.97 | +4.22 | **+1.25** [+0.94, +1.58] | 67 | **synergistic** | same synergy cluster |
+| **DUSP9+ETS2** | +4.79 / +1.66 | +6.45 | +4.31 | **−2.14** [−2.64, −1.60] | 156 | **buffering** | DUSP9 dominates / antagonises ETS2 |
+| **FOXA1+FOXA3** | +2.24 / +2.79 | +5.04 | +4.42 | **−0.61** [−1.37, +0.25] | −2 | **additive** | paralogs, near-additive |
+
+The **DUSP9+ETS2** call is the sharpest: the observed combo (+4.31) lands **at DUSP9-alone**
+(+4.79), far below the additive prediction (+6.45) — NUDGE reads the paper's *DUSP9-dominant
+epistatic suppression* as `buffering` (interaction clearly < 0, ΔBIC 156). **FOXA1+FOXA3** sits on
+the additive line (CI straddles 0, ΔBIC −2) and is *not* over-called. Locked in by
+`tests/inference/test_epistasis.py::test_norman_synergy_lockin_real_data`; demo in
+`notebooks/Norman_Synergy.ipynb`.
+
+**Honest bounds (NUDGE-LIM-009).** A combo inherits its weakest single arm (abstain when an arm is
+underpowered); the additive null is effect-space-dependent (log-FC / Bliss, reported with every
+call); and the interaction is a **scalar along the additive axis** — a purely orthogonal emergent
+state is not captured by it, and a super-additive residual is **not** by itself a hidden-node claim.
+CRISPRa combinations are genetic (on/off), so this illustrates combination *logic*, not a graded
+drug-dose combination.

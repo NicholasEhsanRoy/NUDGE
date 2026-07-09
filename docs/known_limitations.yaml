@@ -150,3 +150,41 @@ anomalies:
       call. Also note the reported n is an APPARENT population gain (pseudobulk conflates
       within-cell cooperativity with a spread of single-cell thresholds), not molecular
       cooperativity — an independent honesty caveat shared with NUDGE-LIM-006.
+
+  - anomaly_id: NUDGE-LIM-009
+    title: A combination attribution inherits its weakest single arm, and its interaction is scalar
+    description: >-
+      In synergy / epistasis attribution (nudge.inference.epistasis), the additive null
+      predicted-effect(A+B) = effect(A) + effect(B) is only as trustworthy as the two
+      single-arm effects it composes. Three honest failure modes follow. (1) WEAKEST-ARM
+      INHERITANCE: if either single arm is underpowered (too few cells) or a dead guide
+      (no effect), the interaction cannot be attributed — NUDGE returns unresolved /
+      no-effect rather than a synergy call (a combo cannot be more certain than its
+      components). (2) DEPTH / BATCH CONFOUND: a sequencing-depth or batch difference
+      between the A+B condition and the singles can masquerade as an interaction; NUDGE
+      depth-normalizes (size-factor to the median) and abstains on an underpowered or
+      wide-CI combo, but cannot separate a confound that is perfectly aligned with the
+      A+B condition. (3) EFFECT-SPACE DEPENDENCE + SCALAR-PROJECTION BOUND: the additive
+      null depends on the chosen effect space (NUDGE uses log-fold-change, i.e. Bliss
+      independence; raw-count or HSA nulls would move the baseline), and the reported
+      interaction is a SCALAR measured along the additive axis fixed by the two singles —
+      a purely ORTHOGONAL emergent state (a combination moving in a direction neither
+      single spans) is not captured by this scalar. Most sharply: a super-additive
+      residual is NOT by itself evidence of a hidden node or rewiring (that bridges to the
+      Capability-7 hidden-node trap, which NUDGE does not claim) — it is a magnitude
+      statement about non-additivity along a known axis, no more. VERIFIED on Norman 2019
+      (GSE133344): CBL+CNN1 / CBL+UBASH3B read synergistic and DUSP9+ETS2 reads buffering
+      (DUSP9-dominant suppression of ETS2), matching the paper's taxonomy; FOXA1+FOXA3
+      reads additive. Guarded by the min-cells + CI-width abstention gates, the BIC
+      parsimony gate, and the Norman lock-in (tests/inference/test_epistasis.py). Inherits
+      the affine-readout bound NUDGE-LIM-006.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      A false synergy call would send a combination-therapy or genetic-interaction
+      follow-up chasing an emergent mechanism the data does not support — the confident-
+      wrong failure the project exists to avoid. The guarantee rests on the weakest-arm
+      inheritance rule (abstain when either single arm is underpowered), the CI-width and
+      BIC gates, and honest reporting of the effect space; too-loose thresholds, an
+      unmodelled depth/batch confound aligned with the A+B condition, or reading the
+      scalar residual as a hidden-node claim would each resurrect a false positive.
