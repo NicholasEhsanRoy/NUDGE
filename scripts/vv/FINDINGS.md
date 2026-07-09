@@ -763,3 +763,54 @@ bound (`NUDGE-LIM-006`). Locked in by
 `tests/inference/test_cross_modality.py::test_chure_laci_kn_ground_truth_real_data`; demo in
 `notebooks/Chure_LacI_Benchmark.ipynb`. The per-mutant `Ka`/`Ki` (inducer) and `Δε_RA` (DNA) shifts
 are in the repo's `Chure2019_KaKi_epAI_summary.csv` / `Chure2019_DNA_binding_energy_summary.csv`.
+
+# Phase 4f — bifurcation / tipping-point proximity (the "robustness dial"): a one-sided lower bound
+
+**What.** A new capability (`nudge.inference.bifurcation`, `NUDGE-METHOD-006`) answers *how close is
+a bistable switch to LOSING bistability* — a saddle-node fold — as a scalar **0..1 robustness dial**
+from three complementary channels, each with a known analytic limit at the fold:
+**critical slowing** (`min|Re λ|` of the drift Jacobian at each stable mode → 0), **basin collapse**
+(stable-node → index-1-saddle distance → 0), and **LNA lobe swell** (`√λmax(Σ) / min‖μᵢ−μⱼ‖` → 1). It
+re-exposes a signal that was *already computed but buried* — the fixed-point eigenvalues that
+`Circuit.fixed_points` labelled-then-dropped, and the lobe ratio used only as an abstention trigger
+inside `lna_reliable`. The fused dial is `max(½·(p_slow + p_basin), p_lobe)`: the two deterministic,
+depth-independent channels averaged, `max`'d with the LNA overlap so the noise channel can only
+*raise* the alarm (fail-safe).
+
+**The honesty crux (the capability lives or dies here; `NUDGE-LIM-012`).** The linear-noise Gaussian
+that the third channel uses **breaks down PRECISELY at the fold** — a mode's variance diverges as its
+Jacobian eigenvalue → 0 — so the estimate is *least* reliable exactly where it matters most.
+Therefore the dial is reported as a **one-sided LOWER BOUND** near the fold (`one_sided` sets once the
+lobes overlap, `lobe_ratio ≥ 1`), never a point estimate; and `classify_robustness` **ABSTAINS**
+(`unresolved`) on the deep-basin far side — where the slowest relaxation rate has saturated at the
+intrinsic decay rate and the noise lobes carry no fold information — rather than emit a false-precise
+"far" number. `< 2 stable modes → not-bistable` (score `None`).
+
+**Ground-truth result (the load-bearing validation — we control the fold).** The self-activation
+switch (`ras_switch_1node`) has a KNOWN analytic saddle-node in its cooperativity `n` (and in its
+threshold `K`). Sweeping `n` toward the fold, the measured channels (float64 Jacobian/Lyapunov):
+
+| n | min\|Reλ\| (→0) | node→saddle (→0) | lobe ratio (→1) | dial | one_sided | call |
+|---|---|---|---|---|---|---|
+| 10 | 0.993 | 0.938 | 0.719 | 0.035 | False | **unresolved** (deep basin) |
+| 6 | 0.915 | 0.925 | 0.754 | 0.073 | False | **robust** |
+| 4 | 0.728 | 0.902 | 0.871 | 0.151 | False | **robust** |
+| 3 | 0.524 | 0.812 | 1.085 | 0.253 | True | **robust** |
+| 2.5 | 0.392 | 0.696 | 1.328 | 0.339 | True | **robust** |
+| 2.2 | 0.324 | 0.643 | 1.536 | 0.536 | True | **robust** |
+| 2.0 | 0.300 | 0.615 | 1.659 | 0.659 | True | **near-fold** |
+| 1.5 | — monostable — | | | | | **not-bistable** |
+
+On the clean ladder (n = 6 → 2.2) all three channels move **monotonically** toward their fold limits
+and the fused dial **ranks proximity correctly** (0.073 → 0.536), with `one_sided` setting as the
+lobes overlap. The K-sweep behaves the same (K = 1.0 → 1.3 ranks the dial; K ≥ 1.33 goes monostable).
+At the very fold edge (n ≤ 2.0) the N-D Newton finder gets numerically noisy as an eigenvalue → 0, so
+the monotonicity assertion is made on the clean rungs just short of it. Generalises to N-species
+switches (toggle/2-node score without special-casing) — it is meant to be the future `design()`
+**safety gate**. Locked in by `tests/inference/test_bifurcation.py` (near-fold → one-sided lower
+bound; deep-basin → abstain; well-buffered → robust; monostable → not-bistable; the monotonic
+parameter-sweep ground truth; the populated raw channels) + `tests/test_service.py`
+(`test_robustness_circuit_wiring`, `test_bifurcation_file_npy_wiring`); demo in
+`notebooks/Robustness_Dial.ipynb`. **A real-data dose-ladder lock-in is a deferred `needs_data`
+follow-up** (toggle+hysteresis Zenodo 11817798 / morphogen top rung GSE233574); the synthetic
+parameter sweep is the load-bearing validation.

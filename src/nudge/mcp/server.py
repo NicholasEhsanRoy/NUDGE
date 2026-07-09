@@ -240,6 +240,41 @@ def build_server() -> Any:
             n_boot=n_boot,
         )
 
+    @mcp.tool()
+    def robustness(
+        topology: str = "1node",
+        n: float = 6.0,
+        K: float = 1.0,
+        vmax: float = 2.0,
+        basal: float = 0.05,
+        path: str = "",
+    ) -> dict[str, Any]:
+        """How close is a bistable switch to LOSING bistability (a saddle-node fold)?
+
+        Returns a **robustness dial** for a bistable motif (``topology``: ``1node`` /
+        ``2node`` / ``toggle``) at the given switch kinetics (``n`` gain, ``K``
+        threshold, ``vmax`` ceiling, ``basal``): the fused 0..1 ``proximity`` plus three
+        raw channels — **critical slowing** (``min|Re λ|`` → 0), **basin collapse**
+        (node→saddle → 0), and **LNA lobe swell** (lobe ratio → 1). The ``call`` is
+        ``near-fold`` / ``robust`` / ``unresolved`` (deep-basin abstention) /
+        ``not-bistable``. **Honesty (load-bearing):** near the fold the number is a
+        **ONE-SIDED LOWER BOUND** (``one_sided``) — the linear-noise Gaussian breaks
+        down precisely at the fold (a mode's variance
+        diverges), so it is least reliable exactly there (NUDGE-LIM-012); NUDGE abstains
+        (``unresolved``) on the deep-basin side rather than emit a false-precise "far"
+        number. Give ``path`` (an ``(n_cells, n_species)`` activity ``.npy``/CSV/TSV) to
+        also calibrate the sequencing depth from data and report the LNA lobe channel's
+        reliability at that depth. This is the same score the future ``design()`` safety
+        gate uses to flag an intervention that pushes a switch toward a tipping point.
+        """
+        from nudge.service import bifurcation_file, robustness_circuit
+
+        if path:
+            return bifurcation_file(
+                path, topology=topology, n=n, k=K, vmax=vmax, basal=basal
+            )
+        return robustness_circuit(topology, n=n, k=K, vmax=vmax, basal=basal)
+
     return mcp
 
 

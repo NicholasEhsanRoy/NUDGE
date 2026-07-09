@@ -239,3 +239,45 @@ anomalies:
       BIC gates, and honest reporting of the effect space; too-loose thresholds, an
       unmodelled depth/batch confound aligned with the A+B condition, or reading the
       scalar residual as a hidden-node claim would each resurrect a false positive.
+
+  - anomaly_id: NUDGE-LIM-012
+    title: The bifurcation-proximity dial is a one-sided lower bound near the fold
+    description: >-
+      In bifurcation / tipping-point attribution (nudge.inference.bifurcation), NUDGE
+      reports a robustness DIAL — how close a bistable switch is to a saddle-node fold —
+      from three channels: critical slowing (min|Re lambda| of the drift Jacobian at each
+      stable mode -> 0 at the fold), basin collapse (stable-node -> index-1-saddle
+      distance -> 0), and LNA lobe swell (sqrt(lambda_max(Sigma)) / inter-mode separation
+      -> 1). The load-bearing honesty point: the linear-noise (LNA) Gaussian used by the
+      third channel BREAKS DOWN PRECISELY AT THE FOLD — a mode's variance diverges as its
+      Jacobian eigenvalue -> 0 — so the estimate is LEAST reliable exactly where it
+      matters most. NUDGE therefore reports the score as a ONE-SIDED LOWER BOUND near the
+      fold ("the switch is AT LEAST this close"), never a point estimate
+      (BifurcationScore.one_sided is set once the lobes overlap), and classify_robustness
+      returns near-fold there. On the far / deep-basin side, where the slowest relaxation
+      rate has saturated at the intrinsic decay rate and the noise lobes carry no fold
+      information (the dial has hit the end of its dynamic range), NUDGE ABSTAINS
+      (unresolved) rather than emit a false-precise "far" number it cannot support — the
+      switch is clearly not near a fold, but the distance is beyond the dial's resolution.
+      A monostable circuit (< 2 stable modes) returns not-bistable (score None). Validated
+      on the self-activation switch's KNOWN analytic saddle-node in cooperativity n (and in
+      threshold K): sweeping toward the fold, all three channels move monotonically
+      (min|Re lambda| -> 0, node->saddle -> 0, lobe ratio -> 1(+)) and the fused 0..1 dial
+      ranks proximity correctly, with one_sided setting near the fold (FINDINGS "Phase
+      4f"; tests/inference/test_bifurcation.py). A real-data lock-in (a bistable dose
+      ladder approaching a fold) is a deferred follow-up; the synthetic parameter sweep is
+      the load-bearing validation.
+    severity: major
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      This dial is the hard dependency for the future design() safety gate (it must flag
+      an intervention that pushes a switch toward a tipping point), so a confidently-wrong
+      "you are safe" number would be exactly the failure the project exists to avoid — and
+      it would be most tempting to emit precisely where the noise model is weakest (at the
+      fold). The guarantee rests on the one-sided-lower-bound framing near the fold and the
+      deep-basin abstention (never a precise "far" number); the two deterministic channels
+      (critical slowing, basin collapse) are depth-independent and stand, but the LNA lobe
+      channel is untrustworthy near the fold and at low sequencing depth (attribute_
+      bifurcation calibrates the depth from data and reports lna_reliable's verdict as a
+      lobe-channel caveat). A point estimate near the fold, or a precise proximity emitted
+      on the deep-basin side, would each resurrect a false-precision failure.

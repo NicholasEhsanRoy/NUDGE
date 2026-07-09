@@ -424,6 +424,83 @@ def cross_modality(
 
 
 # --------------------------------------------------------------------------- #
+# robustness (bifurcation / tipping-point proximity — the "robustness dial")
+# --------------------------------------------------------------------------- #
+@app.command()
+def robustness(
+    path: str = typer.Argument(
+        "", help="optional (n_cells, n_species) activity file (.npy/CSV/TSV); omit to "
+        "score a parametric circuit from the kinetics below"
+    ),
+    topology: str = typer.Option(
+        "1node", help=f"bistable motif: {', '.join(_TOPOLOGIES)}"
+    ),
+    n: float = typer.Option(6.0, "--n", help="switch cooperativity (Hill n)"),
+    k: float = typer.Option(1.0, "--k", help="switch threshold (K)"),
+    vmax: float = typer.Option(2.0, "--vmax", help="switch ceiling (v_max)"),
+    basal: float = typer.Option(0.05, "--basal", help="basal production"),
+    steps: int = typer.Option(200, help="LNA-depth calibration steps (data path only)"),
+    seed: int = typer.Option(0, help="RNG seed (data path only)"),
+) -> None:
+    """How close is a bistable switch to LOSING bistability (a saddle-node fold)?
+
+    Reports a **robustness dial**: the fused 0..1 ``proximity`` + three raw channels —
+    **critical slowing** (min|Reλ|→0), **basin collapse** (node→saddle→0), and **LNA
+    lobe swell** (lobe ratio→1). The call is ``near-fold`` / ``robust`` / ``unresolved``
+    (deep basin, abstains) / ``not-bistable``. Near the fold the number is a **ONE-SIDED
+    LOWER BOUND** — the LNA Gaussian breaks down precisely at the fold, so it is least
+    reliable exactly there (NUDGE-LIM-012). With a data file, the sequencing depth
+    is calibrated from the data to gate the LNA lobe channel's reliability.
+    """
+    from nudge.service import (
+        ROBUSTNESS_TOPOLOGIES,
+        bifurcation_file,
+        robustness_circuit,
+    )
+
+    if topology not in ROBUSTNESS_TOPOLOGIES:
+        raise typer.BadParameter(f"topology must be one of {ROBUSTNESS_TOPOLOGIES}")
+
+    if path:
+        out = bifurcation_file(
+            path, topology=topology, n=n, k=k, vmax=vmax, basal=basal,
+            steps=steps, seed=seed,
+        )
+    else:
+        out = robustness_circuit(topology, n=n, k=k, vmax=vmax, basal=basal)
+
+    _echo(f"robustness dial  (topology={topology}, n={n:g}, K={k:g}, v_max={vmax:g})")
+    if out["proximity"] is None:
+        _echo(f"\n  → CALL: {out['call'].upper()}")
+        _echo(f"     {out['reason']}")
+        return
+    cp = out["channels"].get("channel_proximities", {})
+    _echo(
+        f"  proximity dial = {out['proximity']:.3f} / 1.0   "
+        f"(one-sided lower bound: {out['one_sided']})   modes={out['n_stable_modes']}"
+    )
+    _echo(
+        f"  channels:  critical-slowing min|Reλ| = {out['min_re_lambda']:.3f} (→0)   "
+        f"node→saddle = {out['node_saddle_distance']:.3f} (→0)   "
+        f"LNA lobe ratio = {out['lna_lobe_ratio']:.3f} (→1)"
+    )
+    if cp:
+        _echo(
+            "  per-channel proximity:  "
+            + "  ".join(f"{key}={val:.3f}" for key, val in cp.items())
+        )
+    if "lna_reason" in out:
+        _echo(f"  LNA reliability at this depth (lobe channel): {out['lna_reason']}")
+    _echo(f"\n  → CALL: {out['call'].upper()}")
+    _echo(f"     {out['reason']}")
+    _echo(
+        "\n  note: near the fold this is a ONE-SIDED LOWER BOUND — the noise model is "
+        "\n  weakest exactly at the fold; NUDGE abstains on the deep-basin side "
+        "(NUDGE-LIM-012)."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # mechanisms
 # --------------------------------------------------------------------------- #
 @app.command()

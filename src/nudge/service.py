@@ -411,3 +411,136 @@ def cross_modality_panel_file(
         "control_variant": control_variant,
         "variants": [variant_attribution_to_dict(v) for v in panel],
     }
+
+
+# --------------------------------------------------------------------------- #
+# bifurcation / tipping-point proximity (the "robustness dial": how close is a
+# bistable switch to LOSING bistability — a saddle-node fold? — see
+# inference.bifurcation). A one-sided lower bound near the fold, because the
+# linear-noise Gaussian breaks down there (NUDGE-LIM-012).
+# --------------------------------------------------------------------------- #
+ROBUSTNESS_TOPOLOGIES = ("1node", "2node", "toggle")
+
+
+def _build_named_circuit(
+    topology: str, *, n: float, k: float, vmax: float, basal: float
+) -> Any:
+    """Build a named bistable motif with explicit switch kinetics (the what-if dial)."""
+    if topology not in ROBUSTNESS_TOPOLOGIES:
+        raise ValueError(
+            f"topology must be one of {ROBUSTNESS_TOPOLOGIES}, got {topology!r}"
+        )
+    from nudge.circuits import ras_switch_1node, ras_switch_2node, toggle
+
+    builders = {
+        "1node": ras_switch_1node,
+        "2node": ras_switch_2node,
+        "toggle": toggle,
+    }
+    return builders[topology](n=n, K=k, vmax=vmax, basal=basal)
+
+
+def bifurcation_to_dict(score: Any, call: str, reason: str) -> dict[str, Any]:
+    """Serialise a ``BifurcationScore`` + its verdict to a plain JSON-able dict."""
+    out: dict[str, Any] = {"call": call, "reason": reason}
+    if score is None:
+        out.update(
+            {
+                "proximity": None,
+                "one_sided": None,
+                "n_stable_modes": 0,
+                "min_re_lambda": None,
+                "node_saddle_distance": None,
+                "lna_lobe_ratio": None,
+                "channels": {},
+            }
+        )
+    else:
+        out.update(
+            {
+                "proximity": score.proximity,
+                "one_sided": score.one_sided,
+                "n_stable_modes": score.n_stable_modes,
+                "min_re_lambda": score.min_re_lambda,
+                "node_saddle_distance": score.node_saddle_distance,
+                "lna_lobe_ratio": score.lna_lobe_ratio,
+                "channels": dict(score.channels),
+            }
+        )
+    return out
+
+
+def robustness_circuit(
+    topology: str = "1node",
+    *,
+    n: float = 6.0,
+    k: float = 1.0,
+    vmax: float = 2.0,
+    basal: float = 0.05,
+) -> dict[str, Any]:
+    """Score a **parametric** bistable switch's fold proximity — the what-if entry.
+
+    Builds the named motif at the given switch kinetics and returns the robustness dial:
+    the fused 0..1 ``proximity`` + the three raw channels (critical slowing, basin
+    collapse, LNA lobe swell) + the honest ``call`` (``near-fold`` / ``robust`` /
+    ``unresolved`` / ``not-bistable``). Near the fold the number is a **one-sided lower
+    bound** (``one_sided``): the LNA Gaussian breaks down there (NUDGE-LIM-012).
+    """
+    from nudge.inference.bifurcation import (
+        bifurcation_proximity,
+        classify_robustness,
+    )
+
+    circuit = _build_named_circuit(topology, n=n, k=k, vmax=vmax, basal=basal)
+    score = bifurcation_proximity(circuit)
+    call, reason = classify_robustness(score)
+    out = bifurcation_to_dict(score, call, reason)
+    out["topology"] = topology
+    out["kinetics"] = {"n": n, "K": k, "vmax": vmax, "basal": basal}
+    return out
+
+
+def _read_activity(path: str) -> Any:
+    """Read an ``(n_cells, n_species)`` activity array from ``.npy`` / CSV / TSV."""
+    import numpy as np
+
+    if path.endswith(".npy"):
+        return np.load(path)
+    import pandas as pd
+
+    sep = "\t" if path.endswith((".tsv", ".txt")) else ","
+    return pd.read_csv(path, sep=sep, comment="#").to_numpy(dtype=float)
+
+
+def bifurcation_file(
+    path: str,
+    *,
+    topology: str = "1node",
+    n: float = 6.0,
+    k: float = 1.0,
+    vmax: float = 2.0,
+    basal: float = 0.05,
+    steps: int = 200,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Score a switch's fold proximity from an **activity data file** + a topology.
+
+    Reads an ``(n_cells, n_species)`` array (``.npy`` / CSV / TSV), builds the named
+    circuit hypothesis at the given kinetics, and runs the data-driven attribution
+    (:func:`nudge.inference.bifurcation.attribute_bifurcation`): it scores the circuit,
+    and calibrates the sequencing **depth** from the data so the LNA lobe channel's
+    reliability is honestly reported (``lna_reason``). The proximity is a property of
+    the circuit; the data pins the depth context. Near the fold the number is a
+    **one-sided lower bound** (NUDGE-LIM-012).
+    """
+    from nudge.inference.bifurcation import attribute_bifurcation
+
+    arr = _read_activity(path)
+    circuit = _build_named_circuit(topology, n=n, k=k, vmax=vmax, basal=basal)
+    res = attribute_bifurcation(arr, circuit, free=None, steps=steps, seed=seed)
+    out = bifurcation_to_dict(res.score, res.call, res.reason)
+    out["topology"] = topology
+    out["scale"] = res.scale
+    out["lna_reason"] = res.lna_reason
+    out["recovered"] = dict(res.recovered)
+    return out

@@ -9,6 +9,30 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Bifurcation / tipping-point proximity — the "robustness dial" (`nudge.inference.bifurcation`,
+  `NUDGE-METHOD-006`):** answers a new question — **how close is a bistable switch to
+  *losing* bistability** (a saddle-node fold)? — as a scalar 0..1 dial from **three
+  complementary channels**, each with a known analytic limit at the fold: **critical
+  slowing** (`min|Re λ|` of the drift Jacobian at each stable mode → 0), **basin collapse**
+  (stable-node → index-1-saddle distance → 0), and **LNA lobe swell** (`√λ_max(Σ)/sep` →
+  1). It re-exposes a signal that was *already computed but buried* (the fixed-point
+  eigenvalues that `Circuit.fixed_points` dropped; the lobe ratio inside `lna_reliable`) as
+  a public, honestly-bounded score. **The load-bearing honesty point (`NUDGE-LIM-012`):**
+  the linear-noise Gaussian **breaks down precisely at the fold** (variance diverges), so
+  the dial is a **one-sided LOWER BOUND** near the fold (`BifurcationScore.one_sided`) —
+  never a point estimate — and `classify_robustness` **abstains** (`unresolved`) on the
+  deep-basin far side rather than emit a false-precise "far" number; `not-bistable` when < 2
+  stable modes; `robust` only for a well-buffered switch. **Validated on the self-activation
+  switch's known analytic saddle-node in `n` and `K`:** sweeping toward the fold, all three
+  channels move **monotonically** and the fused dial ranks proximity correctly, with
+  `one_sided` setting near the fold (FINDINGS "Phase 4f"). `BifurcationScore.channels`
+  retains the raw per-mode values for the demo. Wired into the `nudge robustness` CLI verb +
+  the `robustness` MCP tool + `service.robustness_circuit`/`bifurcation_file` + a Mechanism
+  Card + `notebooks/Robustness_Dial.ipynb`. It generalises to N-species switches (it is the
+  hard dependency for the future `design()` **safety gate**). Additive/opt-in — it touches
+  neither the energy-distance `fit()` default nor the decoy battery. A real-data dose-ladder
+  lock-in is a deferred `needs_data` follow-up.
+
 - **Possible-neomorphic off-axis diagnostic** for synergy/epistasis
   (`NUDGE-METHOD-003`): every combination fit now carries the magnitude of its
   interaction residual `r = v_AB − v_A − v_B` **orthogonal** to the additive axis —

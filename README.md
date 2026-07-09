@@ -47,6 +47,15 @@ Highlights so far:
   inducer-binding mutants → **threshold**, DNA-binding mutants → **ceiling / leakiness**,
   the non-inducible mutant **abstains**, no mis-calls — see
   [`notebooks/Chure_LacI_Benchmark.ipynb`](notebooks/Chure_LacI_Benchmark.ipynb).
+- **Robustness dial** (`NUDGE-METHOD-006`) — a scalar 0..1 answer to *how close is a
+  bistable switch to **losing** bistability* (a saddle-node fold), from three channels
+  (critical slowing `min|Reλ|→0`, basin collapse, LNA lobe swell). The honesty crux
+  (`NUDGE-LIM-012`): the noise model is weakest **exactly at the fold**, so the dial is a
+  **one-sided lower bound** near the fold and **abstains** on the deep-basin side — never a
+  confident "you are safe" number it can't support. Validated on the self-activation
+  switch's **known analytic fold** (all three channels move monotonically toward it) — see
+  [`notebooks/Robustness_Dial.ipynb`](notebooks/Robustness_Dial.ipynb). This is the hard
+  dependency for the future `design()` safety gate.
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap

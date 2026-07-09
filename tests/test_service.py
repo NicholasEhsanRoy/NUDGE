@@ -132,3 +132,43 @@ def test_synergy_file_h5ad_wiring(tmp_path) -> None:
         "call", "reason", "interaction", "ci_interaction", "n_cells", "effect_space"
     }
     assert out["n_cells"]["A+B"] == 220
+
+
+def test_robustness_circuit_wiring() -> None:
+    """The parametric robustness dial the CLI/MCP share round-trips to a dict."""
+    from nudge.service import ROBUSTNESS_TOPOLOGIES, robustness_circuit
+
+    assert set(ROBUSTNESS_TOPOLOGIES) == {"1node", "2node", "toggle"}
+
+    near = robustness_circuit("1node", n=2.0)
+    assert near["call"] == "near-fold"
+    assert near["one_sided"] is True
+    assert 0.0 <= near["proximity"] <= 1.0
+    assert set(near) >= {
+        "call", "reason", "proximity", "one_sided", "n_stable_modes",
+        "min_re_lambda", "node_saddle_distance", "lna_lobe_ratio", "channels",
+    }
+    assert "channel_proximities" in near["channels"]
+
+    # monostable → not-bistable, with a null proximity (never a forced number).
+    mono = robustness_circuit("1node", n=1.0)
+    assert mono["call"] == "not-bistable"
+    assert mono["proximity"] is None
+
+
+def test_bifurcation_file_npy_wiring(tmp_path) -> None:
+    """The activity-file path the CLI/MCP share: score + depth-calibrated LNA reason."""
+    import jax
+
+    from nudge.inference.lyapunov import sample_lna_mixture
+    from nudge.service import bifurcation_file
+
+    circuit = build_circuit("1node")
+    data = sample_lna_mixture(circuit, 300, jax.random.PRNGKey(0), scale=40.0)
+    npy = tmp_path / "activity.npy"
+    np.save(npy, np.asarray(data))
+
+    out = bifurcation_file(str(npy), topology="1node")
+    assert out["call"] in {"robust", "unresolved", "near-fold"}
+    assert "lna_reason" in out and isinstance(out["lna_reason"], str)
+    assert out["scale"] > 0.0

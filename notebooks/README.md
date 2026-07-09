@@ -9,6 +9,7 @@ running anything.
 | [`OCT4_NANOG_Flagship.ipynb`](OCT4_NANOG_Flagship.ipynb) | GSE283614 (Yao et al. 2025) | Dose-response attribution: **OCT4 → switch** (n≈6.7, R²=0.99) and **NANOG → unresolved** (a rigorous abstention — the knockdown doesn't span its threshold; `NUDGE-LIM-007`). |
 | [`Norman_Synergy.ipynb`](Norman_Synergy.ipynb) | GSE133344 (Norman et al. 2019) | Synergy / epistasis: calls each CRISPRa combination **additive / synergistic / buffering** — or abstains — and agrees with the paper on its two explicitly-labeled pairs (`NUDGE-METHOD-003`). |
 | [`Chure_LacI_Benchmark.ipynb`](Chure_LacI_Benchmark.ipynb) | Chure et al. 2019 (CaltechDATA D1.1241) | **Cross-modality** adapter: the *same* threshold/gain/ceiling attribution run on **fluorescence fold-change** (not counts), behind a modality bouncer (`NUDGE-LIM-008`). Recovers the authors' answer key — **inducer-binding mutants → threshold, DNA-binding → ceiling/leakiness** — and **abstains** on the rest, 0 mis-calls (`NUDGE-METHOD-002`). |
+| [`Robustness_Dial.ipynb`](Robustness_Dial.ipynb) | Synthetic (self-activation switch, known fold) | **Robustness dial** (`NUDGE-METHOD-006`): how close is a bistable switch to *losing* bistability (a saddle-node fold)? Sweeps toward the switch's **known analytic fold** and shows all three channels move monotonically + the fused 0..1 dial. The honesty crux (`NUDGE-LIM-012`): a **one-sided lower bound** near the fold (the noise model is weakest exactly there) and an **abstention** on the deep-basin side. |
 
 ## Running them yourself
 
