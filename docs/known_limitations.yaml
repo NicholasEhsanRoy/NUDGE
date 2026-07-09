@@ -169,13 +169,22 @@ anomalies:
       independence; raw-count or HSA nulls would move the baseline), and the reported
       interaction is a SCALAR measured along the additive axis fixed by the two singles —
       a purely ORTHOGONAL emergent state (a combination moving in a direction neither
-      single spans) is not captured by this scalar. Most sharply: a super-additive
-      residual is NOT by itself evidence of a hidden node or rewiring (that bridges to the
-      Capability-7 hidden-node trap, which NUDGE does not claim) — it is a magnitude
-      statement about non-additivity along a known axis, no more. VERIFIED on Norman 2019
-      (GSE133344): CBL+CNN1 / CBL+UBASH3B read synergistic and DUSP9+ETS2 reads buffering
-      (DUSP9-dominant suppression of ETS2), matching the paper's taxonomy; FOXA1+FOXA3
-      reads additive. Guarded by the min-cells + CI-width abstention gates, the BIC
+      single spans) is not captured by this scalar. This orthogonal blind spot is now
+      QUANTIFIED, not just asserted: combo_effect_scores(..., return_geometry=True)
+      reports the off-axis residual (the interaction residual orthogonal to the additive
+      axis) as EpistasisFit.off_axis_residual / neomorphic_ratio, and a synergistic /
+      buffering call whose off-axis residual rivals the on-axis interaction
+      (neomorphic_ratio >= 1.0) gains an honest UNDER-count warning in its reason — the
+      scalar is direction-correct but may under-count an emergent (possibly-neomorphic)
+      component. This is a flag, NOT a discovery or a hidden-node claim. Most sharply: a
+      super-additive residual is NOT by itself evidence of a hidden node or rewiring (that
+      bridges to the Capability-7 hidden-node trap, which NUDGE does not claim) — it is a
+      magnitude statement about non-additivity along a known axis, no more. VERIFIED on
+      Norman 2019 (GSE133344): CBL+CNN1 / CBL+UBASH3B read synergistic and DUSP9+ETS2 reads
+      buffering (DUSP9-dominant suppression of ETS2), matching the paper's taxonomy;
+      FOXA1+FOXA3 reads additive; and the off-axis diagnostic flags the three synergy
+      pairs (off-axis >= on-axis) while leaving the clean on-axis DUSP9+ETS2 masking
+      unflagged (ratio 0.62). Guarded by the min-cells + CI-width abstention gates, the BIC
       parsimony gate, and the Norman lock-in (tests/inference/test_epistasis.py). Inherits
       the affine-readout bound NUDGE-LIM-006.
     severity: minor

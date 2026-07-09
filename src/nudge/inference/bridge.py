@@ -20,11 +20,12 @@ growth of the counts; ``lna_reliable`` abstains where that (or low depth) bites.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Literal, overload
 
 import numpy as np
 
 from nudge.core.circuit import Circuit
+from nudge.inference.epistasis import ComboGeometry, combo_geometry
 from nudge.inference.lyapunov import OperatingPoint, calibrate_from_wt
 
 __all__ = [
@@ -204,6 +205,40 @@ def _condition_mask(obs: Any, condition_col: str, label: str) -> np.ndarray:
     return np.asarray(obs[condition_col].astype(str) == str(label))
 
 
+@overload
+def combo_effect_scores(
+    adata: Any,
+    *,
+    control_label: str,
+    a_label: str,
+    b_label: str,
+    ab_label: str,
+    condition_col: str = ...,
+    library_col: str | None = ...,
+    signature: Sequence[str] | None = ...,
+    n_top_genes: int = ...,
+    return_geometry: Literal[False] = ...,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
+
+
+@overload
+def combo_effect_scores(
+    adata: Any,
+    *,
+    control_label: str,
+    a_label: str,
+    b_label: str,
+    ab_label: str,
+    condition_col: str = ...,
+    library_col: str | None = ...,
+    signature: Sequence[str] | None = ...,
+    n_top_genes: int = ...,
+    return_geometry: Literal[True],
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, ComboGeometry | None
+]: ...
+
+
 def combo_effect_scores(
     adata: Any,
     *,
@@ -215,7 +250,11 @@ def combo_effect_scores(
     library_col: str | None = "total_counts",
     signature: Sequence[str] | None = None,
     n_top_genes: int = 2000,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    return_geometry: bool = False,
+) -> (
+    tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+    | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, ComboGeometry | None]
+):
     """Per-cell scalar **effect scores** for {control, A, B, A+B} of a combination.
 
     Returns four 1-D arrays (one score per cell) ready for
@@ -240,6 +279,14 @@ def combo_effect_scores(
 
     Raises ``KeyError`` if a condition label matches no cells or a signature gene is
     absent from ``var_names``.
+
+    With ``return_geometry=True`` a fifth element is returned: the
+    :class:`~nudge.inference.epistasis.ComboGeometry` **possible-neomorphic off-axis
+    diagnostic** — the magnitude of the combo's interaction residual orthogonal to the
+    additive axis (the emergent component this scalar structurally cannot see). It is
+    ``None`` in the fixed-``signature`` mode (there is no additive axis to project).
+    Feed it to :func:`~nudge.inference.epistasis.attribute_synergy` to surface an honest
+    *under-count* warning with the call (NUDGE-LIM-009).
     """
     obs = getattr(adata, "obs", None)
     if obs is None or condition_col not in obs:
@@ -273,6 +320,7 @@ def combo_effect_scores(
     norm, gene_ix = _norm_counts(sub_adata, library_col)
     lognorm = np.log1p(norm)
 
+    geometry: ComboGeometry | None = None
     if signature is not None:
         sig = list(signature)
         missing = [g for g in sig if g not in gene_ix]
@@ -298,10 +346,18 @@ def combo_effect_scores(
             )
         u = u / nu
         score = sub @ u
+        # Off-axis (possible-neomorphic) diagnostic: the combo's interaction residual
+        # r = v_AB − v_A − v_B decomposed into on-axis (the scalar NUDGE reports) and
+        # the orthogonal component the scalar cannot see (NUDGE-LIM-009).
+        v_ab = sub[masks["ab"]].mean(axis=0) - m_ctrl
+        geometry = combo_geometry(v_a, v_b, v_ab, n_top_genes=n_keep)
 
-    return (
+    scores = (
         np.asarray(score[masks["control"]], dtype=float),
         np.asarray(score[masks["a"]], dtype=float),
         np.asarray(score[masks["b"]], dtype=float),
         np.asarray(score[masks["ab"]], dtype=float),
     )
+    if return_geometry:
+        return (*scores, geometry)
+    return scores

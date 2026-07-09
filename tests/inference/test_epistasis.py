@@ -20,8 +20,10 @@ import numpy as np
 import pytest
 
 from nudge.inference.epistasis import (
+    ComboGeometry,
     attribute_synergy,
     classify_synergy,
+    combo_geometry,
     fit_synergy,
 )
 
@@ -124,19 +126,102 @@ def test_interaction_is_control_referenced_and_signed() -> None:
     assert abs(fit.interaction - 1.5) < 0.3
 
 
+def test_off_axis_diagnostic_recovers_known_residual() -> None:
+    """The off-axis (possible-neomorphic) diagnostic recovers a constructed residual.
+
+    Build single/combo mean-shift vectors with a KNOWN split of the interaction
+    residual ``r = v_AB − v_A − v_B`` into an on-axis part (along the additive axis
+    ``u``) and an orthogonal off-axis part. The diagnostic must recover both.
+    """
+    v_a = np.array([1.0, 0.0, 0.0])
+    v_b = np.array([1.0, 0.0, 0.0])  # additive axis u = e0
+
+    # On-axis-only combo: r = [0.5, 0, 0] — no orthogonal component.
+    on_only = combo_geometry(v_a, v_b, np.array([2.5, 0.0, 0.0]))
+    assert abs(on_only.on_axis_interaction - 0.5) < 1e-9
+    assert on_only.off_axis_residual < 1e-9
+    assert on_only.neomorphic_ratio < 1e-6  # would NOT be flagged (< 1.0)
+
+    # Off-axis combo: r = [0.5, 2.0, 0] — a large emergent orthogonal component.
+    off = combo_geometry(v_a, v_b, np.array([2.5, 2.0, 0.0]))
+    assert abs(off.on_axis_interaction - 0.5) < 1e-9
+    assert abs(off.off_axis_residual - 2.0) < 1e-9
+    assert abs(off.neomorphic_ratio - 4.0) < 1e-9  # off ≥ on → would be flagged
+
+    # On-axis interaction equals the scalar interaction fit_synergy would report.
+    assert abs(on_only.on_axis_interaction - 0.5) < 1e-9
+
+
+def test_off_axis_diagnostic_undefined_when_singles_cancel() -> None:
+    """No net single-arm shift ⇒ the additive axis is undefined ⇒ ValueError."""
+    with pytest.raises(ValueError, match="additive axis undefined"):
+        combo_geometry(
+            np.array([1.0, 0.0]), np.array([-1.0, 0.0]), np.array([0.0, 1.0])
+        )
+
+
+def test_synergy_reason_flags_neomorphic_when_offaxis_large() -> None:
+    """A large off-axis residual appends the possible-neomorphic UNDER-count warning.
+
+    The call itself is unchanged (still ``synergistic``); only the reason gains the
+    honest flag, and the two diagnostic fields ride along on the fit.
+    """
+    ctrl = _cells(0.0, seed=1)
+    a = _cells(1.0, seed=2)
+    b = _cells(1.0, seed=3)
+    ab = _cells(3.6, seed=4)  # super-additive → synergistic
+    geom = ComboGeometry(
+        on_axis_interaction=1.6, off_axis_residual=3.2, neomorphic_ratio=2.0
+    )
+    res = attribute_synergy(ctrl, a, b, ab, n_boot=400, seed=0, geometry=geom)
+    assert res.call == "synergistic", res.reason
+    assert "neomorphic" in res.reason
+    assert "UNDER-count" in res.reason
+    assert res.fit.off_axis_residual == 3.2
+    assert res.fit.neomorphic_ratio == 2.0
+
+
+def test_synergy_reason_not_flagged_when_offaxis_small() -> None:
+    """A small off-axis residual (ratio < threshold) does NOT flag — no over-firing."""
+    ctrl = _cells(0.0, seed=1)
+    a = _cells(1.0, seed=2)
+    b = _cells(1.0, seed=3)
+    ab = _cells(3.6, seed=4)
+    geom = ComboGeometry(
+        on_axis_interaction=1.6, off_axis_residual=0.5, neomorphic_ratio=0.3
+    )
+    res = attribute_synergy(ctrl, a, b, ab, n_boot=400, seed=0, geometry=geom)
+    assert res.call == "synergistic", res.reason
+    assert "neomorphic" not in res.reason
+
+
+def test_synergy_without_geometry_is_unchanged() -> None:
+    """No geometry ⇒ no diagnostic, no note — the pure scalar path is untouched."""
+    ctrl = _cells(0.0, seed=1)
+    a = _cells(1.0, seed=2)
+    b = _cells(1.0, seed=3)
+    ab = _cells(3.6, seed=4)
+    res = attribute_synergy(ctrl, a, b, ab, n_boot=400, seed=0)
+    assert res.call == "synergistic", res.reason
+    assert "neomorphic" not in res.reason
+    assert res.fit.off_axis_residual is None
+    assert res.fit.neomorphic_ratio is None
+
+
 def _norman_call(adata, gene_a, gene_b):  # type: ignore[no-untyped-def]
     from nudge.inference.bridge import combo_effect_scores
     from nudge.inference.epistasis import attribute_synergy
 
-    ctrl, a, b, ab = combo_effect_scores(
+    ctrl, a, b, ab, geometry = combo_effect_scores(
         adata,
         control_label="control",
         a_label=gene_a,
         b_label=gene_b,
         ab_label=f"{gene_a}+{gene_b}",
         condition_col="condition",
+        return_geometry=True,
     )
-    return attribute_synergy(ctrl, a, b, ab, n_boot=500, seed=0)
+    return attribute_synergy(ctrl, a, b, ab, n_boot=500, seed=0, geometry=geometry)
 
 
 @pytest.mark.needs_data
@@ -165,6 +250,12 @@ def test_norman_synergy_lockin_real_data() -> None:
     syn1 = _norman_call(adata, "CBL", "CNN1")
     assert syn1.call == "synergistic", syn1.reason
     assert syn1.fit.ci_interaction[0] > 0.0  # CI clearly above the additive null
+    # Off-axis (possible-neomorphic) diagnostic rides along and flags the under-count:
+    # this synergy pair carries an off-axis residual ≥ the on-axis interaction, so the
+    # scalar is a direction-correct but magnitude-incomplete slice (NUDGE-LIM-009).
+    assert syn1.fit.off_axis_residual is not None
+    assert syn1.fit.neomorphic_ratio is not None and syn1.fit.neomorphic_ratio >= 1.0
+    assert "neomorphic" in syn1.reason
 
     syn2 = _norman_call(adata, "CBL", "UBASH3B")
     assert syn2.call == "synergistic", syn2.reason
@@ -172,6 +263,10 @@ def test_norman_synergy_lockin_real_data() -> None:
     buf = _norman_call(adata, "DUSP9", "ETS2")
     assert buf.call == "buffering", buf.reason
     assert buf.fit.ci_interaction[1] < 0.0  # CI clearly below the additive null
+    # DUSP9+ETS2 is a clean ON-axis masking (the sharpest paper match): its off-axis
+    # residual is SMALLER than its on-axis interaction, so it is NOT flagged.
+    assert buf.fit.neomorphic_ratio is not None and buf.fit.neomorphic_ratio < 1.0
+    assert "neomorphic" not in buf.reason
 
     add = _norman_call(adata, "FOXA1", "FOXA3")
     assert add.call == "additive", add.reason

@@ -239,6 +239,8 @@ def synergy_to_dict(res: Any) -> dict[str, Any]:
         "bic_additive": f.bic_additive,
         "bic_free": f.bic_free,
         "delta_bic_additive_minus_free": f.bic_additive - f.bic_free,
+        "off_axis_residual": f.off_axis_residual,
+        "neomorphic_ratio": f.neomorphic_ratio,
         "n_cells": {
             "control": f.n_control,
             "A": f.n_a,
@@ -282,7 +284,7 @@ def synergy_file(
     from nudge.inference.epistasis import attribute_synergy
 
     adata = ad.read_h5ad(path, backed=None)
-    control, a, b, ab = combo_effect_scores(
+    control, a, b, ab, geometry = combo_effect_scores(
         adata,
         control_label=control_label,
         a_label=a_label,
@@ -292,6 +294,7 @@ def synergy_file(
         library_col=library_col,
         signature=signature,
         n_top_genes=n_top_genes,
+        return_geometry=True,
     )
     res = attribute_synergy(
         control,
@@ -303,5 +306,6 @@ def synergy_file(
         bic_margin=bic_margin,
         min_cells=min_cells,
         rel_width=rel_width,
+        geometry=geometry,
     )
     return synergy_to_dict(res)

@@ -672,9 +672,20 @@ free-coefficient regression: where both apply it agrees on type/direction, and i
 **under-count** emergent synergy, **never invert** a call. The one structural blind spot — the
 off-axis/neomorphic residual, and collapsing Norman's *epistasis* (asymmetric masking) vs
 *suppression* into one "buffering" — is a **documented limitation (NUDGE-LIM-009), now measured in
-the paper's terms**, not a defect. A flagged-but-unapplied enhancement: surface that off-axis
-residual as a *"possible neomorphic"* diagnostic on `EpistasisFit` — turning LIM-009 from prose into
-a number shown with every call.
+the paper's terms**, not a defect.
+
+**Off-axis diagnostic — now shipped (`NUDGE-METHOD-003`).** The audit's flagged enhancement is
+built: `combo_effect_scores(..., return_geometry=True)` returns a `ComboGeometry`, so every fit now
+carries `EpistasisFit.off_axis_residual` and `neomorphic_ratio = off_axis / max(|on_axis|, ε)`, and
+a `synergistic`/`buffering` call with `neomorphic_ratio ≥ 1.0` (off-axis ≥ on-axis) gains an honest
+*possible-neomorphic UNDER-count* warning in its `reason`. It is **additive and opt-in** — the pure
+scalar-array fit, all five calls, and every fail-safe margin (`bic_margin`, `min_cells`, `rel_width`)
+are unchanged; it is a flag, never a discovery or a hidden-node claim. Measured per pair: the three
+synergy pairs are flagged (off-axis / on-axis / ratio: CBL+CNN1 2.54/0.95/**2.67**, CBL+UBASH3B
+2.15/1.09/**1.98**, CNN1+UBASH3B 2.21/1.25/**1.76**), while the sharp DUSP9+ETS2 buffering — a clean
+on-axis masking — is correctly *not* flagged (1.33/−2.14/**0.62**), and FOXA1+FOXA3 is `additive`
+so is never flagged. This turns LIM-009 from prose into a number shown with every call (mechanism
+card + `notebooks/Norman_Synergy.ipynb`, which now plots on-axis vs off-axis per pair).
 
 **Honest bounds (NUDGE-LIM-009).** A combo inherits its weakest single arm (abstain when an arm is
 underpowered); the additive null is effect-space-dependent (log-FC / Bliss, reported with every

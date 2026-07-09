@@ -58,8 +58,10 @@ from typing import Any
 import numpy as np
 
 __all__ = [
+    "ComboGeometry",
     "EpistasisFit",
     "EpistasisResult",
+    "combo_geometry",
     "fit_synergy",
     "classify_synergy",
     "attribute_synergy",
@@ -77,6 +79,35 @@ def _bic(rss: float, n_obs: int, k: float) -> float:
     rss = max(rss, 1e-12)
     n_obs = max(n_obs, 1)
     return k * np.log(n_obs) + n_obs * (np.log(2 * np.pi) + np.log(rss / n_obs) + 1.0)
+
+
+@dataclass(frozen=True)
+class ComboGeometry:
+    """The off-axis (**possible-neomorphic**) diagnostic for a combination.
+
+    NUDGE's scalar interaction is exactly the **on-axis projection** of the combo's
+    full interaction-residual vector ``r = v_AB − v_A − v_B`` onto the additive axis
+    ``u = (v_A + v_B)/‖v_A + v_B‖`` (fixed by the singles only). This dataclass carries
+    the part the scalar *cannot* see: the component of ``r`` **orthogonal** to ``u``.
+
+    - ``on_axis_interaction`` — ``r·u``; equals :attr:`EpistasisFit.interaction` (the
+      scalar NUDGE reports), given here so the ratio is self-contained.
+    - ``off_axis_residual`` — ``‖r − (r·u)·u‖``: the magnitude of the interaction
+      residual orthogonal to the additive axis, in the same 2000-HVG ``log1p`` space.
+    - ``neomorphic_ratio`` — ``off_axis_residual / max(|on_axis_interaction|, ε)``: how
+      large the invisible/emergent component is relative to the on-axis interaction.
+
+    A large ratio is an **under-count warning** — NUDGE's scalar is a direction-correct
+    but magnitude-incomplete slice of a larger, possibly-emergent state (Norman 2019's
+    *neomorphic* dimension). It is **NOT** a hidden-node claim or a positive discovery
+    of a new mechanism (NUDGE-LIM-009). Only defined for the projection extractor;
+    ``None`` in the fixed-signature scoring mode (there is no additive axis to project).
+    """
+
+    on_axis_interaction: float
+    off_axis_residual: float
+    neomorphic_ratio: float
+    n_top_genes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +141,8 @@ class EpistasisFit:
     n_boot: int
     effect_space: str
     boot_interaction: tuple[float, ...] = ()
+    off_axis_residual: float | None = None
+    neomorphic_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +160,43 @@ def _percentile_ci(vals: list[float]) -> tuple[float, float]:
     return (float(np.percentile(vals, 2.5)), float(np.percentile(vals, 97.5)))
 
 
+def combo_geometry(
+    v_a: Any, v_b: Any, v_ab: Any, *, n_top_genes: int | None = None, eps: float = 1e-9
+) -> ComboGeometry:
+    """Decompose a combination's interaction residual into on- vs off-axis parts.
+
+    ``v_a`` / ``v_b`` / ``v_ab`` are the single/combo **mean-shift vectors** vs control
+    (``mean(X) − mean(control)``) in some feature space (the 2000-HVG ``log1p`` space
+    when supplied by :func:`~nudge.inference.bridge.combo_effect_scores`). The additive
+    axis ``u = (v_a + v_b)/‖v_a + v_b‖`` is fixed by the singles only. Returns the
+    :class:`ComboGeometry`: the on-axis interaction ``r·u`` (the scalar NUDGE reports),
+    the **off-axis residual** ``‖r − (r·u)·u‖`` (the emergent piece the scalar discards,
+    ``r = v_ab − v_a − v_b``), and their ratio. Raises ``ValueError`` if the singles
+    produce no net shift (the additive axis is undefined).
+    """
+    v_a = np.asarray(v_a, dtype=float).ravel()
+    v_b = np.asarray(v_b, dtype=float).ravel()
+    v_ab = np.asarray(v_ab, dtype=float).ravel()
+    u = v_a + v_b
+    nu = float(np.linalg.norm(u))
+    if nu <= 1e-12:
+        raise ValueError(
+            "the two single arms produce no net shift (additive axis undefined) — "
+            "cannot compute the off-axis diagnostic"
+        )
+    u = u / nu
+    r = v_ab - v_a - v_b
+    on_axis = float(r @ u)
+    off_axis = float(np.linalg.norm(r - on_axis * u))
+    ratio = off_axis / max(abs(on_axis), eps)
+    return ComboGeometry(
+        on_axis_interaction=on_axis,
+        off_axis_residual=off_axis,
+        neomorphic_ratio=ratio,
+        n_top_genes=n_top_genes,
+    )
+
+
 def fit_synergy(
     control: Any,
     a: Any,
@@ -136,6 +206,7 @@ def fit_synergy(
     n_boot: int = 1000,
     seed: int = 0,
     effect_space: str = "log-fold-change",
+    geometry: ComboGeometry | None = None,
 ) -> EpistasisFit:
     """Fit the additive null + the observed interaction for a combination A / B / A+B.
 
@@ -148,6 +219,13 @@ def fit_synergy(
     ``effect_a + effect_b``; the interaction is ``effect_ab − additive_pred``. CIs come
     from a seeded bootstrap resampling cells **within each condition**. Raises
     ``ValueError`` if any condition is empty.
+
+    ``geometry`` is an optional :class:`ComboGeometry` (from
+    :func:`~nudge.inference.bridge.combo_effect_scores`): if given, its
+    ``off_axis_residual`` / ``neomorphic_ratio`` are attached to the fit as the
+    **possible-neomorphic off-axis diagnostic**. This is purely additive — the scalar
+    fit is identical whether or not it is supplied, so the synthetic scalar-array path
+    (no HVG vectors) is unchanged.
     """
     control = np.asarray(control, dtype=float).ravel()
     a = np.asarray(a, dtype=float).ravel()
@@ -209,6 +287,12 @@ def fit_synergy(
         n_boot=len(boot_i),
         effect_space=effect_space,
         boot_interaction=tuple(boot_i),
+        off_axis_residual=(
+            None if geometry is None else geometry.off_axis_residual
+        ),
+        neomorphic_ratio=(
+            None if geometry is None else geometry.neomorphic_ratio
+        ),
     )
 
 
@@ -217,12 +301,32 @@ def _straddles_zero(ci: tuple[float, float]) -> bool:
     return bool(lo <= 0.0 <= hi)
 
 
+def _neomorphic_note(fit: EpistasisFit, threshold: float) -> str:
+    """A possible-neomorphic off-axis warning to append to a non-additive reason.
+
+    Returns ``""`` unless the off-axis diagnostic is available *and* its
+    ``neomorphic_ratio`` clears ``threshold`` (off-axis residual ≥ ``threshold`` × the
+    on-axis interaction). Never changes the call — it only flags that the scalar may
+    **under-count** an emergent/off-axis component (NUDGE-LIM-009).
+    """
+    ratio = fit.neomorphic_ratio
+    off = fit.off_axis_residual
+    if ratio is None or off is None or not np.isfinite(ratio) or ratio < threshold:
+        return ""
+    return (
+        f" | possible neomorphic / off-axis emergent structure — the scalar "
+        f"interaction may UNDER-count it (off-axis ‖ = {off:.2f} ≈ {ratio:.1f}× the "
+        f"on-axis interaction); see NUDGE-LIM-009"
+    )
+
+
 def classify_synergy(
     fit: EpistasisFit,
     *,
     bic_margin: float = 2.0,
     min_cells: int = 30,
     rel_width: float = 0.5,
+    neomorphic_ratio_threshold: float = 1.0,
 ) -> tuple[str, str]:
     """Turn a fit into a conservative verdict + reason (the fail-safe classifier).
 
@@ -236,6 +340,18 @@ def classify_synergy(
     below 0 *and* the free model beats the additive null by ``bic_margin`` (both the CI
     *and* parsimony must agree); otherwise **unresolved** — a wide CI that cannot rule
     out synergy, or a nonzero CI the BIC cannot justify. Returns ``(call, reason)``.
+
+    **Off-axis diagnostic (additive; never changes the call).** When the call is
+    ``synergistic`` / ``buffering`` and the fit carries the off-axis diagnostic (from
+    :func:`~nudge.inference.bridge.combo_effect_scores`) with ``neomorphic_ratio ≥
+    neomorphic_ratio_threshold`` (default ``1.0``: the off-axis residual is at least as
+    large as the on-axis interaction NUDGE reports), a **possible-neomorphic** warning
+    is appended to the reason — the scalar may UNDER-count an emergent/off-axis
+    component (NUDGE-LIM-009). The threshold defaults to 1.0 because at that point the
+    invisible
+    (off-axis) piece equals or exceeds the reported (on-axis) one, so the scalar is at
+    best half the story; below it the scalar captures the majority and the warning would
+    over-fire. It is a warning, not a discovery — never a hidden-node claim.
     """
     n_min = min(fit.n_control, fit.n_a, fit.n_b, fit.n_ab)
     if n_min < min_cells:
@@ -286,7 +402,7 @@ def classify_synergy(
                 f"ΔBIC={d_bic:.1f} — SUPER-ADDITIVE / synergistic ({fit.effect_space} "
                 "space). NOT a hidden-node claim (NUDGE-LIM-009); presumes both single "
                 "arms are correctly measured and an approximately-affine readout "
-                "(NUDGE-LIM-006)"
+                "(NUDGE-LIM-006)" + _neomorphic_note(fit, neomorphic_ratio_threshold)
             )
         return "unresolved", (
             f"interaction CI [{lo:+.3g}, {hi:+.3g}] is above 0 but a free A+B level "
@@ -302,6 +418,7 @@ def classify_synergy(
             f"({fit.effect_space} space). NOT a hidden-node claim (NUDGE-LIM-009); "
             "presumes both single arms are correctly measured and an "
             "approximately-affine readout (NUDGE-LIM-006)"
+            + _neomorphic_note(fit, neomorphic_ratio_threshold)
         )
     return "unresolved", (
         f"interaction CI [{lo:+.3g}, {hi:+.3g}] is below 0 but a free A+B level does "
@@ -322,12 +439,31 @@ def attribute_synergy(
     bic_margin: float = 2.0,
     min_cells: int = 30,
     rel_width: float = 0.5,
+    neomorphic_ratio_threshold: float = 1.0,
+    geometry: ComboGeometry | None = None,
 ) -> EpistasisResult:
-    """Fit + classify a combination in one call — the CLI / MCP entry point."""
+    """Fit + classify a combination in one call — the CLI / MCP entry point.
+
+    Pass ``geometry`` (from :func:`~nudge.inference.bridge.combo_effect_scores` with
+    ``return_geometry=True``) to attach the possible-neomorphic off-axis diagnostic and,
+    for a non-additive call above ``neomorphic_ratio_threshold``, append its warning to
+    the reason. Omitting it leaves the scalar fit unchanged (the synthetic path).
+    """
     fit = fit_synergy(
-        control, a, b, ab, n_boot=n_boot, seed=seed, effect_space=effect_space
+        control,
+        a,
+        b,
+        ab,
+        n_boot=n_boot,
+        seed=seed,
+        effect_space=effect_space,
+        geometry=geometry,
     )
     call, reason = classify_synergy(
-        fit, bic_margin=bic_margin, min_cells=min_cells, rel_width=rel_width
+        fit,
+        bic_margin=bic_margin,
+        min_cells=min_cells,
+        rel_width=rel_width,
+        neomorphic_ratio_threshold=neomorphic_ratio_threshold,
     )
     return EpistasisResult(fit=fit, call=call, reason=reason)

@@ -70,6 +70,29 @@ interaction    = effect(A+B) − [effect(A) + effect(B)]
 5. **unresolved** — otherwise: a CI that straddles 0 but is too wide to *rule out* synergy
    (underpowered), or a clearly-nonzero CI the BIC cannot justify.
 
+## Possible-neomorphic off-axis diagnostic (an under-count warning, not a discovery)
+
+The scalar interaction NUDGE reports is **exactly the on-axis projection** of the combo's
+full interaction-residual vector `r = v_AB − v_A − v_B` onto the additive axis
+`u = (v_A+v_B)/‖v_A+v_B‖`. The component of `r` **orthogonal** to `u` — the **off-axis
+residual** `‖r − (r·u)·u‖` — is the emergent piece the scalar structurally cannot see
+(Norman 2019's *neomorphic* dimension). `combo_effect_scores(..., return_geometry=True)`
+returns it as a `ComboGeometry`; it rides on the fit as `EpistasisFit.off_axis_residual`
+and the ratio `neomorphic_ratio = off_axis / max(|on_axis|, ε)`.
+
+When a `synergistic`/`buffering` call has `neomorphic_ratio ≥ 1.0` (off-axis ≥ the on-axis
+interaction), the reason gains an honest **UNDER-count warning**: the call is
+direction-correct but the scalar may under-count an emergent/off-axis component
+(NUDGE-LIM-009). This **never changes the call** and is emphatically **not** a hidden-node
+claim or a positive discovery — it turns the scalar-projection bound from prose into a
+number shown with every call. Threshold justification: at ratio 1.0 the *invisible*
+(off-axis) piece equals the *reported* (on-axis) one, so the scalar is at best half the
+story; below it the scalar captures the majority and the flag would over-fire. On Norman
+2019 the three synergy pairs are flagged (off-axis 2.2–2.5 vs on-axis 0.9–1.3) while the
+sharp DUSP9+ETS2 buffering — a clean on-axis masking — is correctly *not* flagged (ratio
+0.62); FOXA1+FOXA3 is `additive` so is never flagged. See FINDINGS "Phase 4d" and
+`design/NORMAN_DISCREPANCY_ANALYSIS.md`.
+
 ## Assumptions & simplifications
 
 - **Both single arms must be correctly measured.** The additive null is only as good as
@@ -78,7 +101,9 @@ interaction    = effect(A+B) − [effect(A) + effect(B)]
   can manufacture apparent non-additivity (NUDGE-LIM-006).
 - The scalar interaction is measured **along the singles' additive axis**. A purely
   *orthogonal* emergent state (a combo moving in a direction neither single spans) is not
-  captured by this scalar and is a documented bound (NUDGE-LIM-009).
+  captured by this scalar and is a documented bound (NUDGE-LIM-009) — now **quantified**
+  by the off-axis diagnostic above (`off_axis_residual` / `neomorphic_ratio`), which flags
+  when the scalar may under-count it.
 - The additive-direction `u` is fixed from the point estimate (the singles' means); the
   bootstrap resamples cells with `u` held fixed, so the CI reflects sampling of the means,
   not of the axis.
@@ -128,6 +153,7 @@ lock-in; a synthetic epistasis decoy battery is future work.
 | classify additive / synergistic / buffering / no-effect / unresolved | `nudge.inference.epistasis.classify_synergy` |
 | fit + classify (CLI/MCP entry point) | `nudge.inference.epistasis.attribute_synergy` |
 | combination → per-cell effect scores (projection or signature) | `nudge.inference.bridge.combo_effect_scores` |
+| off-axis (possible-neomorphic) diagnostic: on/off-axis residual split | `nudge.inference.epistasis.combo_geometry` |
 | shared BIC parsimony discipline | `nudge.inference.model_select.select_topology` |
 | CLI / MCP orchestration | `nudge.service.synergy_file` |
 
@@ -144,6 +170,10 @@ reference must resolve to a real attribute.)*
   sub-additive combo reads `buffering`.
 - `tests/inference/test_epistasis.py::test_underpowered_arm_abstains_unresolved` — a
   combo with a dead/underpowered arm abstains (NUDGE-LIM-009).
+- `tests/inference/test_epistasis.py::test_off_axis_diagnostic_recovers_known_residual`
+  — the off-axis (possible-neomorphic) diagnostic recovers a constructed on/off-axis
+  split; `::test_synergy_reason_flags_neomorphic_when_offaxis_large` — a large off-axis
+  residual appends the under-count warning (the call is unchanged).
 - `tests/inference/test_epistasis.py::test_norman_synergy_lockin_real_data` — the
   Norman 2019 GSE133344 lock-in (synergistic / buffering / additive vs the paper).
 

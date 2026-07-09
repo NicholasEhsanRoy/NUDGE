@@ -7,6 +7,24 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ## [Unreleased]
 
+### Added
+- **Possible-neomorphic off-axis diagnostic** for synergy/epistasis
+  (`NUDGE-METHOD-003`): every combination fit now carries the magnitude of its
+  interaction residual `r = v_AB − v_A − v_B` **orthogonal** to the additive axis —
+  the emergent component the scalar interaction structurally cannot see. Computed in
+  `nudge.inference.bridge.combo_effect_scores` (new `return_geometry=True` →
+  `ComboGeometry`), surfaced as `EpistasisFit.off_axis_residual` / `.neomorphic_ratio`,
+  and threaded into `service.synergy_to_dict`. For a `synergistic`/`buffering` call with
+  `neomorphic_ratio ≥ 1.0` (off-axis ≥ on-axis) the reason gains an honest **UNDER-count
+  warning** — the scalar is direction-correct but may under-count an emergent piece
+  (NUDGE-LIM-009). It is **additive and opt-in**: the pure scalar-array fit, every call,
+  and every fail-safe margin (`bic_margin`, `min_cells`, `rel_width`) are unchanged — it
+  is a flag, never a discovery or a hidden-node claim. On Norman 2019 the three synergy
+  pairs are flagged (off-axis 2.2–2.5 vs on-axis 0.9–1.3, ratio 1.8–2.7) while the sharp
+  DUSP9+ETS2 buffering match — a clean on-axis masking — is correctly **not** flagged
+  (ratio 0.62). Turns `NUDGE-LIM-009` from prose into a number shown with every call; see
+  `design/NORMAN_DISCREPANCY_ANALYSIS.md`, FINDINGS "Phase 4d", `notebooks/Norman_Synergy.ipynb`.
+
 ### Performance
 - **Loader ~5× faster** (`data/loaders/perturbseq.py`): the pointer-read hot path
   (`_read_h5ad_rows`, ~99% of load time) now coalesces adjacent selected rows into
