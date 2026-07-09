@@ -1,0 +1,40 @@
+# Mechanism Cards
+
+Every mechanism in the NUDGE library ships with a **Mechanism Card** — the
+literature-grounded, machine-checkable half of its documentation (the other half is
+the in-code `MechanismMeta` in `src/nudge/core/metadata.py`). Each card carries YAML
+front-matter with machine-readable relations (decoys, limitations, identifiability
+regime, references) plus a fixed body: governing equation, what it represents,
+assumptions, known failure modes → the decoy that exercises each, identifiability
+regime (real FINDINGS numbers), an Implementation Mapping to real code, and
+verification evidence.
+
+The cards are validated in CI by three gates:
+
+- `scripts/check_citations.py` — every Pandoc citation key resolves in `docs/bibliography.bib`.
+- `scripts/check_impl_mapping.py` — every `` `nudge.*` `` qualname resolves to real code.
+- `scripts/check_mechanism_cards.py` — every registered mechanism has a card whose
+  front-matter `registry_name` matches, and every card's front-matter parses with the
+  required keys (also run as `tests/docs/test_mechanism_cards.py`).
+
+New cards are added via the `new-mechanism` skill. See `_template.md` for the skeleton.
+
+## Primitives (registered mechanisms)
+
+| Card | Role | ID | Mechanism (registry name) |
+|---|---|---|---|
+| [linear_effect](linear_effect.md) | regulatory-edge | `NUDGE-MECH-001` | `LinearEffect` |
+| [hill_activation](hill_activation.md) | regulatory-edge | `NUDGE-MECH-002` | `HillActivation` |
+| [hill_repression](hill_repression.md) | regulatory-edge | `NUDGE-MECH-003` | `HillRepression` |
+| [linear_integrator](linear_integrator.md) | integrator | `NUDGE-MECH-010` | `LinearIntegrator` |
+| [saturating_integrator](saturating_integrator.md) | integrator | `NUDGE-MECH-011` | `SaturatingIntegrator` |
+| [readout](readout.md) | readout | `NUDGE-MECH-020` | `Readout` |
+
+## Motifs (named circuits)
+
+| Card | Role | ID | Mechanism (topology) |
+|---|---|---|---|
+| [ras_switch_1node](ras_switch_1node.md) | motif | `NUDGE-MOTIF-001` | 1-node self-activation Ras switch |
+| [ras_switch_2node](ras_switch_2node.md) | motif | `NUDGE-MOTIF-002` | 2-node mutual-activation Ras switch |
+| [toggle](toggle.md) | motif | `NUDGE-MOTIF-003` | 2-node mutual-repression toggle |
+| [self_activation_switch](self_activation_switch.md) | motif | `NUDGE-MOTIF-004` | general 1-species positive-feedback switch |
