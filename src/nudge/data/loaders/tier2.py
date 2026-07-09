@@ -51,6 +51,9 @@ GLADSTONE = PerturbLoaderConfig(
     quality_drop_col="low_quality",
     guide_id_col="guide_id",
     exclude_guides=("multi-guide",),
+    # a genome-scale control has tens of thousands of NTC cells; a few thousand is ample
+    # for WT calibration + topology, and keeps the pointer read fast on any RAM.
+    max_cells_per_condition=6000,
 )
 
 
