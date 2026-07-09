@@ -172,13 +172,24 @@ uv run pytest tests/verification/test_stochastic_inverse_crime.py -m "slow or ve
 uv run python scripts/vv/overnight_sweep.py --smoke
 ```
 
-**And now it's a tool you can drive — from a terminal or from Claude itself:**
+**The flagship visual walkthrough — a resolved switch *and* an honest abstention on
+real data:** [`notebooks/OCT4_NANOG_Flagship.ipynb`](notebooks/OCT4_NANOG_Flagship.ipynb)
+(GSE283614, Yao et al. 2025; runs with embedded plots). NUDGE calls **OCT4 → `switch`**
+(apparent `n ≈ 6.7`, R² = 0.99) and **NANOG → `unresolved`** — abstaining because that
+knockdown series doesn't span its threshold. The notebook *proves* the abstention with an
+independent `n`-profile (R² flat within 0.075 across `n = 1…12`) and shows the classifier
+catching a real human over-reading: an exploratory bounded fit called NANOG a graded
+`n ≈ 2.2`, but its `K` railed at the bound with an `n`-CI of [1.2, 12]. Fail-safe,
+visualized (`NUDGE-LIM-007`).
+
+**And it's a tool you can drive — from a terminal or from Claude itself:**
 
 ```bash
 # A working CLI over the tested engine (no data needed for these two):
 uv run nudge mechanisms                     # the mechanism library + its cards
 uv run nudge explain unresolved             # WHY an abstention was the honest answer
 uv run nudge attribute screen.h5ad -t SOS1  # attribute a perturbation, honestly
+uv run nudge dose-response curve.csv         # switch vs graded from a dose axis — or abstain
 
 # Or hand NUDGE to Claude as a custom MCP server (verified — see the memo):
 uv pip install -e ".[mcp]"
@@ -199,9 +210,11 @@ abstain?" traversal is `nudge.knowledge` today and a SPARQL graph in
   `scripts/vv/results/` (calibration curve, identifiability heatmaps).
 - **Honest status:** the science holds up today — green tests, measured guarantees,
   reproducible results — and there is now a **runnable tool surface** (CLI + a live
-  Claude MCP integration) rather than only a test suite. The remaining road is a
-  guided notebook / visual walkthrough on *real* T-cell data (pending the download);
-  the integration itself is built and tested, not vapor.
+  Claude MCP integration) *and* a **guided visual walkthrough on real data** (the
+  OCT4/NANOG flagship notebook, with embedded plots). Two real-data results are in hand:
+  the Gladstone T-cell screen, where NUDGE **honestly abstained** (a fail-safe win), and
+  OCT4/NANOG, where it made its **first positive mechanism call** (OCT4 switch) alongside a
+  rigorous NANOG abstention. Not vapor.
 
 ---
 

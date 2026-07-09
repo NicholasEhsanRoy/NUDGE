@@ -65,6 +65,8 @@ dev = [
     "pre-commit",
     "build",
     "matplotlib>=3.8",  # V&V sweep figures (scripts/vv/); analysis-only
+    "jupyter",          # authoring + executing the demo notebooks (notebooks/)
+    "nbconvert",        # headless execution of notebooks into embedded-output artifacts
 ]
 
 [project.urls]
