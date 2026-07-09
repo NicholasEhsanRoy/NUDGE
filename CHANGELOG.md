@@ -71,8 +71,39 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   end-to-end attribution pipeline + CLI (`inference/pipeline.py`,
   `scripts/vv/gladstone_attribution.py`). The real-data attribution run is pending the data
   download.
+- **`nudge` CLI (typer):** a thin, tested command layer over the existing API —
+  `nudge load` (backed-load + summarise a Perturb-seq file), `nudge check-data`
+  (the raw-count ingestion guardrail, exits loudly), `nudge attribute` (covariance
+  attribution at an operating point, printing the call + honest skip/abstention
+  reasons), `nudge mechanisms` (the registered library), and `nudge explain` (the
+  "why did it abstain?" verb). `src/nudge/cli.py`, `src/nudge/service.py`
+  (the CLI/MCP-shared orchestration), `[project.scripts] nudge`.
+- **Claude integration — MCP server** (`src/nudge/mcp/server.py`, `nudge-mcp`
+  entry point + `.mcp.json`): a FastMCP stdio server exposing `attribute`,
+  `explain_abstention`, `list_mechanisms`, and `get_mechanism_card` so Claude
+  (Claude Code / Desktop / the Claude Science workbench) drives NUDGE in plain
+  language and gets the *same* honest, abstaining output. Feasibility verified
+  and the exact connection recipes recorded in `design/INTEGRATION_FEASIBILITY.md`.
+  Guarded behind the optional `nudge-bio[mcp]` extra.
+- **Shared knowledge base** (`src/nudge/knowledge.py`): read-only lookups over the
+  mechanism registry, decoy battery, `known_limitations.yaml`, and Mechanism Cards
+  — the one tested source the CLI, MCP server, and skills all use, so an
+  abstention always resolves to *which* decoy / limitation / card explains it.
+- **Mechanism-Card knowledge base** (`docs/mechanism_cards/`): 10 cards (6
+  primitives + 4 motifs) with machine-readable YAML front-matter
+  (`vulnerable_to_decoys`, `documented_limitation`, `validated_in_regime`,
+  `references`), a README index, `scripts/check_mechanism_cards.py` + a test
+  asserting every registered mechanism has a card, and the primary-literature bib
+  entries. Registry population fixed so it is complete (`LinearIntegrator` was
+  silently dropped) — `src/nudge/mechanisms/__init__.py`.
+- **Agent Skills** (`.claude/skills/`): `nudge-attribute`, `nudge-explain`, and
+  `mechanism-card` — compose the CLI/MCP into NUDGE workflows.
+- **Ontology design** (`design/ONTOLOGY.md`): the SPARQL/RDF vision + a costed
+  `rdflib` prototype sketch (not on the critical path; the knowledge layer already
+  answers the "why abstain?" traversal in Python).
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
-  validators (`check_anomalies`, `check_citations`, `check_impl_mapping`); PEP 561.
+  validators (`check_anomalies`, `check_citations`, `check_impl_mapping`,
+  `check_mechanism_cards`); PEP 561.
 
 ### Verification
 - V&V calibration sweep (`scripts/vv/`): **0% misclassification** across 300 linear

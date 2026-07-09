@@ -34,6 +34,11 @@ Highlights so far:
 - **Saddle transition-mode gain gate** — fail-safe mechanism attribution on
   genuinely bistable stochastic data (recovers *gain* where a naive fit is
   confidently wrong). See [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md).
+- **`nudge` CLI + Claude MCP server** — the tool is drivable from a terminal
+  (`nudge attribute … / explain / mechanisms`) *and* by Claude in plain language
+  through a custom MCP server (Claude Code / Desktop / the Claude Science
+  workbench). Connection recipes verified in
+  [`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap
@@ -59,6 +64,31 @@ plan = nudge.design(target_outcome)    # → ranked interventions (stretch)
 
 `fit` wants **raw integer counts** — NUDGE owns the observation model. See the
 data contract in `docs/user_guide/data_contract.md`.
+
+## The command line
+
+```bash
+nudge check-data screen.h5ad                 # raw-count guardrail (fails loudly)
+nudge load screen.h5ad                        # conditions / cells / genes summary
+nudge attribute screen.h5ad --target SOS1     # mechanism call + honest abstentions
+nudge mechanisms                              # the registered library + cards
+nudge explain unresolved                      # why an abstention was the honest answer
+```
+
+## Drive it from Claude (MCP)
+
+NUDGE ships a custom MCP server so Claude can run it in plain language:
+
+```bash
+uv pip install -e ".[mcp]"
+claude mcp add --scope project nudge -- uv run nudge-mcp   # Claude Code
+```
+
+It exposes `attribute`, `explain_abstention`, `list_mechanisms`, and
+`get_mechanism_card`. The same stdio server registers as a **Local command**
+connector in Claude Desktop and the **Claude Science** workbench; a hosted
+(Streamable HTTP) deployment reaches claude.ai. Exact recipes:
+[`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md).
 
 ## Capabilities NOT provided
 

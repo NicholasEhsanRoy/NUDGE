@@ -170,11 +170,36 @@ uv run pytest tests/verification/test_stochastic_inverse_crime.py -m "slow or ve
 uv run python scripts/vv/overnight_sweep.py --smoke
 ```
 
+**And now it's a tool you can drive — from a terminal or from Claude itself:**
+
+```bash
+# A working CLI over the tested engine (no data needed for these two):
+uv run nudge mechanisms                     # the mechanism library + its cards
+uv run nudge explain unresolved             # WHY an abstention was the honest answer
+uv run nudge attribute screen.h5ad -t SOS1  # attribute a perturbation, honestly
+
+# Or hand NUDGE to Claude as a custom MCP server (verified — see the memo):
+uv pip install -e ".[mcp]"
+claude mcp add --scope project nudge -- uv run nudge-mcp
+#   then, in Claude: "Use nudge to attribute SOS1, and explain any abstention."
+```
+
+The MCP server exposes `attribute`, `explain_abstention`, `list_mechanisms`, and
+`get_mechanism_card` — so a scientist asks for a mechanism map *in one sentence*
+and gets back the same honest, abstaining answer a human gets, with the decoy +
+limitation + Mechanism Card that explains any "I can't tell." The exact connection
+recipe for Claude Code / Desktop / the **Claude Science** workbench is verified in
+[`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md); the "why
+abstain?" traversal is `nudge.knowledge` today and a SPARQL graph in
+[`design/ONTOLOGY.md`](design/ONTOLOGY.md).
+
 - Read alongside [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md) and the figures in
   `scripts/vv/results/` (calibration curve, identifiability heatmaps).
-- **Honest status:** this is the criterion with the most road left — a guided
-  notebook / visual walkthrough is the natural next build. What holds up *today* is the
-  science: green tests, measured guarantees, and results you can reproduce.
+- **Honest status:** the science holds up today — green tests, measured guarantees,
+  reproducible results — and there is now a **runnable tool surface** (CLI + a live
+  Claude MCP integration) rather than only a test suite. The remaining road is a
+  guided notebook / visual walkthrough on *real* T-cell data (pending the download);
+  the integration itself is built and tested, not vapor.
 
 ---
 
