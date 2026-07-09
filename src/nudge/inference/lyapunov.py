@@ -4,9 +4,8 @@ An **additive, guarded** fit path — it never replaces the energy-distance defa
 fits a Gaussian mixture whose per-mode **means** are the circuit's stable fixed points
 and per-mode **covariances** are the linear-noise (Lyapunov) covariances
 ``A Σ + Σ Aᵀ + D = 0`` — the channel the Fisher-information analysis showed carries the
-gain/threshold/ceiling
-signal that basin *weights* do not (``design/TOGGLE_ATTRIBUTION_RESEARCH.md``;
-``scripts/vv/fisher_sloppiness.py``).
+gain/threshold/ceiling signal that basin *weights* do not
+(``design/TOGGLE_ATTRIBUTION_RESEARCH.md``; ``scripts/vv/fisher_sloppiness.py``).
 
 **Why it exists.** A single toggle snapshot confounds gain (Hill ``n``) with threshold
 (``K``) — the snapshot constrains only ``n·ln(K/B)`` — so no single-condition fit can
@@ -38,9 +37,19 @@ from nudge.core.circuit import Circuit, Params
 from nudge.inference.fit import FreeParam
 
 __all__ = [
+    "attribute_lyapunov_single",
+    "calibrate_from_wt",
+    "calibrate_scale",
     "fit_lyapunov_parameters",
     "sample_lna_mixture",
 ]
+
+#: Restricted-fit params, in a fixed order, and their mechanism names.
+_ATTR_PARAMS: tuple[tuple[str, str], ...] = (
+    ("n", "gain"),
+    ("K", "threshold"),
+    ("vmax", "ceiling"),
+)
 
 
 def _apply_free(base: Params, free: list[FreeParam], vals: Array) -> Params:
@@ -162,6 +171,33 @@ def sample_lna_mixture(
     return out
 
 
+def calibrate_scale(
+    data: np.ndarray,
+    circuit: Circuit,
+    *,
+    weights: np.ndarray | None = None,
+) -> float:
+    """Pin the global scale (≈ sequencing depth) from ``data`` by a mean moment-match.
+
+    ``scale = ⟨data_mean, model_mean⟩ / ‖model_mean‖²`` where ``model_mean`` is the
+    weight-averaged stable-mode mean at the circuit's nominal kinetics (``scale = 1``).
+    Because ``scale`` and ``vmax`` are degenerate (both multiply the mode means; see
+    ``fit_lyapunov_parameters``), the depth nuisance must be pinned from data — the
+    analogue of library-size normalization — so attribution turns on distribution
+    *shape*, not overall magnitude. Uses the WT/nominal modes as the reference.
+    """
+    roots = _stable_roots(circuit, [], np.asarray([], dtype=float))
+    if not roots:
+        raise ValueError("no stable modes to calibrate against")
+    base = circuit.base_params()
+    means = [np.asarray(_mode_mean(circuit, base, jnp.asarray(r))) for r in roots]
+    k = len(means)
+    w = np.full(k, 1.0 / k) if weights is None else np.asarray(weights)
+    model_mean = np.sum([wi * mi for wi, mi in zip(w, means, strict=True)], axis=0)
+    data_mean = np.asarray(data, dtype=float).mean(axis=0)
+    return float(data_mean @ model_mean / (model_mean @ model_mean + 1e-12))
+
+
 def fit_lyapunov_parameters(
     data: np.ndarray,
     circuit: Circuit,
@@ -266,3 +302,90 @@ def _param_value(circuit: Circuit, free: FreeParam) -> float:
     scope, index, name = free
     obj = circuit.edges[index] if scope == "edge" else circuit.species[index]
     return float(getattr(obj, name))
+
+
+def calibrate_from_wt(
+    wt_data: np.ndarray,
+    circuit: Circuit,
+    *,
+    k_modes: int = 2,
+    steps: int = 150,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """Pin the two depth/noise nuisances from the WT condition (nominal kinetics).
+
+    Returns ``(scale, obs_sd)``. ``scale`` is the moment-match depth
+    (``calibrate_scale``);
+    ``obs_sd`` is fit on the WT mixture with ``scale`` pinned. Both come from WT — where
+    the kinetics are nominal, so the data magnitude is *pure depth*, not a mechanism —
+    are then held fixed for every perturbed condition. Calibrating the scale from a
+    a *perturbed* condition's own magnitude would silently absorb a ceiling change into
+    depth
+    (``scale`` and ``vmax`` are degenerate), making ceiling unidentifiable. This is the
+    linear-noise analogue of library-size normalization vs a housekeeping reference.
+    """
+    scale = calibrate_scale(wt_data, circuit)
+    _rec, aux, _hist = fit_lyapunov_parameters(
+        wt_data, circuit, [], k_modes=k_modes, steps=steps, seed=seed,
+        scale_init=scale, fit_scale=False, fit_obs=True,
+    )
+    return scale, float(aux["obs_sd"])
+
+
+def _decide_lyapunov(
+    nlls: dict[str, float], ceiling_margin: float, confound_gap: float
+) -> str:
+    """The honest single-condition call from the restricted NLL profile.
+
+    ``ceiling`` only when the free-vmax fit is the best AND clearly below the
+    gain/threshold pair (ceiling is identifiable from a snapshot). ``gain_or_threshold``
+    when gain/threshold are the best and ~indistinguishable (the measured confound — we
+    abstain *between* them, not guess). Otherwise ``unresolved``. It never returns
+    a bare ``gain`` or ``threshold``: a single snapshot cannot separate them.
+    """
+    n_gain, n_thr, n_cei = nlls["n"], nlls["K"], nlls["vmax"]
+    best = min(nlls, key=lambda k: nlls[k])
+    if best == "vmax" and min(n_gain, n_thr) - n_cei > ceiling_margin:
+        return "ceiling"
+    if best in ("n", "K") and abs(n_gain - n_thr) < confound_gap:
+        return "gain_or_threshold"
+    return "unresolved"
+
+
+def attribute_lyapunov_single(
+    cond_data: np.ndarray,
+    circuit: Circuit,
+    *,
+    wt_data: np.ndarray | None = None,
+    scale: float | None = None,
+    obs_sd: float | None = None,
+    target_edge: int = 0,
+    k_modes: int = 2,
+    steps: int = 200,
+    ceiling_margin: float = 0.05,
+    confound_gap: float = 0.05,
+    seed: int = 0,
+) -> tuple[str, dict[str, float]]:
+    """Single-condition covariance attribution → ``(label, restricted NLLs)``.
+
+    Runs the three restricted fits (free-``n`` / ``K`` / ``vmax`` of ``target_edge``,
+    from WT) with ``scale`` / ``obs_sd`` **pinned** (from ``calibrate_from_wt`` if not
+    given — a ceiling must not hide in the depth nuisance), then ``_decide_lyapunov``.
+    The honest single-snapshot outcome: **identify ceiling; abstain (gain_or_threshold)
+    between gain and threshold** — the measured degeneracy. The *breaker* is a second
+    operating point (M3, ``fit_lyapunov_multi``). Correct-or-abstain, never confidently
+    wrong.
+    """
+    if scale is None or obs_sd is None:
+        if wt_data is None:
+            raise ValueError("provide wt_data, or both scale and obs_sd")
+        scale, obs_sd = calibrate_from_wt(wt_data, circuit, k_modes=k_modes, seed=seed)
+    nlls: dict[str, float] = {}
+    for param, _name in _ATTR_PARAMS:
+        _rec, _aux, hist = fit_lyapunov_parameters(
+            cond_data, circuit, [("edge", target_edge, param)],
+            k_modes=k_modes, steps=steps, seed=seed,
+            scale_init=scale, obs_sd_init=obs_sd, fit_scale=False, fit_obs=False,
+        )
+        nlls[param] = float(np.mean(hist[-20:]))
+    return _decide_lyapunov(nlls, ceiling_margin, confound_gap), nlls

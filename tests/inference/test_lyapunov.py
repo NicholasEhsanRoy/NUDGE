@@ -14,7 +14,11 @@ import numpy as np
 import pytest
 
 from nudge.core.circuit import Circuit, EdgeDef, SpeciesDef
-from nudge.inference.lyapunov import fit_lyapunov_parameters, sample_lna_mixture
+from nudge.inference.lyapunov import (
+    attribute_lyapunov_single,
+    fit_lyapunov_parameters,
+    sample_lna_mixture,
+)
 
 SCALE, OBS_SD = 20.0, 0.5  # Gaussian-friendly (higher-count) regime
 
@@ -69,3 +73,32 @@ def test_inverse_crime_recovers_kinetic(free, true_val, tol) -> None:
     )
     got = list(rec.values())[0]
     assert abs(got - true_val) / true_val < tol
+
+
+@pytest.mark.parametrize(
+    ("mech", "param", "val", "expected"),
+    [
+        ("ceiling", "vmax", 1.5, "ceiling"),          # identifiable
+        ("gain", "n", 3.0, "gain_or_threshold"),      # confounded → abstain
+        ("threshold", "K", 1.3, "gain_or_threshold"), # confounded → abstain
+    ],
+)
+@pytest.mark.slow
+def test_single_condition_correct_or_abstains(mech, param, val, expected) -> None:
+    # The honest single-snapshot call: identify ceiling; abstain between gain and
+    # threshold (the measured confound). Crucially it is NEVER confidently wrong — it
+    # never returns the *other* specific mechanism.
+    wt = _toggle()
+    wt_data = sample_lna_mixture(
+        wt, 3000, jax.random.PRNGKey(100), scale=SCALE, obs_sd=OBS_SD
+    )
+    cond = sample_lna_mixture(
+        wt, 3000, jax.random.PRNGKey(0),
+        free=[("edge", 0, param)], vals=np.array([val]), scale=SCALE, obs_sd=OBS_SD,
+    )
+    label, _nlls = attribute_lyapunov_single(
+        cond, wt, wt_data=wt_data, target_edge=0, steps=200, seed=0
+    )
+    assert label == expected
+    assert label != "gain"  # a single snapshot must never claim a bare gain/threshold
+    assert label != "threshold"
