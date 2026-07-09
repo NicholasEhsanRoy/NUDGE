@@ -24,7 +24,7 @@ the Lyapunov solve — both differentiable in the free kinetics.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 import jax
@@ -37,12 +37,32 @@ from nudge.core.circuit import Circuit, Params
 from nudge.inference.fit import FreeParam
 
 __all__ = [
+    "OperatingPoint",
+    "attribute_lyapunov_multi",
     "attribute_lyapunov_single",
     "calibrate_from_wt",
     "calibrate_scale",
+    "fit_lyapunov_multi",
     "fit_lyapunov_parameters",
     "sample_lna_mixture",
 ]
+
+
+@dataclass(frozen=True)
+class OperatingPoint:
+    """One condition at one operating point, for a joint multi-condition fit (M3).
+
+    ``data`` is the perturbed condition's cells at this operating point; ``circuit`` is
+    the WT circuit *at that operating point* (e.g. a shifted basal from a second target,
+    the synthetic stand-in for a second Gladstone perturbation); ``scale`` / ``obs_sd``
+    are the depth/noise nuisances **pinned from this operating point's own WT**
+    (``calibrate_from_wt``). A shared kinetic value is fit across a list of these.
+    """
+
+    data: np.ndarray
+    circuit: Circuit
+    scale: float
+    obs_sd: float
 
 #: Restricted-fit params, in a fixed order, and their mechanism names.
 _ATTR_PARAMS: tuple[tuple[str, str], ...] = (
@@ -389,3 +409,122 @@ def attribute_lyapunov_single(
         )
         nlls[param] = float(np.mean(hist[-20:]))
     return _decide_lyapunov(nlls, ceiling_margin, confound_gap), nlls
+
+
+def fit_lyapunov_multi(
+    points: list[OperatingPoint],
+    free: FreeParam,
+    *,
+    k_modes: int = 2,
+    steps: int = 200,
+    learning_rate: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, list[float]]:
+    """Fit ONE shared kinetic value jointly across a list of operating ``points``.
+
+    The breaker (M3): a single value of ``free`` must explain *every* operating point at
+    once. The true mechanism can (one gain change is one gain change everywhere); the
+    confounder cannot — the ``K`` that mimics a gain change at one operating point
+    differs at another (the snapshot constraint ``n·ln(K/B)`` moves with ``B``), so a
+    shared ``K`` fits both poorly. Each point keeps its own weights + pinned scale/obs.
+
+    Returns ``(recovered shared value, combined mean NLL, history)``.
+    """
+    n_pts = len(points)
+    if n_pts == 0:
+        raise ValueError("need at least one operating point")
+    bases = [p.circuit.base_params() for p in points]
+    ys = [jnp.asarray(np.asarray(p.data, dtype=np.float32)) for p in points]
+    eyes = [jnp.eye(p.circuit.n_species) for p in points]
+
+    val0 = jnp.log(jnp.asarray(_param_value(points[0].circuit, free)))
+    logits0 = jnp.zeros(n_pts * k_modes)
+    theta = jnp.concatenate([val0[None], logits0])
+
+    optimizer = optax.adam(learning_rate)
+    opt_state = optimizer.init(theta)
+
+    def nll(vec: Array, roots_all: Array) -> Array:
+        roots_all = jax.lax.stop_gradient(roots_all)  # (n_pts, k_modes, n_species)
+        val = jnp.exp(vec[0])
+        total = jnp.asarray(0.0)
+        for i, point in enumerate(points):
+            params = _apply_free(bases[i], [free], val[None])
+            w = jax.nn.log_softmax(vec[1 + i * k_modes : 1 + (i + 1) * k_modes])
+            comps = []
+            for k in range(k_modes):
+                mu = _mode_mean(point.circuit, params, roots_all[i, k])
+                cov = _mode_cov(point.circuit, params, mu)
+                cov_obs = point.scale**2 * cov + point.obs_sd**2 * eyes[i]
+                comps.append(w[k] + _mvn_logpdf(ys[i], point.scale * mu, cov_obs))
+            ll = jax.scipy.special.logsumexp(jnp.stack(comps), axis=0)
+            total = total - jnp.mean(ll)
+        return total / n_pts
+
+    @jax.jit
+    def step(
+        vec: Array, state: optax.OptState, roots_all: Array
+    ) -> tuple[Array, optax.OptState, Array]:
+        loss, grad = jax.value_and_grad(nll)(vec, roots_all)
+        updates, state = optimizer.update(grad, state)
+        return jnp.asarray(optax.apply_updates(vec, updates)), state, loss
+
+    def seeds(vec: Array) -> np.ndarray | None:
+        val = float(np.exp(np.asarray(vec[0])))
+        allr = []
+        for point in points:
+            roots = _stable_roots(point.circuit, [free], np.asarray([val]))
+            roots = sorted(roots, key=lambda r: tuple(float(x) for x in r))
+            if len(roots) != k_modes:
+                return None
+            allr.append(np.stack(roots))
+        return np.stack(allr)
+
+    last = seeds(theta)
+    if last is None:
+        raise ValueError(f"every operating point must present {k_modes} stable modes")
+    history: list[float] = []
+    for _ in range(steps):
+        cur = seeds(theta)
+        if cur is not None:
+            last = cur
+        theta, opt_state, loss = step(theta, opt_state, jnp.asarray(last))
+        history.append(float(loss))
+
+    return float(np.exp(theta[0])), float(np.mean(history[-20:])), history
+
+
+def attribute_lyapunov_multi(
+    points_by_mech: dict[str, list[OperatingPoint]] | list[OperatingPoint],
+    *,
+    target_edge: int = 0,
+    k_modes: int = 2,
+    steps: int = 200,
+    resolve_margin: float = 0.03,
+    confound_gap: float = 0.05,
+    seed: int = 0,
+) -> tuple[str, dict[str, float]]:
+    """Multi-operating-point attribution → ``(label, joint NLLs)``: breaks the confound.
+
+    ``points`` is a list of :class:`OperatingPoint` (same perturbed condition at ≥2
+    operating points). For each candidate mechanism a **shared** value is fit jointly
+    (:func:`fit_lyapunov_multi`); the combined NLLs are compared. With ≥2 points
+    gain and threshold separate, so — unlike the single-condition call — it can return a
+    bare ``gain``/``threshold``/``ceiling`` when one clearly wins, else ``unresolved``.
+    """
+    points = (
+        points_by_mech if isinstance(points_by_mech, list)
+        else next(iter(points_by_mech.values()))
+    )
+    nlls: dict[str, float] = {}
+    for param, name in _ATTR_PARAMS:
+        _val, combined, _hist = fit_lyapunov_multi(
+            points, ("edge", target_edge, param),
+            k_modes=k_modes, steps=steps, seed=seed,
+        )
+        nlls[name] = combined
+    ordered = sorted(nlls, key=lambda k: nlls[k])
+    best, second = ordered[0], ordered[1]
+    if nlls[second] - nlls[best] > resolve_margin:
+        return best, nlls
+    return "unresolved", nlls

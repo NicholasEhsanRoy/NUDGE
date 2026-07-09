@@ -15,7 +15,10 @@ import pytest
 
 from nudge.core.circuit import Circuit, EdgeDef, SpeciesDef
 from nudge.inference.lyapunov import (
+    OperatingPoint,
+    attribute_lyapunov_multi,
     attribute_lyapunov_single,
+    calibrate_from_wt,
     fit_lyapunov_parameters,
     sample_lna_mixture,
 )
@@ -102,3 +105,42 @@ def test_single_condition_correct_or_abstains(mech, param, val, expected) -> Non
     assert label == expected
     assert label != "gain"  # a single snapshot must never claim a bare gain/threshold
     assert label != "threshold"
+
+
+def _toggle_bB(bB: float) -> Circuit:
+    return Circuit(
+        [SpeciesDef("A", basal=0.05, decay=1.0), SpeciesDef("B", basal=bB, decay=1)],
+        [
+            EdgeDef(1, 0, "hill_repression", K=1.0, n=4.0, vmax=2.0),
+            EdgeDef(0, 1, "hill_repression", K=1.0, n=4.0, vmax=2.0),
+        ],
+    )
+
+
+def _operating_point(bB: float, param: str, val: float) -> OperatingPoint:
+    wt = _toggle_bB(bB)
+    wt_data = sample_lna_mixture(
+        wt, 3000, jax.random.PRNGKey(500), scale=SCALE, obs_sd=OBS_SD
+    )
+    scale, obs = calibrate_from_wt(wt_data, wt)
+    cond = sample_lna_mixture(
+        wt, 3000, jax.random.PRNGKey(0),
+        free=[("edge", 0, param)], vals=np.array([val]), scale=SCALE, obs_sd=OBS_SD,
+    )
+    return OperatingPoint(data=cond, circuit=wt, scale=scale, obs_sd=obs)
+
+
+@pytest.mark.parametrize(
+    ("mech", "param", "val"),
+    [("gain", "n", 2.4), ("threshold", "K", 2.0)],
+)
+@pytest.mark.slow
+def test_second_operating_point_breaks_confound(mech, param, val) -> None:
+    # A single operating point abstains between gain and threshold (test above); a
+    # SECOND operating point (a basal-B shift) lets the joint fit RESOLVE the true one.
+    op1 = _operating_point(0.05, param, val)
+    op2 = _operating_point(0.30, param, val)
+    label, nlls = attribute_lyapunov_multi([op1, op2], target_edge=0, steps=200, seed=0)
+    assert label == mech  # the confound is broken → the true mechanism is named
+    # the true mechanism's joint NLL is the clear minimum
+    assert nlls[mech] == min(nlls.values())
