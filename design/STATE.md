@@ -186,10 +186,14 @@ subsets the ~150 GB donor files *on disk*; Gladstone config in `tier2.py`), the 
 **counts→activity bridge** (`inference/bridge.py`), a **BIC topology model-selection** gate
 (`inference/model_select.py` — infers linear/1-node/2-node rather than assuming it), and the
 **attribution pipeline** (`inference/pipeline.py` + `scripts/vv/gladstone_attribution.py`).
-The real `D1_Stim8hr` file is downloading; the single-condition run (expected: parsimony picks
-no-switch or 1-node, and single-condition attribution abstains between gain/threshold — the
-FIM prediction) runs on arrival. The gain-vs-threshold *breaker* needs ≥2 stim-condition files
-(the operating-point axis). `provenance.py` still a stub.
+**RUN DONE — NUDGE abstained (fail-safe on real data).** On the real `D1_Stim8hr` screen
+(2.79M cells, 150 GB; pointer-read loader → 6,367 cells), the BIC topology gate selected
+**no-switch** (40,556 vs 40,599 for 1-node): the 8-h IEG-activation readout is a single sharp
+low mode + a heavy tail (5,884/6,000 cells in the low bin, skew ≈ 12), *not* two attractors, so
+NUDGE declined to attribute rather than fabricate a switch. Full write-up: `scripts/vv/FINDINGS.md`
+"Phase 4 — real data". Follow-ups (don't change the verdict): other stim timepoints, a
+signaling-proximal readout, a focused screen (the targets are underpowered, 24–233 cells). The
+gain-vs-threshold *breaker* would need ≥2 stim-condition files. `provenance.py` still a stub.
 
 The original plan is retained below for reference.
 

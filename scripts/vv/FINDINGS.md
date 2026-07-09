@@ -501,3 +501,35 @@ operating points), *not yet on real data*; the low-count guard exists precisely 
 toggle's OFF state is where the Gaussian is weakest. Kept opt-in until proven on the Gladstone
 T-cell screen. Full slow lane (5 decoys + LIM-006 + Tier-0.5 + saddle) stays green — the path
 is additive. Tests: `tests/inference/test_lyapunov.py`, `tests/core/test_mode_covariance.py`.
+
+# Phase 4 — real data (Gladstone CD4+ T-cell screen): NUDGE abstains, honestly
+
+NUDGE ran end-to-end on the **real** genome-scale CRISPRi Perturb-seq screen
+(`D1_Stim8hr.assigned_guide.h5ad`, 2.79M cells × 18,130 genes, 150 GB; GSE314342) — the
+pointer-based loader read only the Ras-switch guides + IEG panel (6,367 cells: 6,000 NTC +
+SOS1 110, RASGRP1 24, RASA2 233) without loading the matrix. `scripts/vv/gladstone_attribution.py`.
+
+**Result: `no-switch` — NUDGE abstained.** The BIC topology gate scored the WT (NTC) IEG-
+activation readout and preferred the no-switch single-Gaussian null over a 1-node bistable
+switch (BIC **40,556 vs 40,599**). Grounding the call: the activation distribution is a single
+sharp low mode + a sparse heavy tail — **5,884 / 6,000 cells in the lowest bin**, skew ≈ 12,
+kurtosis ≈ 224; EGR1/FOS/NR4A1 are ~95% zero at 8 h; IL2/CD69 carry the (mostly-low) signal.
+That is a graded/heavy-tailed *unimodal* population, **not two populated attractor states**.
+(Sarle's bimodality coefficient reads 0.66, a false positive driven by the extreme skew — the
+histogram is unambiguously one mode + a tail.)
+
+**This is the fail-safe guarantee working on real biology.** Rather than force a
+gain/threshold/ceiling call on data that doesn't support a switch, NUDGE declined — exactly
+its defining property, now demonstrated on a real 150 GB screen, not a synthetic. Per-target
+attribution never ran (no switch to attribute; and the targets are anyway underpowered — 24–233
+cells vs the ~1,000/condition the FIM analysis showed is needed for identifiability, a real
+limitation of genome-*wide* vs focused screens).
+
+**Honest interpretation + follow-ups (we did NOT tune to manufacture a switch).** At 8 h post-
+stimulation the *transcriptional* IEG output is a graded single population; the Das-2009 Ras
+switch is bistable at the *signaling* (Ras-GTP) level, which a steady-state transcriptomic
+snapshot need not resolve as two modes. Legitimate next steps, none of which change the honest
+first-pass verdict: the other stim timepoints (Rest / Stim48hr — the operating-point axis, and
+Stim48hr may show more commitment); a signaling-proximal or single-strong-marker readout
+instead of the IEG mean; and a focused (not genome-wide) screen with enough cells/guide. The
+value here is a *measured, honest* verdict on real data — the tool doing the hard thing.

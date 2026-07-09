@@ -32,13 +32,15 @@ which is why the product is built to **abstain** instead.
   [`design/WORKING_BACKWARDS.md`](design/WORKING_BACKWARDS.md) (the PR/FAQ).
 - Scope discipline is stated up front (README "Capabilities NOT provided"): it is a
   hypothesis-prioritizer for a powered screen, not a clinical tool or a hit-caller.
-- **Honest status:** validated on synthetic ground truth today; the real-data
-  (T-cell SOS/RasGRP1) validation is **built and downloading** — a generic backed-mode
-  Perturb-seq loader (subsets the ~150 GB Gladstone donor files on disk), a BIC
-  topology-model-selection gate (infers the circuit rather than assuming it), and the
-  end-to-end attribution pipeline are all green on synthetic ground truth; the run on the
-  real data is pending the download. We would rather show a measured fail-safe guarantee —
-  and let the parsimony gate say "no switch" if the data warrants — than an unbacked claim.
+- **Honest status — the fail-safe guarantee, demonstrated on real data.** NUDGE ran
+  end-to-end on the **real** 150 GB Gladstone CD4+ T-cell screen (2.79M cells; a
+  pointer-based loader reads only the relevant cells/genes on any laptop) and **abstained**:
+  the BIC topology gate found the 8-h activation readout is a graded single population, not a
+  bistable switch (5,884/6,000 cells in one mode), so it declined to attribute mechanism
+  rather than fabricate one. That is the *defining* property — abstain rather than overclaim —
+  shown on real biology, not a synthetic (`scripts/vv/FINDINGS.md` "Phase 4 — real data").
+  Focused higher-powered screens / other timepoints are the natural next validation; the
+  point stands that the tool does the honest thing when the data doesn't support a switch.
 
 ## 2. Claude Use (25%) — an async, multi-agent R&D lab
 
