@@ -570,3 +570,39 @@ primitive (local, no global x64 flag). Locked by
 `tests/inference/test_dose_response.py::test_autodiff_jacobian_lets_n_move_off_its_seed` and the
 OCT4/NANOG regression. Wired into the `nudge dose-response` CLI verb and the `dose_response` MCP
 tool; carded as `NUDGE-METHOD-001`.
+
+# Phase 4c — multi-timepoint capstone (Gladstone Rest/8h/48h): the abstention is robust
+
+The 8h result teed up two follow-ups; we answered them using the stimulation timepoints as
+operating points (`scripts/vv/gladstone_multitimepoint.py`; D1_Stim8hr + D1_Stim48hr, ~300 GB
+loaded via the pointer reader; D1_Rest pending).
+
+**Q1 — does a later, more-committed timepoint push the readout into a genuine switch that
+survives the BIC parsimony gate?** No.
+- **8h:** `no-switch` (BIC 40556 vs 40599; skew 12.2).
+- **48h:** `no-switch` (BIC 36353 vs 36447; **skew 17.1, kurtosis 684**) — *more* skewed/unimodal,
+  not bimodal.
+The transcriptional IEG activation is a single heavy-tailed mode at *both* timepoints; the switch
+does not emerge with commitment. NUDGE's abstention is **consistent across timepoints**.
+
+**Q2 — do the timepoints as multiple `OperatingPoint`s break the gain/threshold degeneracy?**
+Every target × operating point is **SKIPPED**, by *independent* guards (min_cells=100 pass):
+- **SOS1** (110/118 cells) & **RASA2** (233/192): `LNA unreliable — insufficient depth`
+  (scale·peak 11.3–13.6 < the 15.0 threshold). The LNA reliability guard declines because shallow
+  T-cell scRNA depth makes the covariance untrustworthy — the fail-safe UQ layer widening and
+  abstaining, exactly as intended.
+- **RASGRP1** (24/58): too few cells.
+- **0 usable operating points → no breaker attempted.**
+
+**Honest conclusion.** On 300 GB across two real timepoints, NUDGE declines at *every* gate
+(topology parsimony, LNA depth reliability, min-cells). The multi-timepoint breaker's premise —
+resolve gain/threshold *of a detected switch* across operating points — never engages, because
+this **genome-wide** screen supplies neither a transcriptional switch nor the depth / cell-counts
+identifiability needs (58–233 cells/guide and scale·peak ≈ 11–14, vs the ~1000 cells and
+scale·peak ≥ 15 the guards require). The measured **×16 degeneracy-break stays a synthetic
+ground-truth result (§2)**; on this real dataset the honest verdict is a robust, multi-gate
+abstention — we did **not** manufacture a switch or force a call. The Ras switch is bistable at
+the *signaling* (Ras-GTP) level (Das 2009); a steady-state transcriptomic snapshot of downstream
+IEGs need not resolve two modes, and doesn't. (Rest — the least-activated timepoint, lower depth
+and signal still — is downloading and will be folded in for completeness; it is unlikely to change
+the verdict.)
