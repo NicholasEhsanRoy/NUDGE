@@ -155,7 +155,15 @@ def build_server() -> Any:
 
 
 def main() -> None:
-    """Console-script entry point (``nudge-mcp``): run the server over stdio."""
+    """Console-script entry point (``nudge-mcp``): run the server over stdio.
+
+    Warms the JAX compile caches before serving so the first ``attribute`` /
+    ``dose_response`` tool call a client makes is already fast (the server is a
+    long-lived process — see :func:`nudge.warmup.warmup`).
+    """
+    from nudge.warmup import warmup
+
+    warmup()
     build_server().run(transport="stdio")
 
 

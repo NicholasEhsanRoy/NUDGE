@@ -174,6 +174,24 @@ def _print_report(report: Any) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# warmup
+# --------------------------------------------------------------------------- #
+@app.command()
+def warmup() -> None:
+    """Pre-compile the hot JAX paths (dummy data) so the first real fit is fast.
+
+    Useful before a live demo / in a long-lived session — the dose-response model and
+    the circuit fixed-point kernel compile once (~0.5 s) then run ~50–250× faster. A
+    notebook's first cell can call ``nudge.warmup()``; the MCP server warms on startup.
+    """
+    from nudge.warmup import warmup as _warmup
+
+    _echo("warming JAX compile caches …")
+    dt = _warmup(quiet=True)
+    _echo(f"done in {dt:.2f}s — the next attribution / dose-response fit is now fast.")
+
+
+# --------------------------------------------------------------------------- #
 # dose-response
 # --------------------------------------------------------------------------- #
 @app.command("dose-response")

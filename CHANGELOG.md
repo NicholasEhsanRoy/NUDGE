@@ -7,6 +7,18 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ## [Unreleased]
 
+### Performance
+- **Loader ~5× faster** (`data/loaders/perturbseq.py`): the pointer-read hot path
+  (`_read_h5ad_rows`, ~99% of load time) now coalesces adjacent selected rows into
+  contiguous h5py slice reads (`_coalesced_gather`) instead of one big fancy-index —
+  **byte-identical** output, ~4.6–5.4× uncompressed / ~1.7–2× gzip, still O(selection)
+  (holds at 150 GB). Profiling report + benchmarks: `design/PERFORMANCE.md`, `scripts/perf/`.
+- **Demo-latency warmup** (`nudge.warmup`, `nudge warmup`): pre-compiles the cached hot
+  JAX paths (the dose-response model + the circuit fixed-point kernel) on tiny dummy data,
+  so the first real fit in a long-lived process is fast (dose-response first fit ~405→55 ms;
+  `_nd_kernel` 512→2 ms). Wired into the MCP server startup + the demo notebooks; idempotent,
+  no numerics change. (GPU verdict in `design/PERFORMANCE.md`: stay on CPU for these sizes.)
+
 ### Added
 - **Dose-response attribution (`nudge.inference.dose_response`, `NUDGE-METHOD-001`):**
   a second measurement of the same circuit — fits the *same* Hill primitive

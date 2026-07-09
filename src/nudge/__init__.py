@@ -18,6 +18,7 @@ from nudge.data.stochastic import generate_stochastic_perturbseq
 from nudge.data.synthetic import PerturbationSpec, generate_synthetic_perturbseq
 from nudge.design.invert import design
 from nudge.inference.fit import fit
+from nudge.warmup import warmup
 
 __version__ = "0.1.0"
 
@@ -33,4 +34,5 @@ __all__ = [
     "fit",
     "generate_stochastic_perturbseq",
     "generate_synthetic_perturbseq",
+    "warmup",
 ]
