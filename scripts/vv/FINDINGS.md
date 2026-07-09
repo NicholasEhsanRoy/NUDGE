@@ -693,3 +693,73 @@ call); and the interaction is a **scalar along the additive axis** — a purely 
 state is not captured by it, and a super-additive residual is **not** by itself a hidden-node claim.
 CRISPRa combinations are genetic (on/off), so this illustrates combination *logic*, not a graded
 drug-dose combination.
+
+# Phase 4e — cross-modality readout (Chure 2019 LacI): NUDGE recovers the domain answer key
+
+**Capability 1 (`NUDGE-METHOD-002`) validated on an author-labelled K-vs-ceiling ground truth.**
+NUDGE's ingest hard-required raw integer counts; the cross-modality adapter runs the *same*
+threshold/gain/ceiling attribution on a **continuous single channel** (fluorescence / activity /
+fold-change) behind a modality-aware bouncer (`nudge.data.ingest.check_readout`, `NUDGE-LIM-008`)
+that refuses log-normalized or raw counts masquerading as fluorescence, then feeds the fold-change
+curve into the shipped dose-response fit (`NUDGE-METHOD-001`). The crown-jewel test is **Chure 2019**
+(CaltechDATA D1.1241, `Chure2019_summarized_data.csv`), where the authors decompose LacI mutants by
+*which* biophysical parameter each changes: **DNA-binding-domain** mutants alter only the DNA binding
+energy `Δε_RA` (→ repression setpoint / leakiness = NUDGE's **ceiling**); **inducer-binding-domain**
+mutants alter only `Ka`/`Ki`/`Δε_AI` (→ the inducer response = NUDGE's **threshold K** on the IPTG
+axis). Two biophysical facts anchor the mapping (both independently confirmed against the MWC /
+Chure / Razo-Mejia equations): **`K` is the induction EC50 — the half-max *inducer concentration*,
+a function of `Ka`/`Ki`/`Δε_AI`, NOT the raw `Ka`** — so a `K` shift reports a changed inducer
+response; and **the leakiness FLOOR (fold-change at zero inducer) is the clean pure-`Δε_RA` readout**
+— it depends only on the DNA binding energy, so a raised floor is cleanly DNA-domain-attributable.
+(Saturation / dynamic-RANGE depends on *both* `Ka`/`Ki` and `Δε_RA`, so a `ceiling` call is only
+cleanly DNA-attributable when it is **driven by the floor** — see note (2).)
+
+Fitting each single mutant's fold-change-vs-IPTG curve at the matched condition (operator O2, repressor
+copy number 260) vs WT (`K≈71 µM, n≈1.4`), and localizing each to one knob:
+
+| Mutant | Author domain | NUDGE knob | Evidence vs WT |
+|---|---|---|---|
+| **Q294K** | inducer-binding | **threshold** | K 71→626 µM (+3.1 oct), disjoint CIs; floor near WT |
+| **Q294V** | inducer-binding | **threshold** | K 71→420 µM (+2.6 oct), disjoint CIs |
+| **Y20I** | DNA-binding | **ceiling** | leakiness floor +0.46, span shrinks (K drifts *left*) |
+| **Q21A** | DNA-binding | **ceiling** | leakiness floor +0.32, span shrinks |
+| **Q294R** | inducer-binding | **non-responsive (abstain)** | span collapses (amp≈0.02) — near-non-inducible (`Ka≈Ki`) |
+| **F164T** | inducer-binding | **inconclusive (abstain)** | mildest inducer mutant (Ka 139→201); no knob clears its gate |
+| **Q21M** | DNA-binding | **inconclusive (abstain)** | *stronger*-binding DNA mutant (`ep_RA`≈−15.4) — no leakiness; mild rightward K |
+
+**The honest score: 4/7 localized to the biophysically-correct knob, 3/7 honest abstentions, 0/7
+mis-attributed, and no mutant reads gain(n).** The two dramatic inducer-weakening mutants (Q294K/V)
+land on **threshold**, the two leaky DNA mutants (Y20I/Q21A) on **ceiling**, the non-inducible Q294R
+abstains — recovering the authors' inducer-vs-DNA-domain decomposition wherever a single operating
+point is identifiable. The **sign** of the EC50 shift is what separates the two classes: a *rightward*
+shift is a weakened inducer response (threshold), whereas a raised leakiness floor drags the apparent
+EC50 *left* (ceiling) — NUDGE's knob gate reads these apart rather than collapsing both to "K moved".
+
+**Independently confirmed.** A biophysics literature check against the MWC / Chure / Razo-Mejia
+equations **confirmed the mapping** (inducer→threshold/EC50, DNA→leakiness/floor, gain-abstain) and
+confirmed NUDGE was **right to override the naive "DNA→K, inducer→n" prior** — that prior is
+biophysically refuted (it inverts the domain roles). The Y20I floor +0.46 was reproduced exactly from
+first principles, and the Q21M / Q294R abstentions were judged genuinely-correct hard cases.
+
+**Three honesty notes (do not drop).** (1) **The naive "DNA→K, inducer→n" prior is biophysically
+wrong, and NUDGE overrode it** — the inducer domain sets the induction EC50 (**K**, the half-max
+inducer concentration) and the DNA domain sets leakiness (**floor / ceiling**). On the gain axis:
+the *structural* cooperativity exponent (the exponent 2 = LacI's two inducer sites) is fixed by the
+protein architecture, but the *effective* Hill coefficient depends *weakly* on the `Ka`/`Ki` ratio
+(Razo-Mejia Eq. 10) — so `n` is **not** mathematically invariant. The honest framing is: the mutants'
+dominant, cleanly-attributable effect is on the EC50/threshold; any effective-steepness change is
+**second-order**, so **abstaining on the gain axis is the correct call** (not a claim that `n` is
+fixed). (2) The knob call is **comparative** (vs WT) at a **single operating point (O2, R=260)**. The
+clean guarantees it *can* deliver from one context are analytic and context-independent — the EC50 is
+independent of `Δε_RA`, and the leakiness floor is independent of `Ka`/`Ki` — so **one context
+suffices to separate a threshold shift from a floor shift**. What one context **cannot** do is
+decompose a dynamic-RANGE change into its `Ka`/`Ki` vs `Δε_RA` parts; F164T (mildest inducer mutant)
+and Q21M (a stronger-binding DNA mutant with no floor rise, only a mild EC50 drift) are honestly
+*inconclusive* there — a copy-number series (a second operating point) would resolve them. (3)
+**Residue numbering:** the CSV / mwc_mutants repo use the LacI convention *including* the N-terminal
+Met (`Y20I`, `Q21A/M`, `F164T`, `Q294K/V/R`); the PNAS paper text uses the −3 convention (`Y17I`,
+`Q18A/M`, `F161T`, `Q291K/V/R`) — the same mutants, a +3 numbering offset. Inherits the affine-readout
+bound (`NUDGE-LIM-006`). Locked in by
+`tests/inference/test_cross_modality.py::test_chure_laci_kn_ground_truth_real_data`; demo in
+`notebooks/Chure_LacI_Benchmark.ipynb`. The per-mutant `Ka`/`Ki` (inducer) and `Δε_RA` (DNA) shifts
+are in the repo's `Chure2019_KaKi_epAI_summary.csv` / `Chure2019_DNA_binding_energy_summary.csv`.

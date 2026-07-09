@@ -309,3 +309,105 @@ def synergy_file(
         geometry=geometry,
     )
     return synergy_to_dict(res)
+
+
+# --------------------------------------------------------------------------- #
+# cross-modality readout attribution (the same K/n/v_max, read from a CONTINUOUS
+# single channel — fluorescence / activity / fold-change — not counts; a panel of
+# variants localized to threshold / gain / ceiling vs a control — see
+# inference.cross_modality). The Chure-2019 LacI benchmark's engine.
+# --------------------------------------------------------------------------- #
+def variant_attribution_to_dict(v: Any) -> dict[str, Any]:
+    """Serialise one ``VariantAttribution`` to a plain JSON-able dict (CLI / MCP)."""
+    return {
+        "variant": v.variant,
+        "class_label": v.class_label,
+        "call": v.call,
+        "reason": v.reason,
+        "knob": v.knob,
+        "knob_reason": v.knob_reason,
+        "K_threshold": v.k_threshold,
+        "ci_K": list(v.ci_k),
+        "n_apparent_gain": v.n,
+        "ci_n": list(v.ci_n),
+        "amp": v.amp,
+        "ci_amp": list(v.ci_amp),
+        "floor": v.floor,
+        "ci_floor": list(v.ci_floor),
+        "r2": v.r2,
+        "n_points": v.n_points,
+        "log2_K_ratio_vs_control": v.log2_k_ratio,
+        "delta_floor_vs_control": v.delta_floor,
+        "delta_n_vs_control": v.delta_n,
+    }
+
+
+def _coerce(val: str) -> Any:
+    """Coerce a CLI ``key=value`` filter value to float when it looks numeric."""
+    try:
+        return float(val)
+    except ValueError:
+        return val
+
+
+def cross_modality_panel_file(
+    path: str,
+    *,
+    dose_col: str,
+    response_col: str,
+    variant_col: str,
+    control_variant: str,
+    class_col: str | None = None,
+    variants: list[str] | None = None,
+    filters: dict[str, Any] | None = None,
+    modality: str = "fluorescence",
+    direction: str = "activate",
+    autofluor: float = 0.0,
+    agg: str = "mean",
+    n_boot: int = 400,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Attribute a panel of **continuous-readout** dose-responses — the CLI/MCP entry.
+
+    Reads a tidy CSV/TSV of a continuous single-channel readout (fluorescence /
+    activity / fold-change, declared by ``modality`` — NUDGE never guesses it and the
+    bouncer refuses log-normalized or raw counts, NUDGE-LIM-008), extracts each
+    variant's ``(dose, response)`` curve, fits + classifies it with the shipped
+    dose-response path, and localizes each variant's effect to one knob (**threshold** /
+    **gain** / **ceiling**) vs ``control_variant`` — or abstains (**non-responsive** /
+    **inconclusive**). Returns the per-variant table (with the author/ground-truth
+    ``class_col`` label carried through, if given) — never a forced call. This is the
+    Chure-2019 LacI benchmark's engine: DNA-binding mutants localize to
+    ceiling/leakiness, inducer-binding mutants to threshold.
+    """
+    import pandas as pd
+
+    from nudge.inference.cross_modality import attribute_variant_panel
+
+    sep = "\t" if path.endswith((".tsv", ".txt")) else ","
+    df = pd.read_csv(path, sep=sep, comment="#")
+    coerced = {
+        k: _coerce(v) if isinstance(v, str) else v for k, v in (filters or {}).items()
+    }
+    panel = attribute_variant_panel(
+        df,
+        dose_col=dose_col,
+        response_col=response_col,
+        variant_col=variant_col,
+        control_variant=control_variant,
+        variants=variants,
+        class_col=class_col,
+        filters=coerced or None,
+        modality=modality,
+        direction=direction,
+        autofluor=autofluor,
+        agg=agg,
+        n_boot=n_boot,
+        seed=seed,
+    )
+    return {
+        "modality": modality,
+        "direction": direction,
+        "control_variant": control_variant,
+        "variants": [variant_attribution_to_dict(v) for v in panel],
+    }

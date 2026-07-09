@@ -194,6 +194,52 @@ def build_server() -> Any:
             min_cells=min_cells,
         )
 
+    @mcp.tool()
+    def cross_modality(
+        path: str,
+        dose_col: str,
+        response_col: str,
+        variant_col: str,
+        control_variant: str,
+        class_col: str = "",
+        modality: str = "fluorescence",
+        direction: str = "activate",
+        filters: dict[str, Any] | None = None,
+        n_boot: int = 400,
+    ) -> dict[str, Any]:
+        """Attribute a panel of CONTINUOUS-readout dose-responses (cross-modality tool).
+
+        Runs the *same* K (threshold) / n (gain) / v_max (ceiling) attribution NUDGE
+        does on counts, but on a **continuous single channel** — flow fluorescence,
+        an activity reporter, or a fold-change summary — read from a tidy CSV/TSV
+        (``dose_col`` / ``response_col`` / ``variant_col``). The ``modality``
+        (``fluorescence`` / ``activity`` / ``foldchange``) is **declared, never
+        guessed**: the bouncer refuses log-normalized or raw counts masquerading as
+        fluorescence (NUDGE-LIM-008). Each variant's curve is fit + classified with the
+        shipped dose-response path and localized to one knob vs ``control_variant`` —
+        **threshold** (dose-EC50 shift) / **gain** (Hill steepness) / **ceiling**
+        (leakiness / dynamic range) — or abstains (**non-responsive** /
+        **inconclusive**). ``filters`` (e.g. ``{"operator": "O2"}``) pins other axes;
+        ``class_col`` carries a ground-truth label. ``direction`` is ``activate`` when
+        the readout rises with dose (induction). This is the Chure-2019 LacI benchmark:
+        DNA-binding-domain mutants localize to ceiling/leakiness, inducer-binding-domain
+        mutants to threshold. Returns the honest per-variant table.
+        """
+        from nudge.service import cross_modality_panel_file
+
+        return cross_modality_panel_file(
+            path,
+            dose_col=dose_col,
+            response_col=response_col,
+            variant_col=variant_col,
+            control_variant=control_variant,
+            class_col=class_col or None,
+            filters=filters,
+            modality=modality,
+            direction=direction,
+            n_boot=n_boot,
+        )
+
     return mcp
 
 

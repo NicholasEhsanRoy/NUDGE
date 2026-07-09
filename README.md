@@ -35,10 +35,18 @@ Highlights so far:
   genuinely bistable stochastic data (recovers *gain* where a naive fit is
   confidently wrong). See [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md).
 - **`nudge` CLI + Claude MCP server** — the tool is drivable from a terminal
-  (`nudge attribute … / explain / mechanisms`) *and* by Claude in plain language
-  through a custom MCP server (Claude Code / Desktop / the Claude Science
-  workbench). Connection recipes verified in
+  (`nudge attribute … / dose-response / synergy / cross-modality / explain`) *and* by
+  Claude in plain language through a custom MCP server (Claude Code / Desktop / the
+  Claude Science workbench). Connection recipes verified in
   [`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md).
+- **Cross-modality readout adapter** (`NUDGE-METHOD-002`) — the *same* threshold / gain
+  / ceiling attribution, run on a **continuous single channel** (flow fluorescence /
+  activity / fold-change) instead of counts, behind a modality-aware bouncer that refuses
+  log-normalized or raw counts masquerading as fluorescence (`NUDGE-LIM-008`). Validated
+  on the **Chure 2019 LacI benchmark** (author-labelled K-vs-ceiling ground truth):
+  inducer-binding mutants → **threshold**, DNA-binding mutants → **ceiling / leakiness**,
+  the non-inducible mutant **abstains**, no mis-calls — see
+  [`notebooks/Chure_LacI_Benchmark.ipynb`](notebooks/Chure_LacI_Benchmark.ipynb).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap

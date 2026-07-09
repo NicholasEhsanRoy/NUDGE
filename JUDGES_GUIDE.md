@@ -182,6 +182,19 @@ catching a real human over-reading: an exploratory bounded fit called NANOG a gr
 `n ≈ 2.2`, but its `K` railed at the bound with an `n`-CI of [1.2, 12]. Fail-safe,
 visualized (`NUDGE-LIM-007`).
 
+**The cross-modality crown jewel — recovering an author-provided answer key:**
+[`notebooks/Chure_LacI_Benchmark.ipynb`](notebooks/Chure_LacI_Benchmark.ipynb) (Chure et
+al. 2019, PNAS; CaltechDATA D1.1241; embedded plots). NUDGE runs the *same* threshold /
+gain / ceiling attribution — but on **flow-cytometry fold-change**, not counts — behind a
+modality bouncer that refuses log-normalized or raw counts masquerading as fluorescence
+(`NUDGE-LIM-008`). Against the authors' domain labels it localizes **inducer-binding
+mutants (Q294K/Q294V) → threshold** (the inducer EC50) and **DNA-binding mutants
+(Y20I/Q21A) → ceiling / leakiness** (the repression setpoint), **abstains** on the
+near-non-inducible Q294R and two single-operating-point-underdetermined mutants — **4/7
+correct, 3/7 honest abstentions, 0 mis-calls, and no manufactured gain story**. This is the
+threshold-vs-mechanism distinction validated against an *external* biophysical ground truth
+(`scripts/vv/FINDINGS.md` "Phase 4e"; `NUDGE-METHOD-002`).
+
 **And it's a tool you can drive — from a terminal or from Claude itself:**
 
 ```bash
@@ -190,6 +203,8 @@ uv run nudge mechanisms                     # the mechanism library + its cards
 uv run nudge explain unresolved             # WHY an abstention was the honest answer
 uv run nudge attribute screen.h5ad -t SOS1  # attribute a perturbation, honestly
 uv run nudge dose-response curve.csv         # switch vs graded from a dose axis — or abstain
+uv run nudge cross-modality flow.csv --dose-col IPTGuM --response-col mean \
+  --variant-col mutant --control wt --modality foldchange  # K/n/ceiling from FLUORESCENCE
 
 # Or hand NUDGE to Claude as a custom MCP server (verified — see the memo):
 uv pip install -e ".[mcp]"
@@ -197,8 +212,9 @@ claude mcp add --scope project nudge -- uv run nudge-mcp
 #   then, in Claude: "Use nudge to attribute SOS1, and explain any abstention."
 ```
 
-The MCP server exposes `attribute`, `explain_abstention`, `list_mechanisms`, and
-`get_mechanism_card` — so a scientist asks for a mechanism map *in one sentence*
+The MCP server exposes `attribute`, `dose_response`, `synergy`, `cross_modality`,
+`explain_abstention`, `list_mechanisms`, and `get_mechanism_card` — so a scientist asks
+for a mechanism map *in one sentence*
 and gets back the same honest, abstaining answer a human gets, with the decoy +
 limitation + Mechanism Card that explains any "I can't tell." The exact connection
 recipe for Claude Code / Desktop / the **Claude Science** workbench is verified in
@@ -211,10 +227,13 @@ abstain?" traversal is `nudge.knowledge` today and a SPARQL graph in
 - **Honest status:** the science holds up today — green tests, measured guarantees,
   reproducible results — and there is now a **runnable tool surface** (CLI + a live
   Claude MCP integration) *and* a **guided visual walkthrough on real data** (the
-  OCT4/NANOG flagship notebook, with embedded plots). Two real-data results are in hand:
-  the Gladstone T-cell screen, where NUDGE **honestly abstained** (a fail-safe win), and
+  OCT4/NANOG flagship notebook, with embedded plots). Several real-data results are in
+  hand: the Gladstone T-cell screen, where NUDGE **honestly abstained** (a fail-safe win);
   OCT4/NANOG, where it made its **first positive mechanism call** (OCT4 switch) alongside a
-  rigorous NANOG abstention. Not vapor.
+  rigorous NANOG abstention; Norman 2019, where its synergy calls **agree with the paper on
+  the two explicitly-labeled pairs**; and **Chure 2019, where it recovers the authors' own
+  DNA-vs-inducer-domain answer key from fluorescence** (inducer → threshold, DNA → ceiling)
+  with zero mis-calls. Not vapor.
 
 ---
 

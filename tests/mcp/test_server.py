@@ -27,6 +27,7 @@ def test_server_registers_the_expected_tools() -> None:
         "attribute",
         "dose_response",
         "synergy",
+        "cross_modality",
         "explain_abstention",
         "list_mechanisms",
         "get_mechanism_card",

@@ -8,6 +8,7 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 ## [Unreleased]
 
 ### Added
+
 - **Possible-neomorphic off-axis diagnostic** for synergy/epistasis
   (`NUDGE-METHOD-003`): every combination fit now carries the magnitude of its
   interaction residual `r = v_AB − v_A − v_B` **orthogonal** to the additive axis —
@@ -25,19 +26,28 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   (ratio 0.62). Turns `NUDGE-LIM-009` from prose into a number shown with every call; see
   `design/NORMAN_DISCREPANCY_ANALYSIS.md`, FINDINGS "Phase 4d", `notebooks/Norman_Synergy.ipynb`.
 
-### Performance
-- **Loader ~5× faster** (`data/loaders/perturbseq.py`): the pointer-read hot path
-  (`_read_h5ad_rows`, ~99% of load time) now coalesces adjacent selected rows into
-  contiguous h5py slice reads (`_coalesced_gather`) instead of one big fancy-index —
-  **byte-identical** output, ~4.6–5.4× uncompressed / ~1.7–2× gzip, still O(selection)
-  (holds at 150 GB). Profiling report + benchmarks: `design/PERFORMANCE.md`, `scripts/perf/`.
-- **Demo-latency warmup** (`nudge.warmup`, `nudge warmup`): pre-compiles the cached hot
-  JAX paths (the dose-response model + the circuit fixed-point kernel) on tiny dummy data,
-  so the first real fit in a long-lived process is fast (dose-response first fit ~405→55 ms;
-  `_nd_kernel` 512→2 ms). Wired into the MCP server startup + the demo notebooks; idempotent,
-  no numerics change. (GPU verdict in `design/PERFORMANCE.md`: stay on CPU for these sizes.)
-
-### Added
+- **Cross-modality readout adapter (`nudge.inference.cross_modality`, `NUDGE-METHOD-002`):**
+  runs the *same* threshold (K) / gain (n) / ceiling (v_max) attribution on a **continuous
+  single channel** — flow-cytometry fluorescence, an activity reporter, or a fold-change
+  summary — instead of raw UMI counts, reusing the shipped dose-response fit/classify
+  (`NUDGE-METHOD-001`) verbatim. Two new pieces make it modality-aware: a **bouncer**
+  (`nudge.data.ingest.check_readout`) that routes `modality="counts"` to the unchanged
+  integer guard and refuses ambiguous continuous input — most sharply **log-normalized or
+  raw counts masquerading as fluorescence** (all-integer / zero-inflated / centered
+  fingerprints; new `NUDGE-LIM-008`), never guessing a modality — and a **fold-change
+  extractor** (`nudge.inference.bridge.fluorescence_dose_response`). A panel
+  (`attribute_variant_panel`) localizes each variant's effect vs a control to **threshold**
+  (dose-EC50 shift) / **gain** (Hill steepness) / **ceiling** (leakiness / dynamic range) —
+  or abstains (**non-responsive** / **inconclusive**). Wired into the `nudge cross-modality`
+  CLI verb + the `cross_modality` MCP tool + a Mechanism Card. **Validated on Chure 2019
+  (CaltechDATA D1.1241, LacI IPTG induction):** against the authors' domain answer key,
+  inducer-binding mutants **Q294K / Q294V** localize to **threshold** (K 71 → 420–626 µM),
+  DNA-binding mutants **Y20I / Q21A** to **ceiling / leakiness** (floor +0.3–0.5), the
+  near-non-inducible **Q294R** abstains — 4/7 cleanly correct, 3/7 honest abstentions,
+  **0 mis-calls, no gain(n) overclaim**; `F164T` / `Q21M` inconclusive at one operating
+  point. The dose-response fit additionally records bootstrap CIs on the response span
+  (`ci_amp`) and baseline (`ci_floor`) for the ceiling axis (additive; the count path and
+  the `check_counts` integer guard are untouched). Demo: `notebooks/Chure_LacI_Benchmark.ipynb`.
 - **Synergy / epistasis attribution (`nudge.inference.epistasis`, `NUDGE-METHOD-003`):**
   for a two-perturbation combination, calls the interaction **additive** / **synergistic**
   / **buffering** — or abstains (**no-effect** / **unresolved**). Reads A, B and A+B as
@@ -166,11 +176,26 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`,
   `check_mechanism_cards`); PEP 561.
 
+### Performance
+
+- **Loader ~5× faster** (`data/loaders/perturbseq.py`): the pointer-read hot path
+  (`_read_h5ad_rows`, ~99% of load time) now coalesces adjacent selected rows into
+  contiguous h5py slice reads (`_coalesced_gather`) instead of one big fancy-index —
+  **byte-identical** output, ~4.6–5.4× uncompressed / ~1.7–2× gzip, still O(selection)
+  (holds at 150 GB). Profiling report + benchmarks: `design/PERFORMANCE.md`, `scripts/perf/`.
+- **Demo-latency warmup** (`nudge.warmup`, `nudge warmup`): pre-compiles the cached hot
+  JAX paths (the dose-response model + the circuit fixed-point kernel) on tiny dummy data,
+  so the first real fit in a long-lived process is fast (dose-response first fit ~405→55 ms;
+  `_nd_kernel` 512→2 ms). Wired into the MCP server startup + the demo notebooks; idempotent,
+  no numerics change. (GPU verdict in `design/PERFORMANCE.md`: stay on CPU for these sizes.)
+
 ### Verification
+
 - V&V calibration sweep (`scripts/vv/`): **0% misclassification** across 300 linear
   + 552 switch datasets; calibrated `margin_k = 1.7`. Tier-0.5 inverse-crime guard
   and the seed-2 saddle gain-recovery test. Findings in `scripts/vv/FINDINGS.md`.
 
 ### Known Limitations
+
 - See `docs/known_limitations.yaml` (`NUDGE-LIM-*`); the full decoy battery, Laplace
   uncertainty, and real-data validation are not yet built. `design()` is a stub.

@@ -206,6 +206,11 @@ class DoseResponseFit:
     spans_inflection: bool
     noise: float
     boot_n: tuple[float, ...] = ()
+    #: Bootstrap CIs on the response span (``amp``) and baseline (``floor``) — the
+    #: **ceiling / leakiness** axis, used by cross-modality knob attribution
+    #: (:mod:`nudge.inference.cross_modality`); ``(nan, nan)`` if bootstrap is empty.
+    ci_amp: tuple[float, float] = (float("nan"), float("nan"))
+    ci_floor: tuple[float, float] = (float("nan"), float("nan"))
 
 
 @dataclass(frozen=True)
@@ -260,6 +265,8 @@ def fit_dose_response(
     rng = np.random.default_rng(seed)
     boot_n: list[float] = []
     boot_k: list[float] = []
+    boot_amp: list[float] = []
+    boot_floor: list[float] = []
     for _ in range(max(n_boot, 0)):
         idx = rng.integers(0, n_obs, n_obs)
         try:
@@ -270,18 +277,21 @@ def fit_dose_response(
             continue
         boot_n.append(float(bp[3]))
         boot_k.append(float(bp[2]))
-    if boot_n:
-        ci_n = (
-            float(np.percentile(boot_n, 2.5)),
-            float(np.percentile(boot_n, 97.5)),
+        boot_floor.append(float(bp[0]))
+        boot_amp.append(float(bp[1]))
+
+    def _ci(samples: list[float]) -> tuple[float, float]:
+        if not samples:
+            return (float("nan"), float("nan"))
+        return (
+            float(np.percentile(samples, 2.5)),
+            float(np.percentile(samples, 97.5)),
         )
-        ci_k = (
-            float(np.percentile(boot_k, 2.5)),
-            float(np.percentile(boot_k, 97.5)),
-        )
-    else:
-        ci_n = (float("nan"), float("nan"))
-        ci_k = (float("nan"), float("nan"))
+
+    ci_n = _ci(boot_n)
+    ci_k = _ci(boot_k)
+    ci_amp = _ci(boot_amp)
+    ci_floor = _ci(boot_floor)
 
     dose_min, dose_max = float(dose.min()), float(dose.max())
     spans = bool(dose_min <= k_threshold <= dose_max)
@@ -304,6 +314,8 @@ def fit_dose_response(
         spans_inflection=spans,
         noise=noise,
         boot_n=tuple(boot_n),
+        ci_amp=ci_amp,
+        ci_floor=ci_floor,
     )
 
 

@@ -151,6 +151,48 @@ anomalies:
       within-cell cooperativity with a spread of single-cell thresholds), not molecular
       cooperativity — an independent honesty caveat shared with NUDGE-LIM-006.
 
+  - anomaly_id: NUDGE-LIM-008
+    title: A cross-modality readout must be declared, never guessed — refuse ambiguous input
+    description: >-
+      In cross-modality readout attribution (nudge.inference.cross_modality), NUDGE runs
+      its dose-response attribution on a CONTINUOUS single channel (fluorescence /
+      activity / fold-change) instead of raw counts. The sharp new failure mode is a
+      modality confusion: silently accepting LOG-NORMALIZED counts (log1p-CPM single-cell
+      data, which is zero-inflated from dropout and continuous in its tail) or RAW COUNTS
+      dressed up as a continuous fluorescence signal would feed a garbage curve into the
+      fit and could manufacture a confident-wrong knob call. NUDGE never GUESSES a
+      modality: the caller must declare it (modality="fluorescence"/"activity"/
+      "foldchange" vs "counts"), and the bouncer (nudge.data.ingest.check_readout) REFUSES
+      ambiguous input rather than fit it — three witnesses: all-integer values (raw counts
+      mislabeled as continuous), a large fraction of exact zeros beside a continuous tail
+      (the log-normalized-counts / dropout fingerprint), and substantially-negative values
+      (scaled / centered / log-ratio data). The count path (check_counts) is UNCHANGED —
+      modality="counts" delegates to the existing raw-integer guard, which is not weakened.
+      A second, softer bound: the knob call is COMPARATIVE (variant vs a control curve) and
+      a single operating point cannot always separate a threshold (EC50) shift from a
+      ceiling/leakiness change (a raised leakiness floor repositions the apparent EC50 in
+      fold-change space); NUDGE returns INCONCLUSIVE there rather than force a knob.
+      VERIFIED on Chure 2019 (CaltechDATA D1.1241): inducer-binding mutants Q294K/Q294V
+      localize to threshold, DNA-binding mutants Y20I/Q21A to ceiling/leakiness, the
+      near-non-inducible Q294R abstains (non-responsive), and no mutant is mis-called or
+      called gain — while F164T/Q21M are honestly inconclusive at one operating point.
+      Guarded by the bouncer's refusals + the sign-aware knob gates + the Chure lock-in
+      (tests/inference/test_cross_modality.py). Inherits the affine-readout bound
+      NUDGE-LIM-006 (a nonlinear reporter can still fake ultrasensitivity).
+    severity: major
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      Silently fitting log-normalized or raw counts as if they were a continuous
+      fluorescence signal is exactly the confident-wrong failure the project exists to
+      avoid — the curve would be meaningless yet the fit would return a knob. The
+      guarantee rests on the modality being DECLARED (never inferred) and the bouncer
+      refusing the ambiguous fingerprints (all-integer, zero-inflated, substantially
+      negative); a loosened bouncer, or an unmodelled nonlinear reporter (NUDGE-LIM-006),
+      would resurrect a false positive. The comparative knob call also inherits the
+      dose-response identifiability regime (the doses must span the inflection,
+      NUDGE-LIM-007) and abstains (inconclusive) when one operating point cannot separate
+      threshold from ceiling.
+
   - anomaly_id: NUDGE-LIM-009
     title: A combination attribution inherits its weakest single arm, and its interaction is scalar
     description: >-

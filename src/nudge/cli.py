@@ -335,6 +335,95 @@ def synergy(
 
 
 # --------------------------------------------------------------------------- #
+# cross-modality readout (fluorescence / activity / fold-change, not counts)
+# --------------------------------------------------------------------------- #
+@app.command("cross-modality")
+def cross_modality(
+    path: str = typer.Argument(
+        ..., help="a tidy CSV/TSV of a CONTINUOUS readout (dose/response/variant cols)"
+    ),
+    dose_col: str = typer.Option(..., "--dose-col", help="dose column (e.g. IPTGuM)"),
+    response_col: str = typer.Option(
+        ..., "--response-col", help="continuous readout column (e.g. fold-change mean)"
+    ),
+    variant_col: str = typer.Option(
+        ..., "--variant-col", help="column of variant/mutant labels"
+    ),
+    control: str = typer.Option(
+        ..., "--control", help="the control/WT variant label to compare against"
+    ),
+    class_col: str = typer.Option(
+        "", "--class-col", help="optional ground-truth class column (carried through)"
+    ),
+    modality: str = typer.Option(
+        "fluorescence", help="continuous modality: fluorescence | activity | foldchange"
+    ),
+    direction: str = typer.Option(
+        "activate", help="'activate' (readout rises with dose, e.g. induction) or "
+        "'repress'"
+    ),
+    filt: list[str] = typer.Option(
+        [], "--filter", help="KEY=VALUE to pin another axis (repeatable, e.g. "
+        "operator=O2)"
+    ),
+    n_boot: int = typer.Option(400, help="bootstrap resamples for the K/n/amp CIs"),
+    seed: int = typer.Option(0, help="bootstrap RNG seed"),
+) -> None:
+    """Attribute a panel of CONTINUOUS-readout dose-responses (cross-modality adapter).
+
+    Runs the *same* K (threshold) / n (gain) / v_max (ceiling) attribution NUDGE does on
+    counts, but on a continuous single channel (flow fluorescence, an activity reporter,
+    a fold-change summary). The modality is **declared, never guessed** — the bouncer
+    refuses log-normalized or raw counts masquerading as fluorescence (NUDGE-LIM-008).
+    Each variant is localized to one knob vs the control — or abstains
+    (**non-responsive** / **inconclusive**). This is the Chure-2019 LacI benchmark:
+    DNA-binding mutants localize to ceiling/leakiness, inducer-binding to threshold.
+    """
+    from nudge.service import cross_modality_panel_file
+
+    filters: dict[str, str] = {}
+    for spec in filt:
+        if "=" not in spec:
+            raise typer.BadParameter(f"--filter {spec!r} must be KEY=VALUE")
+        k, _, v = spec.partition("=")
+        filters[k.strip()] = v.strip()
+
+    out = cross_modality_panel_file(
+        path,
+        dose_col=dose_col,
+        response_col=response_col,
+        variant_col=variant_col,
+        control_variant=control,
+        class_col=class_col or None,
+        filters=filters or None,
+        modality=modality,
+        direction=direction,
+        n_boot=n_boot,
+        seed=seed,
+    )
+    _echo(
+        f"cross-modality  ({out['modality']}, direction={out['direction']}, "
+        f"control={out['control_variant']})"
+    )
+    header = f"  {'variant':10} {'class':6} {'knob':14} {'call':11} K        n    log2K"
+    _echo(header)
+    for v in out["variants"]:
+        cls = v["class_label"] or "—"
+        k = v["K_threshold"]
+        ks = f"{k:8.2f}" if k == k else "     nan"  # nan-safe
+        lr = v["log2_K_ratio_vs_control"]
+        lrs = f"{lr:+6.2f}" if lr == lr else "   —  "
+        _echo(
+            f"  {v['variant']:10} {cls:6} {v['knob']:14} {v['call']:11} {ks} "
+            f"{v['n_apparent_gain']:5.2f} {lrs}"
+        )
+    _echo(
+        "\n  knob: threshold=EC50 shift · ceiling=leakiness/range · gain=Hill n · "
+        "\n  non-responsive/inconclusive = honest abstention (never a forced call)."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # mechanisms
 # --------------------------------------------------------------------------- #
 @app.command()

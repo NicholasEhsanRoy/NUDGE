@@ -32,6 +32,7 @@ __all__ = [
     "adata_to_operating_point",
     "combo_effect_scores",
     "counts_to_activity",
+    "fluorescence_dose_response",
     "knockdown_dose_response",
 ]
 
@@ -199,6 +200,78 @@ def knockdown_dose_response(
         response.append(float(norm[m][:, sig_cols].mean(axis=1).mean()) / base_sig)
     order = np.argsort(dose)
     return np.asarray(dose)[order], np.asarray(response)[order]
+
+
+def fluorescence_dose_response(
+    df: Any,
+    *,
+    dose_col: str,
+    response_col: str,
+    variant: str,
+    variant_col: str,
+    filters: Mapping[str, Any] | None = None,
+    control_variant: str | None = None,
+    autofluor: float = 0.0,
+    agg: str = "mean",
+    modality: str = "fluorescence",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-dose ``(dose, continuous response)`` for one ``variant`` — the adapter core.
+
+    The cross-modality analogue of :func:`knockdown_dose_response`: it turns a tidy
+    **continuous-readout** table (flow fluorescence, an activity reporter, or a
+    fold-change summary — *not* UMI counts) into the ``(dose, response)`` pair the
+    shipped :func:`~nudge.inference.dose_response.attribute_dose_response` consumes. One
+    row per (variant, dose[, extra keys]); ``filters`` pins the other axes (e.g.
+    ``{"operator": "O2", "repressors": 260}``) so a single induction curve is selected.
+
+    The **modality bouncer runs first** (:func:`nudge.data.ingest.check_readout`): the
+    raw ``response_col`` must pass the continuous-readout guard, so log-normalized or
+    raw counts mislabeled as fluorescence are **refused here**, before any fitting
+    (NUDGE-LIM-008). Then, per dose level, the response is aggregated (``agg`` =
+    ``mean`` or ``median``), an optional ``autofluor`` offset is subtracted, and — if
+    ``control_variant`` is given — divided by that variant's per-dose response to form a
+    fold-change (Chure-style summaries are already fold-change, so the default is a
+    plain per-dose summary). Returns dose-sorted arrays. Raises ``KeyError`` on missing
+    columns / variants and ``IngestError`` on a modality violation.
+    """
+    from nudge.data.ingest import check_readout
+
+    for col in (dose_col, response_col, variant_col):
+        if col not in getattr(df, "columns", []):
+            raise KeyError(f"column {col!r} not in {list(getattr(df, 'columns', []))}")
+
+    sub = df
+    for key, val in (filters or {}).items():
+        if key not in df.columns:
+            raise KeyError(f"filter column {key!r} not in {list(df.columns)}")
+        sub = sub[sub[key] == val]
+
+    def _curve(name: str) -> dict[float, float]:
+        rows = sub[sub[variant_col].astype(str) == str(name)]
+        if rows.empty:
+            raise KeyError(
+                f"no rows for {variant_col}=={name!r} under "
+                f"filters {dict(filters or {})}"
+            )
+        # Bouncer: refuse counts / log-normalized values masquerading as continuous.
+        check_readout(rows, modality=modality, readout_col=response_col)
+        grouped = rows.groupby(dose_col)[response_col]
+        summary = grouped.median() if agg == "median" else grouped.mean()
+        return {float(d): float(v) - autofluor for d, v in summary.items()}
+
+    var_curve = _curve(variant)
+    if control_variant is not None:
+        ctrl_curve = _curve(control_variant)
+        doses = sorted(d for d in var_curve if d in ctrl_curve)
+        response = [
+            var_curve[d] / ctrl_curve[d] if ctrl_curve[d] != 0 else float("nan")
+            for d in doses
+        ]
+    else:
+        doses = sorted(var_curve)
+        response = [var_curve[d] for d in doses]
+
+    return np.asarray(doses, dtype=float), np.asarray(response, dtype=float)
 
 
 def _condition_mask(obs: Any, condition_col: str, label: str) -> np.ndarray:
