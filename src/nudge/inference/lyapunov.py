@@ -358,36 +358,42 @@ def lna_reliable(
     scale: float,
     *,
     min_count: float = 15.0,
-    cv_max: float = 1.5,
+    sep_ratio: float = 1.0,
 ) -> tuple[bool, str]:
     """Is the linear-noise Gaussian mixture trustworthy for ``circuit`` at this depth?
 
     The LNA Gaussian is *local and second-order*: it breaks down (a) **near a
     saddle-node bifurcation**, where a mode's covariance diverges (the Lyapunov solution
-    Jacobian eigenvalue → 0) and the lobe stops being Gaussian, and (b) **at low copy
+    Jacobian eigenvalue → 0) and the lobes stop being resolvable, and (b) **at low copy
     number**, where the discrete/skewed count distribution is not Gaussian. Attribution
     must **abstain loudly** in both regimes rather than trust a bad Gaussian. Returns
     ``(ok, reason)``:
 
     - **not bistable** — fewer than two stable modes (nothing to attribute);
-    - **near bifurcation** — a mode's coefficient of variation
-      ``√λ_max(Σ)/‖μ‖ > cv_max`` (the covariance has swollen toward the merging modes);
+    - **near bifurcation** — a lobe's std ``√λ_max(Σ)`` exceeds ``sep_ratio`` × the
+      inter-mode separation ``min‖μ_i − μ_j‖`` (the lobes overlap → merging). Measured
+      against the *separation*, not a lobe's own mean, so a near-zero OFF state (tiny
+      ‖μ‖) is not mistaken for a bifurcation;
     - **insufficient depth** — the brightest state's expected counts ``scale·max|μ| <
       min_count`` (the Gaussian relaxation of the counts is untrustworthy).
     """
     modes = circuit.mode_covariances()
     if modes is None or len(modes) < 2:
         return False, "not bistable (need ≥2 stable modes)"
-    peak = max(float(np.max(np.abs(mean))) for mean, _ in modes)
+    means = [np.asarray(mean, dtype=float) for mean, _ in modes]
+    peak = max(float(np.max(np.abs(mean))) for mean in means)
     if scale * peak < min_count:
         sp = scale * peak
         return False, f"insufficient depth (scale·peak={sp:.1f} < {min_count})"
-    for mean, cov in modes:
-        cv = float(np.sqrt(np.max(np.linalg.eigvalsh(cov)))) / (
-            float(np.linalg.norm(mean)) + 1e-9
-        )
-        if cv > cv_max:
-            return False, f"near bifurcation (mode CV={cv:.2f} > {cv_max})"
+    sep = min(
+        float(np.linalg.norm(means[i] - means[j]))
+        for i in range(len(means))
+        for j in range(i + 1, len(means))
+    )
+    for _mean, cov in modes:
+        spread = float(np.sqrt(np.max(np.linalg.eigvalsh(cov))))
+        if spread > sep_ratio * sep:
+            return False, f"near bifurcation (lobe std {spread:.2f} > {sep:.2f} sep)"
     return True, "ok"
 
 
