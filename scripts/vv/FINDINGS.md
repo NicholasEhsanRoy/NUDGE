@@ -533,3 +533,40 @@ first-pass verdict: the other stim timepoints (Rest / Stim48hr — the operating
 Stim48hr may show more commitment); a signaling-proximal or single-strong-marker readout
 instead of the IEG mean; and a focused (not genome-wide) screen with enough cells/guide. The
 value here is a *measured, honest* verdict on real data — the tool doing the hard thing.
+
+# Phase 4b — dose-response attribution: OCT4 resolves as a switch, NANOG honestly abstains
+
+A second real-data result, and the first *positive* mechanism call on real biology. Single-cell
+bimodality and bulk dose-response ultrasensitivity are two measurements of one Hill circuit, so
+`nudge.inference.dose_response` fits the *same* Hill primitive (`hill_repression`) to a readout's
+response across a graded perturbation dose, with the *same* BIC parsimony discipline as topology
+model-selection. Applied to the OCT4/NANOG pluripotency screen (GSE283614, Yao et al. 2025): a
+self-renewal signature (SOX2/LIN28A/UTF1/DNMT3B/TDGF1/ZFP42/SALL4) vs each factor's own guide-
+level knockdown (the guide axis *is* a dose axis).
+
+**Result: OCT4 → `switch`; NANOG → `unresolved` (abstain).**
+- **OCT4** (16 guide-dose points): apparent gain **n ≈ 6.7 (95% CI 4.5–12)**, K ≈ 0.65, **R² = 0.99**,
+  ΔBIC(graded−switch) = +54 — an abrupt, ultrasensitive switch. Its inflection is *inside* the
+  knockdown range. Matches the literature threshold behavior (Niwa 2000).
+- **NANOG** (17 points): NUDGE **abstains**. Its knockdown reaches only ~75%, its fitted K sits
+  *past* the maximum dose, and an independent n-profile shows **R² flat within 0.075 across
+  n = 1…12** (a graded n≈1 and a high-threshold switch fit equally well). The gain is genuinely
+  unidentifiable → `unresolved` (NUDGE-LIM-007).
+
+**The classifier caught a classic human over-reading.** An exploratory bounded Hill fit (K ≤ 1.0)
+reported NANOG as a graded `n ≈ 2.2` — but that fit *railed K against its bound* and had a
+bootstrap n-CI of [1.2, 12]: an under-determined curve whose own uncertainty screamed
+non-identifiability. The old script had no classifier and just printed the point estimate; a
+human labeled it "graded." NUDGE's classifier reads the same fit and correctly returns
+`unresolved`. Not a fail-safe break (no code ever "called graded"), and not a module bug — the
+classifier *prevents* the overclaim. Two independent gates abstain (inflection-not-spanned AND
+CI-straddle), so it is not a threshold artifact.
+
+**Engineering note (verified root-cause, not guessed).** The fit reuses the JAX Hill primitive;
+JAX defaults to float32, so `curve_fit`'s finite-difference Jacobian underflowed to *exactly zero*
+in the `n` direction (scipy's default step is float64-sized) and `n` froze at its init — a
+confident-wrong-`n` hazard. Fixed by handing `curve_fit` the **exact JAX-autodiff Jacobian** of the
+primitive (local, no global x64 flag). Locked by
+`tests/inference/test_dose_response.py::test_autodiff_jacobian_lets_n_move_off_its_seed` and the
+OCT4/NANOG regression. Wired into the `nudge dose-response` CLI verb and the `dose_response` MCP
+tool; carded as `NUDGE-METHOD-001`.

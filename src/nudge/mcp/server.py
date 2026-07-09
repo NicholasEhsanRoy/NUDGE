@@ -106,6 +106,51 @@ def build_server() -> Any:
         )
         return report_to_dict(report)
 
+    @mcp.tool()
+    def dose_response(
+        path: str,
+        direction: str = "repress",
+        dose_col: str = "dose",
+        response_col: str = "response",
+        target: str = "",
+        target_gene: str = "",
+        signature: str = "",
+        group_col: str = "guide",
+        control: str = "WT",
+        min_cells: int = 15,
+        n_boot: int = 500,
+    ) -> dict[str, Any]:
+        """Attribute a mechanism from a dose-response curve: switch/graded or abstain.
+
+        The same K/n/v_max vocabulary as single-cell ``attribute``, read from a dose
+        axis (two measurements of one circuit). ``path`` is a 2-column CSV/TSV
+        (``dose_col`` / ``response_col``) or an ``.h5ad`` knockdown screen — for an
+        ``.h5ad`` give ``target`` (guide-group prefix, e.g. ``OCT4``), ``target_gene``
+        (the gene whose knockdown is the dose, e.g. ``POU5F1``), and ``signature``
+        (comma-separated readout genes). ``direction`` is ``repress`` when the response
+        falls with dose. Returns the verdict (``switch`` / ``graded`` / ``no-effect`` /
+        ``unresolved``) with the apparent population gain ``n`` + CI and the honest
+        reason — it abstains on an unidentifiable curve (e.g. doses not spanning the
+        inflection) rather than force a call. ``n`` is an apparent gain, not molecular
+        cooperativity.
+        """
+        from nudge.service import dose_response_file
+
+        sig = [g.strip() for g in signature.split(",") if g.strip()]
+        return dose_response_file(
+            path,
+            direction=direction,
+            dose_col=dose_col,
+            response_col=response_col,
+            target=target or None,
+            target_gene=target_gene or None,
+            signature=sig or None,
+            group_col=group_col,
+            control=control,
+            min_cells=min_cells,
+            n_boot=n_boot,
+        )
+
     return mcp
 
 

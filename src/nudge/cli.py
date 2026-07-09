@@ -174,6 +174,79 @@ def _print_report(report: Any) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# dose-response
+# --------------------------------------------------------------------------- #
+@app.command("dose-response")
+def dose_response(
+    path: str = typer.Argument(
+        ..., help="a 2-column CSV/TSV (dose,response) OR an .h5ad knockdown screen"
+    ),
+    direction: str = typer.Option(
+        "repress", help="'repress' (response falls with dose) or 'activate' (rises)"
+    ),
+    dose_col: str = typer.Option("dose", help="CSV dose column"),
+    response_col: str = typer.Option("response", help="CSV response column"),
+    target: str = typer.Option(
+        "", "--target", "-t", help="h5ad: guide-group prefix (e.g. OCT4)"
+    ),
+    target_gene: str = typer.Option(
+        "", help="h5ad: the gene whose knockdown is the dose axis (e.g. POU5F1)"
+    ),
+    signature: str = typer.Option(
+        "", help="h5ad: comma-separated readout genes whose mean is the response"
+    ),
+    group_col: str = typer.Option("guide", help="h5ad: obs column of guide IDs"),
+    control: str = typer.Option("WT", help="h5ad: control/WT condition label"),
+    min_cells: int = typer.Option(15, help="h5ad: min cells/guide for a dose point"),
+    n_boot: int = typer.Option(500, help="bootstrap resamples for the n/K CIs"),
+    seed: int = typer.Option(0, help="bootstrap RNG seed"),
+) -> None:
+    """Attribute a mechanism from a dose-response curve — switch vs graded, or abstain.
+
+    The same K (threshold) / n (gain) / v_max (ceiling) vocabulary as single-cell
+    attribution, read from a dose axis instead (two measurements of one circuit).
+    Reports
+    ``n`` as an **apparent population gain** with a CI, and abstains (``unresolved`` /
+    ``no-effect``) rather than over-call an unidentifiable curve — e.g. when the doses
+    do
+    not span the inflection.
+    """
+    from nudge.service import dose_response_file
+
+    sig = [g.strip() for g in signature.split(",") if g.strip()]
+    out = dose_response_file(
+        path,
+        direction=direction,
+        dose_col=dose_col,
+        response_col=response_col,
+        target=target or None,
+        target_gene=target_gene or None,
+        signature=sig or None,
+        group_col=group_col,
+        control=control,
+        min_cells=min_cells,
+        n_boot=n_boot,
+        seed=seed,
+    )
+    lo, hi = out["ci_n"]
+    _echo(f"dose-response  ({out['n_points']} points, direction={out['direction']})")
+    _echo(
+        f"  apparent gain n = {out['n_apparent_gain']:.2f}  95% CI [{lo:.2f}, {hi:.2f}]"
+        f"   K = {out['K_threshold']:.3f}   R² = {out['r2']:.3f}"
+    )
+    _echo(
+        f"  ΔBIC(graded−switch) = {out['delta_bic_graded_minus_switch']:+.1f}   "
+        f"spans_inflection = {out['spans_inflection']}   "
+        f"dose∈[{out['dose_range'][0]:.3f}, {out['dose_range'][1]:.3f}]"
+    )
+    _echo(f"\n  → CALL: {out['call'].upper()}")
+    _echo(f"     {out['reason']}")
+    _echo(
+        "\n  note: n is an APPARENT population gain + CI, not molecular cooperativity."
+    )
+
+
+# --------------------------------------------------------------------------- #
 # mechanisms
 # --------------------------------------------------------------------------- #
 @app.command()

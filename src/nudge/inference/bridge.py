@@ -27,7 +27,11 @@ import numpy as np
 from nudge.core.circuit import Circuit
 from nudge.inference.lyapunov import OperatingPoint, calibrate_from_wt
 
-__all__ = ["adata_to_operating_point", "counts_to_activity"]
+__all__ = [
+    "adata_to_operating_point",
+    "counts_to_activity",
+    "knockdown_dose_response",
+]
 
 #: species name → marker gene symbols whose (normalized) mean is that species' activity.
 SpeciesMarkers = Mapping[str, Sequence[str]]
@@ -102,3 +106,94 @@ def adata_to_operating_point(
     return OperatingPoint(
         data=cond_act, circuit=circuit, scale=scale, obs_sd=obs_sd
     )
+
+
+def _norm_counts(
+    adata: Any, library_col: str | None
+) -> tuple[np.ndarray, dict[str, int]]:
+    """Depth-normalized counts (size-factor to median) + a symbol→column index map."""
+    x = np.asarray(
+        adata.X.todense() if hasattr(adata.X, "todense") else adata.X, dtype=float
+    )
+    if library_col is not None and library_col in getattr(adata, "obs", {}):
+        lib = np.asarray(adata.obs[library_col], dtype=float)
+    else:
+        lib = x.sum(axis=1)
+    lib = np.where(lib > 0, lib, 1.0)
+    norm = x / lib[:, None] * float(np.median(lib))
+    gene_ix = {str(g): i for i, g in enumerate(adata.var_names)}
+    return norm, gene_ix
+
+
+def knockdown_dose_response(
+    adata: Any,
+    *,
+    target_gene: str,
+    signature: Sequence[str],
+    group_prefix: str,
+    group_col: str = "guide",
+    condition_col: str = "condition",
+    control_label: str = "WT",
+    library_col: str | None = "total_counts",
+    min_cells_per_group: int = 15,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-guide ``(knockdown dose, signature response)`` points for a KD screen.
+
+    Each guide (a value of ``group_col`` starting with ``group_prefix``, with at least
+    ``min_cells_per_group`` cells) becomes **one dose point** — different guides against
+    the
+    same target achieve different knockdown strengths, so the guide axis *is* a dose
+    axis
+    (the operating-point structure the degeneracy-breaker exploits). For each such
+    guide:
+
+    - ``dose`` = ``1 − mean(target_gene) / mean(target_gene | control)`` — the
+    *fractional
+      knockdown* of ``target_gene`` (0 = no knockdown, 1 = fully silenced);
+    - ``response`` = ``mean(signature) / mean(signature | control)`` — the readout
+    signature
+      (mean over ``signature`` genes) relative to control.
+
+    Depth-normalized (size-factor to the median library size), so per-cell depth is
+    divided
+    out — the same normalization as :func:`counts_to_activity`. Feed the result to
+    :func:`~nudge.inference.dose_response.fit_dose_response` with
+    ``direction="repress"``
+    when the signature *falls* with knockdown. Raises ``KeyError`` on missing
+    genes/columns.
+    """
+    obs = getattr(adata, "obs", None)
+    for col in (group_col, condition_col):
+        if obs is None or col not in obs:
+            raise KeyError(f"obs column {col!r} not found")
+    sig = list(signature)
+    norm, gene_ix = _norm_counts(adata, library_col)
+    missing = [g for g in [target_gene, *sig] if g not in gene_ix]
+    if missing:
+        raise KeyError(f"genes absent from var_names: {missing}")
+
+    tgt_col = gene_ix[target_gene]
+    sig_cols = [gene_ix[g] for g in sig]
+    cond = np.asarray(obs[condition_col].astype(str))
+    guide = np.asarray(obs[group_col].astype(str))
+
+    ctrl = cond == control_label
+    if not ctrl.any():
+        raise KeyError(f"no control cells (condition == {control_label!r})")
+    base_tgt = float(norm[ctrl, tgt_col].mean())
+    base_sig = float(norm[ctrl][:, sig_cols].mean(axis=1).mean())
+    base_tgt = base_tgt if base_tgt > 0 else 1.0
+    base_sig = base_sig if base_sig > 0 else 1.0
+
+    dose: list[float] = []
+    response: list[float] = []
+    for g in np.unique(guide):
+        if not g.startswith(group_prefix):
+            continue
+        m = guide == g
+        if int(m.sum()) < min_cells_per_group:
+            continue
+        dose.append(1.0 - float(norm[m, tgt_col].mean()) / base_tgt)
+        response.append(float(norm[m][:, sig_cols].mean(axis=1).mean()) / base_sig)
+    order = np.argsort(dose)
+    return np.asarray(dose)[order], np.asarray(response)[order]

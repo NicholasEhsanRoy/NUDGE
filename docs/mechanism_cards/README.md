@@ -38,3 +38,9 @@ New cards are added via the `new-mechanism` skill. See `_template.md` for the sk
 | [ras_switch_2node](ras_switch_2node.md) | motif | `NUDGE-MOTIF-002` | 2-node mutual-activation Ras switch |
 | [toggle](toggle.md) | motif | `NUDGE-MOTIF-003` | 2-node mutual-repression toggle |
 | [self_activation_switch](self_activation_switch.md) | motif | `NUDGE-MOTIF-004` | general 1-species positive-feedback switch |
+
+## Methods (attribution capabilities)
+
+| Card | Role | ID | Capability |
+|---|---|---|---|
+| [dose_response_attribution](dose_response_attribution.md) | attribution-method | `NUDGE-METHOD-001` | K/n/v_max attribution from a dose-response curve (switch / graded / abstain) |

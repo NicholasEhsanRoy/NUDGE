@@ -8,6 +8,17 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 ## [Unreleased]
 
 ### Added
+- **Dose-response attribution (`nudge.inference.dose_response`, `NUDGE-METHOD-001`):**
+  a second measurement of the same circuit — fits the *same* Hill primitive
+  (`hill_repression`/`hill_activation`) to a readout's response across a graded dose and
+  classifies **switch / graded / no-effect / unresolved** with the *same* BIC parsimony
+  discipline. Reports `n` as an **apparent population gain + bootstrap CI** (not molecular
+  cooperativity) and abstains when the doses don't span the inflection (new `NUDGE-LIM-007`).
+  Wired into the `nudge dose-response` CLI verb + the `dose_response` MCP tool + a Mechanism
+  Card; the fit hands `curve_fit` an exact JAX-autodiff Jacobian (the float32
+  finite-difference Jacobian froze `n` at its init — verified, regression-locked). Validated
+  on OCT4/NANOG (GSE283614): OCT4 resolves as a switch (n≈6.7, R²=0.99); NANOG correctly
+  abstains — see FINDINGS "Phase 4b".
 - **Phase 0 — skeleton:** `src/nudge` package, the two-layer circuit API
   (`Circuit`, `CircuitBuilder`, `CircuitSpec`), the `MechanismRegistry`, the
   attribution vocabulary (`MechanismClass` with first-class abstention classes),

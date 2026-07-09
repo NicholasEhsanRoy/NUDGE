@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from nudge.service import build_circuit, parse_markers
+from nudge.service import build_circuit, dose_response_file, parse_markers
 
 
 def test_build_circuit_topologies() -> None:
@@ -34,6 +34,24 @@ def test_parse_markers_explicit_pairs() -> None:
 def test_parse_markers_rejects_malformed() -> None:
     with pytest.raises(ValueError):
         parse_markers(build_circuit("1node"), ["no-equals-sign"])
+
+
+def test_dose_response_file_csv_wiring(tmp_path) -> None:
+    """The CSV path the CLI/MCP share: a switch curve round-trips to a 'switch' dict."""
+    from nudge.mechanisms.regulatory import hill_repression
+
+    dose = np.linspace(0.0, 1.0, 22)
+    resp = 0.2 + np.asarray(hill_repression(dose, 0.5, 6.0, 0.8))
+    resp = resp + np.random.default_rng(0).normal(0.0, 0.02, dose.shape)
+    csv = tmp_path / "curve.csv"
+    csv.write_text(
+        "dose,response\n"
+        + "\n".join(f"{d},{r}" for d, r in zip(dose, resp, strict=True))
+    )
+    out = dose_response_file(str(csv), n_boot=200)
+    assert out["call"] == "switch"
+    assert out["n_apparent_gain"] > 4.0
+    assert set(out) >= {"call", "reason", "ci_n", "spans_inflection", "direction"}
 
 
 @pytest.mark.slow

@@ -101,3 +101,117 @@ def report_to_dict(report: Any) -> dict[str, Any]:
         ),
         "skipped": dict(report.skipped),
     }
+
+
+# --------------------------------------------------------------------------- #
+# dose-response attribution (the same K/n/v_max vocabulary, a dose axis instead
+# of single cells — a second measurement of one circuit; see inference.dose_response)
+# --------------------------------------------------------------------------- #
+def _dose_points(
+    path: str,
+    *,
+    dose_col: str,
+    response_col: str,
+    target: str | None,
+    target_gene: str | None,
+    signature: list[str] | None,
+    group_col: str,
+    control: str,
+    min_cells: int,
+) -> Any:
+    """Read ``(dose, response)`` from a two-column CSV/TSV, or extract it from an
+    ``.h5ad`` knockdown screen (per-guide fractional knockdown → dose, signature →
+    response).
+    """
+    if path.endswith(".h5ad"):
+        if not (target and target_gene and signature):
+            raise ValueError(
+                ".h5ad input needs --target, --target-gene, and --signature"
+            )
+        import anndata as ad
+
+        from nudge.inference.bridge import knockdown_dose_response
+
+        adata = ad.read_h5ad(path, backed=None)
+        return knockdown_dose_response(
+            adata,
+            target_gene=target_gene,
+            signature=signature,
+            group_prefix=target,
+            group_col=group_col,
+            control_label=control,
+            min_cells_per_group=min_cells,
+        )
+    import pandas as pd
+
+    sep = "\t" if path.endswith((".tsv", ".txt")) else ","
+    df = pd.read_csv(path, sep=sep)
+    for col in (dose_col, response_col):
+        if col not in df.columns:
+            raise KeyError(f"column {col!r} not in {list(df.columns)}")
+    return df[dose_col].to_numpy(dtype=float), df[response_col].to_numpy(dtype=float)
+
+
+def dose_response_to_dict(res: Any) -> dict[str, Any]:
+    """Serialise a ``DoseResponseResult`` to a plain JSON-able dict (for CLI / MCP)."""
+    f = res.fit
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "n_apparent_gain": f.n,
+        "ci_n": list(f.ci_n),
+        "K_threshold": f.k_threshold,
+        "ci_K": list(f.ci_k),
+        "amp": f.amp,
+        "floor": f.floor,
+        "r2": f.r2,
+        "graded_r2": f.graded_r2,
+        "bic_switch": f.bic_switch,
+        "bic_graded": f.bic_graded,
+        "delta_bic_graded_minus_switch": f.bic_graded - f.bic_switch,
+        "n_points": f.n_points,
+        "n_boot": f.n_boot,
+        "dose_range": [f.dose_min, f.dose_max],
+        "spans_inflection": f.spans_inflection,
+        "direction": f.direction,
+    }
+
+
+def dose_response_file(
+    path: str,
+    *,
+    direction: str = "repress",
+    dose_col: str = "dose",
+    response_col: str = "response",
+    target: str | None = None,
+    target_gene: str | None = None,
+    signature: list[str] | None = None,
+    group_col: str = "guide",
+    control: str = "WT",
+    min_cells: int = 15,
+    n_boot: int = 500,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Fit + classify a dose-response curve from a CSV/TSV or an ``.h5ad`` screen.
+
+    Returns the verdict (``switch`` / ``graded`` / ``no-effect`` / ``unresolved``) with
+    the apparent gain ``n`` + CI and the honest abstention reason — never a forced call.
+    The reported ``n`` is an **apparent population gain**, not molecular cooperativity.
+    """
+    from nudge.inference.dose_response import attribute_dose_response
+
+    dose, response = _dose_points(
+        path,
+        dose_col=dose_col,
+        response_col=response_col,
+        target=target,
+        target_gene=target_gene,
+        signature=signature,
+        group_col=group_col,
+        control=control,
+        min_cells=min_cells,
+    )
+    res = attribute_dose_response(
+        dose, response, direction=direction, n_boot=n_boot, seed=seed
+    )
+    return dose_response_to_dict(res)

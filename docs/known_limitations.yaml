@@ -119,3 +119,34 @@ anomalies:
       at known doses, bypassing the circuit) is VALIDATED to break the degeneracy — it lets
       the fit reject "no switch" and conclude the ultrasensitivity is biological (see
       FINDINGS "NUDGE-LIM-006 mitigation"). Not yet wired into the release forward model.
+
+  - anomaly_id: NUDGE-LIM-007
+    title: A dose series that does not span the inflection makes gain unidentifiable
+    description: >-
+      In dose-response attribution (nudge.inference.dose_response), when a dose /
+      knockdown series does not push past the response inflection — the fitted threshold
+      K falls outside the observed dose range — a Hill fit sees only ONE ARM of the
+      sigmoid. On one arm, gain (n) and threshold (K) trade off: a graded n≈1 curve is
+      indistinguishable from a high-threshold switch whose transition lies just past the
+      last dose. A naive fitter reports a spuriously precise n (the classic
+      over-interpretation of an under-determined curve). NUDGE must abstain
+      (unresolved): the classifier requires the doses to span the inflection AND the
+      bootstrap n-CI to clear the switch/graded line, else it returns unresolved.
+      VERIFIED on real data — NANOG own-knockdown (GSE283614) reaches only ~75% KD, its
+      fitted K sits past the maximum dose, and its n-profile R² is flat within 0.075
+      across all n (n=1 to n=12 fit equally well); NUDGE correctly abstains where a
+      bounded Hill fit reports a misleadingly graded n≈2.2. Contrast OCT4 in the same
+      screen, whose inflection IS spanned (n≈6.7, R²=0.99) and resolves as a switch.
+      Guarded by the inflection-spanning + CI-straddle gates and the OCT4/NANOG
+      regression (tests/inference/test_dose_response.py).
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      An over-called gain on a truncated dose series would send a follow-up chasing a
+      switch the data cannot support — the same confident-wrong failure the project
+      exists to avoid, here from a human eyeballing a point estimate rather than the
+      model. The guarantee rests on the classifier's inflection-spanning check and the
+      bootstrap CI; too-loose thresholds would resurrect the false "graded" / "switch"
+      call. Also note the reported n is an APPARENT population gain (pseudobulk conflates
+      within-cell cooperativity with a spread of single-cell thresholds), not molecular
+      cooperativity — an independent honesty caveat shared with NUDGE-LIM-006.
