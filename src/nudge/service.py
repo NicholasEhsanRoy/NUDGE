@@ -215,3 +215,93 @@ def dose_response_file(
         dose, response, direction=direction, n_boot=n_boot, seed=seed
     )
     return dose_response_to_dict(res)
+
+
+# --------------------------------------------------------------------------- #
+# synergy / epistasis attribution (A / B / A+B as three operating points; the
+# additive Bliss null vs a non-additive combo — see inference.epistasis)
+# --------------------------------------------------------------------------- #
+def synergy_to_dict(res: Any) -> dict[str, Any]:
+    """Serialise an ``EpistasisResult`` to a plain JSON-able dict (for CLI / MCP)."""
+    f = res.fit
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "effect_a": f.effect_a,
+        "effect_b": f.effect_b,
+        "effect_ab": f.effect_ab,
+        "ci_a": list(f.ci_a),
+        "ci_b": list(f.ci_b),
+        "ci_ab": list(f.ci_ab),
+        "additive_pred": f.additive_pred,
+        "interaction": f.interaction,
+        "ci_interaction": list(f.ci_interaction),
+        "bic_additive": f.bic_additive,
+        "bic_free": f.bic_free,
+        "delta_bic_additive_minus_free": f.bic_additive - f.bic_free,
+        "n_cells": {
+            "control": f.n_control,
+            "A": f.n_a,
+            "B": f.n_b,
+            "A+B": f.n_ab,
+        },
+        "n_boot": f.n_boot,
+        "effect_space": f.effect_space,
+    }
+
+
+def synergy_file(
+    path: str,
+    *,
+    control_label: str = "control",
+    a_label: str,
+    b_label: str,
+    ab_label: str,
+    condition_col: str = "condition",
+    signature: list[str] | None = None,
+    library_col: str | None = "total_counts",
+    n_top_genes: int = 2000,
+    n_boot: int = 1000,
+    seed: int = 0,
+    bic_margin: float = 2.0,
+    min_cells: int = 30,
+    rel_width: float = 0.5,
+) -> dict[str, Any]:
+    """Classify a two-perturbation combination from an ``.h5ad`` — the CLI/MCP entry.
+
+    Reads the {control, A, B, A+B} conditions of ``path`` (by ``condition_col`` labels),
+    reduces each to a per-cell **effect score** (projection onto the additive axis fixed
+    by the singles, or a fixed ``signature``; both depth-normalized, log-fold-change
+    space), and returns the verdict (``additive`` / ``synergistic`` / ``buffering`` /
+    ``no-effect`` / ``unresolved``) with the interaction + its bootstrap CI and the
+    honest abstention reason — never a forced call.
+    """
+    import anndata as ad
+
+    from nudge.inference.bridge import combo_effect_scores
+    from nudge.inference.epistasis import attribute_synergy
+
+    adata = ad.read_h5ad(path, backed=None)
+    control, a, b, ab = combo_effect_scores(
+        adata,
+        control_label=control_label,
+        a_label=a_label,
+        b_label=b_label,
+        ab_label=ab_label,
+        condition_col=condition_col,
+        library_col=library_col,
+        signature=signature,
+        n_top_genes=n_top_genes,
+    )
+    res = attribute_synergy(
+        control,
+        a,
+        b,
+        ab,
+        n_boot=n_boot,
+        seed=seed,
+        bic_margin=bic_margin,
+        min_cells=min_cells,
+        rel_width=rel_width,
+    )
+    return synergy_to_dict(res)

@@ -29,6 +29,7 @@ from nudge.inference.lyapunov import OperatingPoint, calibrate_from_wt
 
 __all__ = [
     "adata_to_operating_point",
+    "combo_effect_scores",
     "counts_to_activity",
     "knockdown_dose_response",
 ]
@@ -197,3 +198,110 @@ def knockdown_dose_response(
         response.append(float(norm[m][:, sig_cols].mean(axis=1).mean()) / base_sig)
     order = np.argsort(dose)
     return np.asarray(dose)[order], np.asarray(response)[order]
+
+
+def _condition_mask(obs: Any, condition_col: str, label: str) -> np.ndarray:
+    return np.asarray(obs[condition_col].astype(str) == str(label))
+
+
+def combo_effect_scores(
+    adata: Any,
+    *,
+    control_label: str,
+    a_label: str,
+    b_label: str,
+    ab_label: str,
+    condition_col: str = "condition",
+    library_col: str | None = "total_counts",
+    signature: Sequence[str] | None = None,
+    n_top_genes: int = 2000,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Per-cell scalar **effect scores** for {control, A, B, A+B} of a combination.
+
+    Returns four 1-D arrays (one score per cell) ready for
+    :func:`~nudge.inference.epistasis.fit_synergy`. Counts are depth-normalized
+    (size-factor to the median library size, the same normalization as
+    :func:`counts_to_activity`) and ``log1p``-transformed, so effects live in
+    **log-fold-change space** and the additive null is Bliss independence.
+
+    Two scoring modes:
+
+    - **projection (default, ``signature=None``)** — the **direction-safe** data-driven
+      score. Compute the two single-arm mean shift vectors ``vA = mean(A) − mean(ctrl)``
+      and ``vB`` over the ``n_top_genes`` most variable genes, and project every cell
+      onto the **additive axis fixed by the singles** ``u = (vA + vB) / ‖vA + vB‖``.
+      Because ``u`` comes from the singles only (never the combo), a positive
+      interaction is unambiguously super-additive *along the axis the singles push* — no
+      circularity, no manual sign convention. The recommended Norman-style extractor.
+    - **signature (``signature=[genes…]``)** — the per-cell score is the mean
+      ``log1p``-normalized expression over the given ``signature`` genes (a
+      pre-specified phenotype readout). Simpler, but the caller must ensure the
+      signature is oriented so the two arms push the same way.
+
+    Raises ``KeyError`` if a condition label matches no cells or a signature gene is
+    absent from ``var_names``.
+    """
+    obs = getattr(adata, "obs", None)
+    if obs is None or condition_col not in obs:
+        raise KeyError(f"obs column {condition_col!r} not found")
+
+    # Subset to only the four conditions BEFORE densifying — a genome-wide screen is far
+    # too large to densify whole (111k×19k), and only these cells are ever scored.
+    full_masks = {}
+    for role, label in (
+        ("control", control_label),
+        ("a", a_label),
+        ("b", b_label),
+        ("ab", ab_label),
+    ):
+        m = _condition_mask(obs, condition_col, label)
+        if not m.any():
+            raise KeyError(f"no cells for {role} condition {label!r}")
+        full_masks[role] = m
+    keep_rows = np.zeros(len(obs), dtype=bool)
+    for m in full_masks.values():
+        keep_rows |= m
+    sub_adata = adata[keep_rows]
+    sub_labels = np.asarray(sub_adata.obs[condition_col].astype(str))
+    masks = {
+        "control": sub_labels == str(control_label),
+        "a": sub_labels == str(a_label),
+        "b": sub_labels == str(b_label),
+        "ab": sub_labels == str(ab_label),
+    }
+
+    norm, gene_ix = _norm_counts(sub_adata, library_col)
+    lognorm = np.log1p(norm)
+
+    if signature is not None:
+        sig = list(signature)
+        missing = [g for g in sig if g not in gene_ix]
+        if missing:
+            raise KeyError(f"signature genes absent from var_names: {missing}")
+        cols = [gene_ix[g] for g in sig]
+        score = lognorm[:, cols].mean(axis=1)
+    else:
+        # Direction from the singles only (control + A + B); the combo never defines it.
+        var = lognorm.var(axis=0)
+        n_keep = min(int(n_top_genes), lognorm.shape[1])
+        keep = np.argsort(var)[::-1][:n_keep]
+        sub = lognorm[:, keep]
+        m_ctrl = sub[masks["control"]].mean(axis=0)
+        v_a = sub[masks["a"]].mean(axis=0) - m_ctrl
+        v_b = sub[masks["b"]].mean(axis=0) - m_ctrl
+        u = v_a + v_b
+        nu = float(np.linalg.norm(u))
+        if nu <= 1e-12:
+            raise ValueError(
+                "the two single arms produce no net expression shift "
+                "(additive direction is undefined) — cannot score this combination"
+            )
+        u = u / nu
+        score = sub @ u
+
+    return (
+        np.asarray(score[masks["control"]], dtype=float),
+        np.asarray(score[masks["a"]], dtype=float),
+        np.asarray(score[masks["b"]], dtype=float),
+        np.asarray(score[masks["ab"]], dtype=float),
+    )

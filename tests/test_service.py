@@ -85,3 +85,50 @@ def test_attribute_file_end_to_end_is_honest(tmp_path) -> None:
     d = report_to_dict(report)
     assert isinstance(d, dict) and d["target"] == "SOS1"
     assert isinstance(np.asarray(list(report.n_cells.values())), np.ndarray)
+
+
+def test_synergy_file_h5ad_wiring(tmp_path) -> None:
+    """The .h5ad path the CLI/MCP share: a super-additive combo → a 'synergistic' dict.
+
+    Builds a tiny 4-condition AnnData whose signature gene is clearly super-additive in
+    A+B, writes it, and round-trips it through the shared ``synergy_file`` service.
+    """
+    import anndata as ad
+    import pandas as pd
+
+    from nudge.service import synergy_file
+
+    rng = np.random.default_rng(0)
+    genes = ["SIG", "G2", "G3", "G4", "G5"]
+    # per-condition mean count of the signature gene: A+B (~200) >> additive (~40).
+    levels = {"control": 10, "A": 25, "B": 25, "A+B": 200}
+    rows, labels = [], []
+    for cond, sig_mean in levels.items():
+        for _ in range(220):
+            row = rng.poisson([sig_mean, 30, 30, 30, 30]).astype(float)
+            rows.append(row)
+            labels.append(cond)
+    x = np.vstack(rows)
+    obs = pd.DataFrame(
+        {"condition": labels, "total_counts": x.sum(axis=1)},
+        index=[f"c{i}" for i in range(len(labels))],
+    )
+    adata = ad.AnnData(X=x, obs=obs, var=pd.DataFrame(index=genes))
+    path = tmp_path / "combo.h5ad"
+    adata.write_h5ad(path)
+
+    out = synergy_file(
+        str(path),
+        control_label="control",
+        a_label="A",
+        b_label="B",
+        ab_label="A+B",
+        signature=["SIG"],
+        n_boot=300,
+    )
+    assert out["call"] == "synergistic", out["reason"]
+    assert out["interaction"] > 0.0
+    assert set(out) >= {
+        "call", "reason", "interaction", "ci_interaction", "n_cells", "effect_space"
+    }
+    assert out["n_cells"]["A+B"] == 220

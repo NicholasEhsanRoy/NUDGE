@@ -19,12 +19,14 @@ def _unwrap(result):
     return structured
 
 
-def test_server_registers_the_four_tools() -> None:
+def test_server_registers_the_expected_tools() -> None:
     server = build_server()
     tools = asyncio.run(server.list_tools())
     names = {t.name for t in tools}
     assert names == {
         "attribute",
+        "dose_response",
+        "synergy",
         "explain_abstention",
         "list_mechanisms",
         "get_mechanism_card",

@@ -8,6 +8,21 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 ## [Unreleased]
 
 ### Added
+- **Synergy / epistasis attribution (`nudge.inference.epistasis`, `NUDGE-METHOD-003`):**
+  for a two-perturbation combination, calls the interaction **additive** / **synergistic**
+  / **buffering** — or abstains (**no-effect** / **unresolved**). Reads A, B and A+B as
+  three operating points against a shared control, reduces each to a scalar **effect**
+  (log-fold-change space, so the additive null is **Bliss independence**), and reports the
+  **interaction** `effect(A+B) − [effect(A)+effect(B)]` with a **bootstrap CI over cells**.
+  A combo **inherits its weakest single arm**: the classifier abstains when an arm is
+  underpowered or the CI is too wide, and a super-additive residual is **not** a hidden-node
+  claim (new `NUDGE-LIM-009`). The per-cell score projects onto the additive axis fixed by
+  the two single arms (direction-safe; `nudge.inference.bridge.combo_effect_scores`). Wired
+  into the `nudge synergy` CLI verb + the `synergy` MCP tool + a Mechanism Card. Validated
+  on Norman 2019 (GSE133344): CBL+CNN1 and CBL+UBASH3B → **synergistic** (the paper's
+  emergent erythroid synergy), DUSP9+ETS2 → **buffering** (DUSP9-dominant suppression of
+  ETS2), FOXA1+FOXA3 → **additive** — matching the paper's taxonomy (see FINDINGS
+  "Phase 4c"); demo in `notebooks/Norman_Synergy.ipynb`.
 - **Dose-response attribution (`nudge.inference.dose_response`, `NUDGE-METHOD-001`):**
   a second measurement of the same circuit — fits the *same* Hill primitive
   (`hill_repression`/`hill_activation`) to a readout's response across a graded dose and

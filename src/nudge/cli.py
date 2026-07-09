@@ -247,6 +247,76 @@ def dose_response(
 
 
 # --------------------------------------------------------------------------- #
+# synergy / epistasis
+# --------------------------------------------------------------------------- #
+@app.command()
+def synergy(
+    path: str = typer.Argument(..., help="an .h5ad with control/A/B/A+B conditions"),
+    a_label: str = typer.Option(..., "--a", help="the A condition label (obs)"),
+    b_label: str = typer.Option(..., "--b", help="the B condition label (obs)"),
+    ab_label: str = typer.Option(..., "--ab", help="the A+B combination label (obs)"),
+    control_label: str = typer.Option(
+        "control", "--control", help="the control/WT condition label"
+    ),
+    condition_col: str = typer.Option("condition", help="obs condition-label column"),
+    signature: str = typer.Option(
+        "", help="comma-separated signature genes; default projects onto the "
+        "additive axis fixed by the singles (recommended)"
+    ),
+    n_top_genes: int = typer.Option(2000, help="top-variable genes for the projection"),
+    n_boot: int = typer.Option(1000, help="bootstrap resamples for the interaction CI"),
+    seed: int = typer.Option(0, help="bootstrap RNG seed"),
+    min_cells: int = typer.Option(30, help="min cells/condition or the call abstains"),
+) -> None:
+    """Classify a two-perturbation combination — additive vs synergistic/buffering.
+
+    Reads {control, A, B, A+B} as three operating points against a shared control,
+    reduces each to a scalar **effect** (log-fold-change space; the additive null is
+    Bliss), and reports the **interaction** (``effect(A+B) − [effect(A)+effect(B)]``)
+    with a bootstrap CI. Calls ``additive`` / ``synergistic`` / ``buffering`` — or
+    abstains (``no-effect`` / ``unresolved``) when an arm is underpowered or the CI is
+    too wide. A super-additive residual is NOT a hidden-node claim (NUDGE-LIM-009).
+    """
+    from nudge.service import synergy_file
+
+    sig = [g.strip() for g in signature.split(",") if g.strip()]
+    out = synergy_file(
+        path,
+        control_label=control_label,
+        a_label=a_label,
+        b_label=b_label,
+        ab_label=ab_label,
+        condition_col=condition_col,
+        signature=sig or None,
+        n_top_genes=n_top_genes,
+        n_boot=n_boot,
+        seed=seed,
+        min_cells=min_cells,
+    )
+    nc = out["n_cells"]
+    ilo, ihi = out["ci_interaction"]
+    _echo(
+        f"synergy  A={a_label}  B={b_label}  A+B={ab_label}  "
+        f"(effect space: {out['effect_space']})"
+    )
+    _echo(
+        f"  cells: control={nc['control']:,}  A={nc['A']:,}  B={nc['B']:,}  "
+        f"A+B={nc['A+B']:,}"
+    )
+    _echo(
+        f"  effect A = {out['effect_a']:+.3f}   effect B = {out['effect_b']:+.3f}   "
+        f"additive pred = {out['additive_pred']:+.3f}"
+    )
+    _echo(
+        f"  observed A+B = {out['effect_ab']:+.3f}   "
+        f"interaction = {out['interaction']:+.3f}  95% CI [{ilo:+.3f}, {ihi:+.3f}]"
+    )
+    _echo(f"  ΔBIC(additive−free) = {out['delta_bic_additive_minus_free']:+.1f}")
+    _echo(f"\n  → CALL: {out['call'].upper()}")
+    _echo(f"     {out['reason']}")
+
+
+# --------------------------------------------------------------------------- #
 # mechanisms
 # --------------------------------------------------------------------------- #
 @app.command()
