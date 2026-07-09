@@ -225,6 +225,64 @@ class Circuit:
         saddles = [state for state, label in fps if label == "saddle-index1"]
         return saddles[0] if saddles else None
 
+    def mode_covariances(self) -> list[tuple[np.ndarray, np.ndarray]] | None:
+        """Per-stable-mode linear-noise covariance: ``[(mean, cov), ...]`` or ``None``.
+
+        For each **stable** fixed point (a lobe of the stationary distribution), the
+        local Gaussian covariance from the **linear-noise / Lyapunov equation**
+        ``A Σ + Σ Aᵀ + D = 0`` — ``A`` the drift Jacobian at the mode (autodiff), ``D =
+        diag(2·decay·μ)`` the birth-death diffusion (at a fixed point production =
+        decay·μ, so birth + death = 2·decay·μ). Returns ``[(mean (n,) float32, cov
+        (n,n) float32), ...]`` for the stable modes (mean-sorted, matching
+        ``fixed_points``); ``None`` when there are no fixed points (unsupported
+        topology / numerical failure).
+
+        These are the mode means + shapes the covariance-structured Gaussian-mixture
+        attribution loss fits — the channel that carries the gain/threshold/ceiling
+        information (the Fisher-information analysis; ``design/`` +
+        ``scripts/vv/fisher_sloppiness.py``). It is an LNA approximation: local to each
+        stable mode, and degrades near a bifurcation / at low copy number, so callers
+        should treat it as unreliable there. Never raises (``None`` on any failure).
+        """
+        fps = self.fixed_points()
+        if fps is None:
+            return None
+        out: list[tuple[np.ndarray, np.ndarray]] = []
+        for state, label in fps:
+            if label != "stable":
+                continue
+            try:
+                cov = _lna_covariance(self, state)
+            except Exception:
+                return None
+            out.append((np.asarray(state, dtype=np.float32), cov))
+        return out or None
+
+
+def _lna_covariance(circuit: Circuit, mu_np: np.ndarray) -> np.ndarray:
+    """Linear-noise covariance at fixed point ``mu``: solve ``A Σ + Σ Aᵀ + D = 0``.
+
+    ``A`` = the drift Jacobian at ``mu`` (``production − decay·x``, autodiff), ``D`` =
+    ``diag(2·decay·μ)`` the birth-death diffusion. A Kronecker solve of the Lyapunov
+    equation, under a **local x64 context** (the Jacobian is ill-conditioned near a
+    saddle-node), cast to float32. Symmetrized to kill round-off asymmetry.
+    """
+    n = circuit.n_species
+    with enable_x64():
+        base = circuit.base_params()
+        decay = base["species"]["decay"]
+
+        def drift(x: Array) -> Array:
+            return circuit.production(jnp.maximum(x, 0.0), base) - decay * x
+
+        mu = jnp.asarray(mu_np, dtype=jnp.float64)
+        jac = jax.jacfwd(drift)(mu)
+        diff = jnp.diag(2.0 * decay * jnp.clip(mu, 1e-9))
+        kron = jnp.kron(jnp.eye(n), jac) + jnp.kron(jac, jnp.eye(n))
+        sig = jnp.linalg.solve(kron, -diff.reshape(-1)).reshape(n, n)
+        sig = 0.5 * (sig + sig.T)
+    return np.asarray(sig, dtype=np.float32)
+
 
 def _self_activation_roots(
     *, basal: float, decay: float, K: float, n: float, vmax: float, n_grid: int = 2000

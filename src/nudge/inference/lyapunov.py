@@ -1,0 +1,268 @@
+"""Covariance-structured (linear-noise) Gaussian-mixture attribution — Lyapunov path.
+
+An **additive, guarded** fit path — it never replaces the energy-distance default. It
+fits a Gaussian mixture whose per-mode **means** are the circuit's stable fixed points
+and per-mode **covariances** are the linear-noise (Lyapunov) covariances
+``A Σ + Σ Aᵀ + D = 0`` — the channel the Fisher-information analysis showed carries the
+gain/threshold/ceiling
+signal that basin *weights* do not (``design/TOGGLE_ATTRIBUTION_RESEARCH.md``;
+``scripts/vv/fisher_sloppiness.py``).
+
+**Why it exists.** A single toggle snapshot confounds gain (Hill ``n``) with threshold
+(``K``) — the snapshot constrains only ``n·ln(K/B)`` — so no single-condition fit can
+separate them (M2 shows it *abstains*). The breaker is a **second operating point**
+(``fit_lyapunov_multi``, M3): a shared kinetic parameter fit jointly across conditions.
+
+**Honest bounds.** The LNA Gaussian is *local* to each stable mode and degrades near a
+bifurcation and at low copy number — precisely where a large perturbation pushes the
+system. Callers must guard on that (M4); here the forward model is deterministic-LNA.
+
+Differentiability mirrors the transition fit: the fixed-point *locations* come from the
+concrete finder each step (a ``stop_gradient`` seed), then the mode **means** are made
+differentiable by one implicit-function-theorem Newton step and the **covariances** by
+the Lyapunov solve — both differentiable in the free kinetics.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Any
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from jax import Array
+
+from nudge.core.circuit import Circuit, Params
+from nudge.inference.fit import FreeParam
+
+__all__ = [
+    "fit_lyapunov_parameters",
+    "sample_lna_mixture",
+]
+
+
+def _apply_free(base: Params, free: list[FreeParam], vals: Array) -> Params:
+    """Functionally override the ``free`` params in ``base`` with ``vals`` (autodiff).
+
+    ``base`` carries single (not per-cell) leaves — shape ``(n_species,)`` /
+    ``(n_edges,)``
+    — since the fixed points / covariances are a deterministic property of the circuit.
+    """
+    params: Params = {
+        "species": dict(base["species"]),
+        "edges": dict(base["edges"]),
+    }
+    for (scope, index, name), v in zip(free, vals, strict=True):
+        coll = "edges" if scope == "edge" else "species"
+        params[coll][name] = params[coll][name].at[index].set(v)
+    return params
+
+
+def _drift(circuit: Circuit, x: Array, params: Params) -> Array:
+    decay = params["species"]["decay"]
+    return circuit.production(jnp.maximum(x, 0.0), params) - decay * x
+
+
+def _mode_mean(circuit: Circuit, params: Params, root: Array) -> Array:
+    """IFT-differentiable fixed point: value ≈ root, grad = −A⁻¹ ∂f/∂θ."""
+    x0 = jax.lax.stop_gradient(root)
+    f = _drift(circuit, x0, params)
+    jac = jax.jacobian(lambda x: _drift(circuit, x, params))(x0)
+    return x0 - jnp.linalg.solve(jac, f)
+
+
+def _mode_cov(circuit: Circuit, params: Params, mu: Array) -> Array:
+    """LNA covariance at ``mu`` via the Lyapunov equation (Kronecker solve)."""
+    jac = jax.jacobian(lambda x: _drift(circuit, x, params))(mu)
+    decay = params["species"]["decay"]
+    diff = jnp.diag(2.0 * decay * jnp.clip(mu, 1e-9))
+    n = mu.shape[0]
+    kron = jnp.kron(jnp.eye(n), jac) + jnp.kron(jac, jnp.eye(n))
+    sig = jnp.linalg.solve(kron, -diff.reshape(-1)).reshape(n, n)
+    return 0.5 * (sig + sig.T)
+
+
+def _mvn_logpdf(y: Array, mean: Array, cov: Array) -> Array:
+    """Log N(y; mean, cov) for a batch ``y`` (n_cells, G) and one component."""
+    d = y - mean
+    sol = jnp.linalg.solve(cov, d.T).T
+    quad = jnp.sum(d * sol, axis=1)
+    _, logdet = jnp.linalg.slogdet(cov)
+    return -0.5 * (quad + logdet + mean.shape[0] * jnp.log(2 * jnp.pi))
+
+
+def _updated_circuit(
+    circuit: Circuit, free: list[FreeParam], vals: np.ndarray
+) -> Circuit:
+    species = list(circuit.species)
+    edges = list(circuit.edges)
+    for (scope, index, name), v in zip(free, vals, strict=True):
+        if scope == "edge":
+            edges[index] = replace(edges[index], **{name: float(v)})
+        else:
+            species[index] = replace(species[index], **{name: float(v)})
+    return Circuit(species, edges)
+
+
+def _stable_roots(
+    circuit: Circuit, free: list[FreeParam], vals: np.ndarray
+) -> list[np.ndarray]:
+    """Concrete stable fixed points of the current circuit (mean-sorted), or ``[]``."""
+    cur = _updated_circuit(circuit, free, vals)
+    fps = cur.fixed_points()
+    if fps is None:
+        return []
+    return [np.asarray(s, dtype=float) for s, lab in fps if lab == "stable"]
+
+
+def sample_lna_mixture(
+    circuit: Circuit,
+    n_cells: int,
+    key: Array,
+    *,
+    free: list[FreeParam] | None = None,
+    vals: np.ndarray | None = None,
+    scale: float = 1.0,
+    obs_sd: float = 0.05,
+    weights: np.ndarray | None = None,
+) -> np.ndarray:
+    """Sample cells from the LNA Gaussian mixture — the inverse-crime data for M1.
+
+    Each mode ``k`` contributes ``N(scale·μ_k, scale²·Σ_k + obs_sd²·I)`` with mixing
+    ``weights`` (default uniform). ``μ_k`` / ``Σ_k`` are the stable fixed points + their
+    Lyapunov covariances at the (optionally ``free``-overridden) kinetics.
+    """
+    free = free or []
+    v = np.asarray(vals if vals is not None else [], dtype=float)
+    roots = _stable_roots(circuit, free, v)
+    if not roots:
+        raise ValueError("no stable modes to sample from")
+    base = _apply_free(circuit.base_params(), free, jnp.asarray(v))
+    means, covs = [], []
+    for r in roots:
+        mu = _mode_mean(circuit, base, jnp.asarray(r))
+        cov = _mode_cov(circuit, base, mu)
+        means.append(scale * np.asarray(mu))
+        covs.append(scale**2 * np.asarray(cov) + obs_sd**2 * np.eye(len(r)))
+    k = len(roots)
+    w = np.full(k, 1.0 / k) if weights is None else np.asarray(weights)
+    key, ka = jax.random.split(key)
+    assign = np.asarray(jax.random.choice(ka, k, (n_cells,), p=jnp.asarray(w)))
+    out = np.empty((n_cells, circuit.n_species))
+    for i in range(n_cells):
+        key, ks = jax.random.split(key)
+        c = int(assign[i])
+        out[i] = np.asarray(
+            jax.random.multivariate_normal(
+                ks, jnp.asarray(means[c]), jnp.asarray(covs[c])
+            )
+        )
+    return out
+
+
+def fit_lyapunov_parameters(
+    data: np.ndarray,
+    circuit: Circuit,
+    free: list[FreeParam],
+    *,
+    k_modes: int = 2,
+    steps: int = 300,
+    learning_rate: float = 0.05,
+    scale_init: float = 1.0,
+    obs_sd_init: float = 0.1,
+    fit_scale: bool = True,
+    fit_obs: bool = True,
+    seed: int = 0,
+) -> tuple[dict[FreeParam, float], dict[str, Any], list[float]]:
+    """Fit ``free`` kinetics by MAXIMIZING the LNA Gaussian-mixture NLL of ``data``.
+
+    ``data`` is an ``(n_cells, n_species)`` activity-space array (identity readout). The
+    mixture has ``k_modes`` components (the circuit's stable fixed points, recomputed
+    step as ``stop_gradient`` seeds), with means ``scale·μ_k(θ)`` and covariances
+    ``scale²·Σ_k(θ) + obs_var·I``; mixture weights, ``scale`` and ``obs_var`` are fitted
+    nuisances. Returns ``(recovered kinetics, {weights, scale, obs_sd}, nll_history)``.
+
+    Requires the WT circuit to present exactly ``k_modes`` stable fixed points; if a
+    step finds a different count the previous roots are reused (a bifurcation).
+    """
+    y = jnp.asarray(np.asarray(data, dtype=np.float32))
+    n_free = len(free)
+    base = circuit.base_params()
+
+    log_kin0 = jnp.log(jnp.array([_param_value(circuit, f) for f in free]))
+    logits0 = jnp.zeros(k_modes)
+    theta = jnp.concatenate(
+        [log_kin0, logits0,
+         jnp.array([np.log(scale_init), np.log(obs_sd_init)], dtype=log_kin0.dtype)]
+    )
+
+    optimizer = optax.adam(learning_rate)
+    opt_state = optimizer.init(theta)
+    g_dim = circuit.n_species
+    eye = jnp.eye(g_dim)
+
+    def nll(vec: Array, roots: Array) -> Array:
+        roots = jax.lax.stop_gradient(roots)  # (k_modes, n_species) concrete seeds
+        vals = jnp.exp(vec[:n_free])
+        logits = vec[n_free : n_free + k_modes]
+        # A free global scale is degenerate with vmax (both scale the mode means); a
+        # free obs floor with the covariance. Freeze either via stop_gradient when the
+        # caller knows it (inverse-crime / a calibrated normalization).
+        s_raw = vec[n_free + k_modes]
+        o_raw = vec[n_free + k_modes + 1]
+        scale = jnp.exp(s_raw if fit_scale else jax.lax.stop_gradient(s_raw))
+        obs_var = jnp.exp(o_raw if fit_obs else jax.lax.stop_gradient(o_raw)) ** 2
+        params = _apply_free(base, free, vals)
+        log_w = jax.nn.log_softmax(logits)
+        comps = []
+        for k in range(k_modes):
+            mu = _mode_mean(circuit, params, roots[k])
+            cov = _mode_cov(circuit, params, mu)
+            mean_obs = scale * mu
+            cov_obs = scale**2 * cov + obs_var * eye
+            comps.append(log_w[k] + _mvn_logpdf(y, mean_obs, cov_obs))
+        ll = jax.scipy.special.logsumexp(jnp.stack(comps), axis=0)  # (n_cells,)
+        return -jnp.mean(ll)
+
+    @jax.jit
+    def step(
+        vec: Array, state: optax.OptState, roots: Array
+    ) -> tuple[Array, optax.OptState, Array]:
+        loss, grad = jax.value_and_grad(nll)(vec, roots)
+        updates, state = optimizer.update(grad, state)
+        return jnp.asarray(optax.apply_updates(vec, updates)), state, loss
+
+    def seeds(vec: Array) -> np.ndarray | None:
+        roots = _stable_roots(circuit, free, np.exp(np.asarray(vec[:n_free])))
+        roots = sorted(roots, key=lambda r: tuple(float(x) for x in r))
+        if len(roots) != k_modes:
+            return None
+        return np.stack(roots)
+
+    history: list[float] = []
+    last_roots = seeds(theta)
+    if last_roots is None:
+        raise ValueError(f"WT circuit must present {k_modes} stable modes to fit")
+    for _ in range(steps):
+        cur = seeds(theta)
+        if cur is not None:
+            last_roots = cur
+        theta, opt_state, loss = step(theta, opt_state, jnp.asarray(last_roots))
+        history.append(float(loss))
+
+    kin = np.exp(np.asarray(theta[:n_free]))
+    recovered = {f: float(v) for f, v in zip(free, kin, strict=True)}
+    aux = {
+        "weights": np.asarray(jax.nn.softmax(theta[n_free : n_free + k_modes])),
+        "scale": float(np.exp(theta[n_free + k_modes])),
+        "obs_sd": float(np.exp(theta[n_free + k_modes + 1])),
+    }
+    return recovered, aux, history
+
+
+def _param_value(circuit: Circuit, free: FreeParam) -> float:
+    scope, index, name = free
+    obj = circuit.edges[index] if scope == "edge" else circuit.species[index]
+    return float(getattr(obj, name))
