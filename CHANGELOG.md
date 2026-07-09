@@ -55,6 +55,27 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   mirroring the covariance-attribution ×16 Fisher result. **Additive / opt-in:** it computes
   over a caller-supplied loss and touches neither the energy-distance `fit()` default output
   contract nor the decoy battery. Tests: `tests/inference/test_uncertainty.py`.
+- **Toggle covariance attribution validated on INDEPENDENT stochastic data — the single
+  snapshot degenerates, the second operating point recovers (fail-safe).** The Lyapunov
+  covariance path (`nudge.inference.lyapunov`) was previously validated only under the
+  *inverse crime* (cells drawn from the LNA Gaussian the fitter maximizes). New measurement
+  on data from the **independent tau-leaping SSA** (`generate_toggle_perturbseq`), bridged to
+  activity as the real-data path does, at a depth that clears the `lna_reliable` guard
+  (3 seeds; `scripts/vv/toggle_lyapunov_ssa.py`): **(a) the single toggle snapshot
+  DEGENERATES** — the inverse-crime "ceiling is identifiable" result does *not* survive; on
+  the true stochastic distribution the free-vmax fit is the *worst* explanation of a true
+  ceiling, so a true ceiling mis-narrows to `gain_or_threshold` and gain/threshold abstain
+  (`unresolved`). It still only ever returns an abstention-class label (never a bare
+  gain/threshold/ceiling), so it is never confidently wrong — but a single snapshot is not a
+  positive on real data (docstring corrected). **(b) The two-operating-point breaker
+  RECOVERS** — a shared-parameter joint fit across two basal-B operating points resolves
+  **threshold** (3/3) and **ceiling** (3/3) correctly and honestly **abstains on gain**
+  (residual gain⇄threshold confound), with **0 confident-wrong calls** across all mechanisms
+  × seeds. This is the first evidence the covariance-difference signature separates mechanism
+  on **non-inverse-crime** toggle ground truth — a guarded positive for the multi-condition
+  path plus a documented single-snapshot negative. Additive/opt-in, **not** wired into
+  `fit()`; NUDGE's production toggle path still abstains (`test_toggle_nd_safety`). Locked by
+  `tests/inference/test_lyapunov_toggle_ssa.py`; FINDINGS "independent-SSA validation".
 
 - **Bifurcation / tipping-point proximity — the "robustness dial" (`nudge.inference.bifurcation`,
   `NUDGE-METHOD-006`):** answers a new question — **how close is a bistable switch to

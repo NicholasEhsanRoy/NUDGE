@@ -436,10 +436,17 @@ def attribute_lyapunov_single(
     Runs the three restricted fits (free-``n`` / ``K`` / ``vmax`` of ``target_edge``,
     from WT) with ``scale`` / ``obs_sd`` **pinned** (from ``calibrate_from_wt`` if not
     given — a ceiling must not hide in the depth nuisance), then ``_decide_lyapunov``.
-    The honest single-snapshot outcome: **identify ceiling; abstain (gain_or_threshold)
-    between gain and threshold** — the measured degeneracy. The *breaker* is a second
-    operating point (M3, ``fit_lyapunov_multi``). Correct-or-abstain, never confidently
-    wrong.
+    Under the *inverse crime* (cells sampled from the LNA mixture) the single-snapshot
+    outcome is **identify ceiling; abstain (gain_or_threshold) between gain and
+    threshold**. On **independent stochastic (SSA) toggle data that identification does
+    NOT survive**: the free-vmax fit becomes the *worst* explanation of a true ceiling,
+    so a true ceiling mis-narrows to ``gain_or_threshold`` and gain/threshold abstain
+    (``unresolved``) — a *single toggle snapshot degenerates* (FINDINGS "independent-SSA
+    validation"). It still only ever returns an abstention-class label from one snapshot
+    (``unresolved`` / ``gain_or_threshold``), never a bare gain/threshold/ceiling, so
+    never confidently wrong; but **do not read a positive from one operating point on
+    real data**. The *breaker* is a second operating point (M3, ``fit_lyapunov_multi``),
+    which recovers threshold + ceiling on independent SSA and abstains on gain.
     """
     if scale is None or obs_sd is None:
         if wt_data is None:

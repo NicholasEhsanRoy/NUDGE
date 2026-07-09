@@ -175,8 +175,23 @@ That whole chain is now a working, **additive/opt-in/guarded** capability
 identifies ceiling and **abstains between gain/threshold** (M2); the multi-operating-point
 breaker `fit_lyapunov_multi`/`attribute_lyapunov_multi` that **resolves** gain vs threshold
 (M3; NLL gap 0.005→0.098, ×20); and `lna_reliable`, which **abstains loudly** at low depth /
-near a bifurcation / when monostable (M4). Validated on LNA/synthetic ground truth, not yet
-real data. Full write-up: `scripts/vv/FINDINGS.md` "Covariance attribution".
+near a bifurcation / when monostable (M4). Full write-up: `scripts/vv/FINDINGS.md`
+"Covariance attribution".
+
+**Broken past the inverse crime (measured on INDEPENDENT SSA).** M1–M3 above were inverse-crime
+(cells drawn from the LNA Gaussian the fitter maximizes). New: fed data from the *independent*
+tau-leaping SSA (`generate_toggle_perturbseq`, bridged to activity, at a guard-clearing depth;
+`scripts/vv/toggle_lyapunov_ssa.py`, 3 seeds). **The single snapshot DEGENERATES** — the
+inverse-crime "ceiling is identifiable" claim does not survive (the free-vmax fit becomes the
+*worst* fit of a true ceiling → mis-narrows to `gain_or_threshold`; gain/threshold abstain),
+though it still only ever returns an abstention-class label (never a bare mechanism, so never
+confidently wrong). **The second operating point RECOVERS** — the two-basal-B joint fit resolves
+**threshold (3/3)** and **ceiling (3/3)** and honestly **abstains on gain**, with **0
+confident-wrong calls**. First evidence the covariance signature separates mechanism on
+non-inverse-crime toggle ground truth: a guarded positive for the multi-condition breaker + a
+documented single-snapshot negative. Still additive/opt-in, not in `fit()`; production toggle
+path still abstains. Locked by `tests/inference/test_lyapunov_toggle_ssa.py`; FINDINGS
+"independent-SSA validation".
 
 **Phase 4 — real-data validation (infra landed; run pending the download).** The pipeline to
 point this at the Gladstone CD4+ T-cell screen is built and green on synthetic ground truth:

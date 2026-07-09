@@ -153,6 +153,13 @@ cell pipelines normalize by sequencing depth (the `scale⇄vmax` degeneracy → 
 a WT/housekeeping reference). A full arc — literature → first-principles measurement that
 overturned it → shipped, guarded capability — validated on synthetic ground truth and staged
 for the real multi-target Gladstone screen (`FINDINGS.md`, "Covariance attribution").
+Most recently we pushed *past the inverse crime*: fed the covariance attribution data from the
+**independent** tau-leaping SSA (not a Gaussian the fitter drew), the **single toggle snapshot
+degenerates** (a true ceiling mis-narrows — an honest negative we document rather than paper
+over), while the **two-operating-point breaker recovers threshold and ceiling (3/3 each) and
+abstains on gain, with 0 confident-wrong calls** — the fail-safe holding on genuinely
+independent stochastic data (`FINDINGS.md`, "independent-SSA validation";
+`tests/inference/test_lyapunov_toggle_ssa.py`).
 
 ## 4. Demo (30%) — reproducible science you can run
 

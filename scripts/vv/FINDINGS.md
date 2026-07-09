@@ -502,6 +502,56 @@ toggle's OFF state is where the Gaussian is weakest. Kept opt-in until proven on
 T-cell screen. Full slow lane (5 decoys + LIM-006 + Tier-0.5 + saddle) stays green — the path
 is additive. Tests: `tests/inference/test_lyapunov.py`, `tests/core/test_mode_covariance.py`.
 
+## Independent-SSA validation — the single snapshot degenerates, the second operating point recovers (fail-safe)
+
+M1–M3 above were measured on **inverse-crime** data (`sample_lna_mixture` — cells drawn from
+the very LNA Gaussian the fitter maximizes). The honest question is whether the covariance
+signature survives the **inverse-crime break**: data from the *independent* tau-leaping SSA
+(`generate_toggle_perturbseq`, the true stochastic stationary distribution), bridged to
+activity exactly as the real-data path does (`inference.bridge.counts_to_activity`), at a
+depth that clears the `lna_reliable` guard (a deeper readout, `Readout.identity(2, scale=15)`
+→ scale·peak ≈ 30 ≥ 15; at the generator's default scale=5 NUDGE correctly abstains before
+any fit). Mild single-edge perturbations (gain n:4→2.4, threshold K:1→1.6, ceiling
+vmax:2→1.2) keep both attractors populated. 3 seeds each. Reproduce:
+`scripts/vv/toggle_lyapunov_ssa.py` (raw numbers in `toggle_lyapunov_ssa_RESULTS.txt`).
+
+**Result — a documented single-snapshot NEGATIVE and a guarded two-point POSITIVE, 0 wrong:**
+
+| true mechanism | single snapshot (basal 0.05) | two operating points (basal 0.05 + 0.30) |
+|---|---|---|
+| **gain** (n) | `unresolved` (3/3) | `unresolved` (3/3) — honest abstention |
+| **threshold** (K) | `unresolved` (3/3) | **`threshold`** (3/3 ✓, wins by 0.34–0.35 nats) |
+| **ceiling** (vmax) | `gain_or_threshold` (3/3) | **`ceiling`** (3/3 ✓, wins by 0.16–0.20 nats) |
+
+1. **The single snapshot DEGENERATES on independent SSA.** The inverse-crime claim that
+   "ceiling is the identifiable one" does **not** survive: on the true stochastic
+   distribution the free-vmax fit becomes the **worst** explanation of a true ceiling (NLL
+   6.47 / 6.47 / **6.55**), so the single-condition call mis-narrows a true ceiling to
+   `gain_or_threshold` — a label that *excludes the correct answer*. Gain and threshold
+   abstain (`unresolved`; vmax marginally best but inside the 0.05 ceiling margin). Crucially
+   the single path **never emits a bare gain/threshold/ceiling** — only abstention-class
+   labels — so it is never *confidently* wrong; but a single toggle snapshot must not be read
+   as a positive. Why it breaks: the homoscedastic LNA Gaussian is misspecified against the
+   NB/discrete/skewed true stationary distribution, and — as the deep-research synthesis
+   warned — the Gaussian is weakest exactly where a perturbation pushes a lobe.
+2. **The second operating point RECOVERS threshold + ceiling, and abstains on gain — 0
+   confident-wrong.** The shared-parameter joint fit across two basal-B operating points
+   resolves **threshold** and **ceiling** correctly at *every* seed (clear margins), and
+   honestly **abstains on gain** (the residual gain⇄threshold confound the second point does
+   not break *for gain* on this independent data — the inverse-crime M3 gain-resolution did
+   not survive, threshold/ceiling did). Recovery **6/9 correct, 3/9 honest abstention (all
+   gain), 0/9 wrong** — the non-negotiable fail-safe holds on genuinely independent
+   stochastic data.
+
+**Disposition (honest).** This is the first evidence the covariance signature separates
+mechanism on **non-inverse-crime** toggle data: a **guarded positive** for the
+two-operating-point breaker (recover-or-abstain, never wrong) plus a **documented negative**
+for the single snapshot (it degenerates — inverse-crime-validated only). It remains
+additive/opt-in and is **not** wired into `fit()`; NUDGE's production toggle path still
+abstains (`tests/verification/test_toggle_nd_safety.py`). Still synthetic (SSA, not real
+data), still depth-gated. Locked by `tests/inference/test_lyapunov_toggle_ssa.py`
+(multi recover-or-abstain + single never-confidently-wrong).
+
 # Phase 4 — real data (Gladstone CD4+ T-cell screen): NUDGE abstains, honestly
 
 NUDGE ran end-to-end on the **real** genome-scale CRISPRi Perturb-seq screen

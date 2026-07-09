@@ -1,0 +1,24 @@
+
+=== single-condition (independent SSA, basal=0.05) ===
+      true seed               label  NLLs (n / K / vmax)
+      gain    0          unresolved  7.524  7.525  7.505
+      gain    1          unresolved  7.552  7.553  7.536
+      gain    2          unresolved  7.559  7.560  7.547
+ threshold    0          unresolved  6.825  6.830  6.788
+ threshold    1          unresolved  6.879  6.885  6.841
+ threshold    2          unresolved  6.876  6.883  6.838
+   ceiling    0   gain_or_threshold  6.440  6.441  6.471
+   ceiling    1   gain_or_threshold  6.468  6.473  6.588
+   ceiling    2   gain_or_threshold  6.497  6.499  6.591
+
+=== two operating points (basal-B 0.05 + 0.30) ===
+      true seed           label  NLLs (gain/threshold/ceiling)
+      gain    0      unresolved  7.690  7.691  7.692
+      gain    1      unresolved  7.714  7.716  7.719
+      gain    2      unresolved  7.707  7.709  7.712
+ threshold    0       threshold  7.054  6.705  7.049
+ threshold    1       threshold  7.081  6.741  7.077
+ threshold    2       threshold  7.078  6.732  7.073
+   ceiling    0         ceiling  6.844  6.866  6.642
+   ceiling    1         ceiling  6.849  6.863  6.688
+   ceiling    2         ceiling  6.870  6.893  6.703
