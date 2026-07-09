@@ -158,15 +158,26 @@ optimizer step) is now a **jitted, per-topology-cached kernel** (`_nd_kernel`; k
 traced arg) — byte-identical roots, ~1 ms/call (**333×** per-call; a toggle transition fit
 **26 s → 4.1 s**). A warm-start/trust-region attempt was tried and *rejected* (tracing, not
 solve-count, was the cost → ~1× + a reproducibility divergence; jit subsumes it).
-**The toggle attribution signature is now researched** (`design/TOGGLE_ATTRIBUTION_RESEARCH.md`,
-from an adversarially-verified `/deep-research`): `w_trans`/occupancy was the wrong channel
-(mixture weights are set by a non-gradient quasi-potential, not the saddle); the gain signal
-lives in each lobe's **covariance** (linear-noise Lyapunov `AΣ+ΣAᵀ+D=0`) + separatrix
-orientation, with the residual **gain⇄ceiling** degeneracy broken by the *same* **constitutive
-control** already validated for LIM-006. Researched, not built. Full write-up:
-`scripts/vv/FINDINGS.md` "N-D saddle". **Other open follow-ons:** a Fisher-information/sloppiness
-analysis of the LNA mixture (to *measure* the gain⇄ceiling confound before building the loss);
-sweep the 1-D gain-factor/τ calibration.
+**The toggle attribution signature is researched + BUILT.**
+(`design/TOGGLE_ATTRIBUTION_RESEARCH.md`): `w_trans`/occupancy was the wrong channel (mixture
+weights are set by a non-gradient quasi-potential, not the saddle); the gain signal lives in
+each lobe's **covariance** (linear-noise Lyapunov `AΣ+ΣAᵀ+D=0`). A Fisher-information analysis
+*measured* the degeneracy — it is **gain⇄threshold** (not gain⇄ceiling; ceiling is the *most*
+identifiable), analytically `n·ln(K/B)`, robust to extrinsic noise
+(`scripts/vv/fisher_sloppiness.py`, `fisher_extrinsic.py`) — and the breaker is a **second
+operating point**, not a constitutive control.
+
+That whole chain is now a working, **additive/opt-in/guarded** capability
+(`nudge.inference.lyapunov`, milestones M0–M4; **not** wired into `fit()`, for risk isolation):
+`Circuit.mode_covariances` (M0); the differentiable LNA Gaussian-mixture fit
+`fit_lyapunov_parameters` (M1; found the `scale⇄vmax` = sequencing-depth degeneracy →
+`calibrate_from_wt` pins depth from WT); single-condition `attribute_lyapunov_single` that
+identifies ceiling and **abstains between gain/threshold** (M2); the multi-operating-point
+breaker `fit_lyapunov_multi`/`attribute_lyapunov_multi` that **resolves** gain vs threshold
+(M3; NLL gap 0.005→0.098, ×20); and `lna_reliable`, which **abstains loudly** at low depth /
+near a bifurcation / when monostable (M4). Validated on LNA/synthetic ground truth, not yet
+real data. Full write-up: `scripts/vv/FINDINGS.md` "Covariance attribution". **Next:** the
+Gladstone T-cell screen supplies the real multiple operating points this needs.
 
 The original plan is retained below for reference.
 

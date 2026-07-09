@@ -47,8 +47,20 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 - **Toggle attribution — researched (`design/TOGGLE_ATTRIBUTION_RESEARCH.md`):** an
   adversarially-verified `/deep-research` synthesis of why the saddle gain gate does not
   extend to a toggle (mixture weights are non-gradient-quasi-potential-set, not saddle-set)
-  and the signature that would (linear-noise Lyapunov mode covariance + separatrix
-  orientation; gain⇄ceiling broken by a constitutive control). Researched, not built.
+  and the signature that would (linear-noise Lyapunov mode covariance). A Fisher-information
+  analysis (`scripts/vv/fisher_sloppiness.py`, `fisher_extrinsic.py`) then *measured* the
+  degeneracy: it is **gain⇄threshold** (analytically `n·ln(K/B)`; ceiling is the most
+  identifiable), robust to extrinsic noise, broken by a **second operating point**.
+- **Covariance attribution — the Lyapunov path (`nudge.inference.lyapunov`):** an additive,
+  opt-in, guarded capability (never wired into `fit()`). `Circuit.mode_covariances`
+  (per-stable-mode linear-noise covariance); `fit_lyapunov_parameters` (differentiable LNA
+  Gaussian-mixture fit); `calibrate_from_wt` (pins the scale⇄vmax sequencing-depth nuisance
+  from WT); `attribute_lyapunov_single` (identifies ceiling, abstains between gain/threshold);
+  `OperatingPoint` + `fit_lyapunov_multi` / `attribute_lyapunov_multi` (a shared-parameter
+  joint fit across operating points that **resolves** gain vs threshold — the breaker); and
+  `lna_reliable` (abstains loudly at low depth / near a bifurcation / when monostable).
+  Validated on LNA/synthetic ground truth; not yet real data. See FINDINGS "Covariance
+  attribution".
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`); PEP 561.
 

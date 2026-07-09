@@ -458,3 +458,46 @@ loading on the sloppy eigenvector stays −0.01 → stays identifiable), and the
 floor actually *rises* ×1.5 at σ=0.3 (a heteroscedastic `dΣ_ext/dθ` information channel).
 Independently reproduced (subagent → main-loop). **Caveat:** this assumes σ is *known*; a
 misspecified/unknown extrinsic σ is the untested next check.
+
+# Covariance attribution (the Lyapunov path): the confound reproduced, and broken
+
+The Fisher-information analysis said the gain/threshold/ceiling signal lives in each toggle
+lobe's **covariance**, not its weight. We built that attribution — a **covariance-structured
+linear-noise Gaussian-mixture fit** (`nudge.inference.lyapunov`) — as an **additive, opt-in,
+guarded** capability that never touches the energy-distance `fit()` default (risk isolation:
+the decoy battery cannot be routed into the LNA). Milestones, each green:
+
+- **M0 — the primitive** (`Circuit.mode_covariances`): per-stable-mode covariance from the
+  Lyapunov equation `AΣ+ΣAᵀ+D=0` (autodiff Jacobian; `D=diag(2·decay·μ)`), reproducing the
+  FIM reference *exactly* (toggle lobe cov diag `[0.199, 2.055]`, corr `−0.324`).
+- **M1 — the differentiable fit** (`fit_lyapunov_parameters`): mode means made
+  differentiable by an implicit-function-theorem step, covariances by the Lyapunov solve; an
+  optax loop maximizes the mixture likelihood. Inverse-crime recovery: gain 1%, ceiling 3.7%,
+  threshold 12%. **Design finding:** a free global `scale` is degenerate with `vmax` (both
+  scale the mode means) — the LNA rediscovery of why single-cell pipelines **normalize by
+  sequencing depth**. So depth is pinned from an *independent* reference (`calibrate_from_wt`):
+  calibrating it from a perturbed condition's own magnitude would hide a ceiling change in
+  depth and make ceiling unidentifiable.
+- **M2 — the confound, honestly** (`attribute_lyapunov_single`): restricted free-K/n/vmax
+  fits. Measured (3 seeds): true gain → NLL(gain)≈NLL(threshold), ceiling +0.05 worse; true
+  ceiling → NLL(ceiling) best by +0.20. So it **identifies ceiling and abstains
+  (`gain_or_threshold`) between gain and threshold** — never a bare gain/threshold from one
+  snapshot. Correct-or-abstain, never confidently wrong.
+- **M3 — the breaker** (`fit_lyapunov_multi` / `attribute_lyapunov_multi`): a **shared**
+  kinetic value fit jointly across operating points (a clean `OperatingPoint` list API). A
+  true gain perturbation observed at basal-B 0.05 + 0.30: the gain↔threshold NLL gap widens
+  **0.005 → 0.098 (~20×)** — mirroring the FIM's ×16 — and attribution flips from *abstain*
+  to **`gain` (resolved)**. Both gain and threshold truth resolve correctly. The synthetic
+  operating point (a basal shift) is the stand-in for a **second Gladstone target**, which is
+  exactly why the multi-target screen supplies the operating points the FIM proved we need.
+- **M4 — the fail-safe guard** (`lna_reliable`): the LNA Gaussian is local and second-order,
+  so attribution **abstains loudly** where it breaks — **low sequencing depth**
+  (`scale·peak < 15` counts), **near a saddle-node** (a lobe's covariance swells, CV > 1.5),
+  or **monostability** (<2 stable modes). Verified to pass a well-sampled bistable toggle and
+  trip in each regime; wired into both attribution entry points before any fit runs.
+
+**Honest bounds.** Validated on LNA/synthetic ground truth (inverse-crime + independent
+operating points), *not yet on real data*; the low-count guard exists precisely because a
+toggle's OFF state is where the Gaussian is weakest. Kept opt-in until proven on the Gladstone
+T-cell screen. Full slow lane (5 decoys + LIM-006 + Tier-0.5 + saddle) stays green — the path
+is additive. Tests: `tests/inference/test_lyapunov.py`, `tests/core/test_mode_covariance.py`.

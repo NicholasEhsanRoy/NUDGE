@@ -20,6 +20,7 @@ from nudge.inference.lyapunov import (
     attribute_lyapunov_single,
     calibrate_from_wt,
     fit_lyapunov_parameters,
+    lna_reliable,
     sample_lna_mixture,
 )
 
@@ -43,6 +44,36 @@ def test_sample_lna_mixture_structure() -> None:
     # each cell is closer to one lobe than the other → clear bimodality in A - B
     diff = data[:, 0] - data[:, 1]
     assert (diff > 5).any() and (diff < -5).any()
+
+
+def test_lna_reliable_flags_breakdown() -> None:
+    # The guard passes a well-sampled bistable toggle and abstains in each regime where
+    # the LNA Gaussian breaks: low depth, near a bifurcation, and monostability.
+    assert lna_reliable(_toggle(), 20.0)[0] is True
+    ok, why = lna_reliable(_toggle(), 3.0)  # low sequencing depth
+    assert ok is False and "depth" in why
+    ok, why = lna_reliable(_toggle_n(2.2), 20.0)  # covariance swelling toward the merge
+    assert ok is False and "bifurcation" in why
+    ok, why = lna_reliable(_toggle_n(1.5), 20.0)  # collapsed to one mode
+    assert ok is False and "bistable" in why
+
+
+def test_attribute_abstains_when_lna_unreliable() -> None:
+    # With the guard tripped (here: low depth), attribution abstains BEFORE fitting — a
+    # loud abstention, never a call from an untrustworthy Gaussian. (Fast: no fit runs.)
+    data = np.zeros((10, 2), dtype=np.float32)
+    label, nlls = attribute_lyapunov_single(data, _toggle(), scale=3.0, obs_sd=0.5)
+    assert label == "unresolved" and nlls == {}
+
+
+def _toggle_n(n: float) -> Circuit:
+    return Circuit(
+        [SpeciesDef("A", basal=0.05, decay=1.0), SpeciesDef("B", basal=0.05, decay=1)],
+        [
+            EdgeDef(1, 0, "hill_repression", K=1.0, n=n, vmax=2.0),
+            EdgeDef(0, 1, "hill_repression", K=1.0, n=n, vmax=2.0),
+        ],
+    )
 
 
 def test_fit_requires_bistable() -> None:

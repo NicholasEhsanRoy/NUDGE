@@ -128,6 +128,26 @@ toggle — so we **kept the gate guarded to one species and shipped abstention**
 fail-safe on toggles, `test_toggle_nd_safety.py`) rather than ship an unreliable N-D gate.
 Reusable infrastructure + an honest boundary, not overreach (`FINDINGS.md`, "N-D saddle").
 
+**Then we came back and solved it — theory → measurement → working attribution.** The NO-GO
+left a real question: *how does mechanism manifest in a toggle snapshot?* A cross-disciplinary
+`/deep-research` (non-equilibrium stat-mech) said the signal lives in each lobe's **covariance**,
+not its basin weight. We turned that into a **measured** result: a Fisher-information /
+sloppiness analysis (`scripts/vv/fisher_sloppiness.py`) proved — and *corrected the
+literature's medium-confidence guess* — that the confounded pair is **gain⇄threshold** (not
+gain⇄ceiling), analytically because a snapshot constrains only `n·ln(K/B)`; it is robust to
+extrinsic noise; and the degeneracy-breaker is a **second operating point** (FIM stiffening
+×16). Then we **built** the covariance-structured attribution (`nudge.inference.lyapunov`, an
+additive/opt-in/guarded path, milestones M0–M4): a differentiable linear-noise Gaussian-mixture
+fit whose single-condition call *abstains between gain and threshold* (reproducing the confound
+honestly) and whose **multi-operating-point joint fit resolves it** — the gain↔threshold NLL
+gap widens 0.005→0.098 (~20×, matching the FIM) and attribution flips from *abstain* to the
+correct mechanism. It **abstains loudly** where the Gaussian breaks (low counts, near a
+bifurcation, monostability; `lna_reliable`). Along the way the fit *rediscovered* why single-
+cell pipelines normalize by sequencing depth (the `scale⇄vmax` degeneracy → depth pinned from
+a WT/housekeeping reference). A full arc — literature → first-principles measurement that
+overturned it → shipped, guarded capability — validated on synthetic ground truth and staged
+for the real multi-target Gladstone screen (`FINDINGS.md`, "Covariance attribution").
+
 ## 4. Demo (30%) — reproducible science you can run
 
 The demo today is **reproducible, trustworthy findings** rather than a polished UI —

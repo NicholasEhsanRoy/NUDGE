@@ -44,6 +44,7 @@ __all__ = [
     "calibrate_scale",
     "fit_lyapunov_multi",
     "fit_lyapunov_parameters",
+    "lna_reliable",
     "sample_lna_mixture",
 ]
 
@@ -352,6 +353,44 @@ def calibrate_from_wt(
     return scale, float(aux["obs_sd"])
 
 
+def lna_reliable(
+    circuit: Circuit,
+    scale: float,
+    *,
+    min_count: float = 15.0,
+    cv_max: float = 1.5,
+) -> tuple[bool, str]:
+    """Is the linear-noise Gaussian mixture trustworthy for ``circuit`` at this depth?
+
+    The LNA Gaussian is *local and second-order*: it breaks down (a) **near a
+    saddle-node bifurcation**, where a mode's covariance diverges (the Lyapunov solution
+    Jacobian eigenvalue → 0) and the lobe stops being Gaussian, and (b) **at low copy
+    number**, where the discrete/skewed count distribution is not Gaussian. Attribution
+    must **abstain loudly** in both regimes rather than trust a bad Gaussian. Returns
+    ``(ok, reason)``:
+
+    - **not bistable** — fewer than two stable modes (nothing to attribute);
+    - **near bifurcation** — a mode's coefficient of variation
+      ``√λ_max(Σ)/‖μ‖ > cv_max`` (the covariance has swollen toward the merging modes);
+    - **insufficient depth** — the brightest state's expected counts ``scale·max|μ| <
+      min_count`` (the Gaussian relaxation of the counts is untrustworthy).
+    """
+    modes = circuit.mode_covariances()
+    if modes is None or len(modes) < 2:
+        return False, "not bistable (need ≥2 stable modes)"
+    peak = max(float(np.max(np.abs(mean))) for mean, _ in modes)
+    if scale * peak < min_count:
+        sp = scale * peak
+        return False, f"insufficient depth (scale·peak={sp:.1f} < {min_count})"
+    for mean, cov in modes:
+        cv = float(np.sqrt(np.max(np.linalg.eigvalsh(cov)))) / (
+            float(np.linalg.norm(mean)) + 1e-9
+        )
+        if cv > cv_max:
+            return False, f"near bifurcation (mode CV={cv:.2f} > {cv_max})"
+    return True, "ok"
+
+
 def _decide_lyapunov(
     nlls: dict[str, float], ceiling_margin: float, confound_gap: float
 ) -> str:
@@ -400,6 +439,9 @@ def attribute_lyapunov_single(
         if wt_data is None:
             raise ValueError("provide wt_data, or both scale and obs_sd")
         scale, obs_sd = calibrate_from_wt(wt_data, circuit, k_modes=k_modes, seed=seed)
+    ok, _reason = lna_reliable(circuit, scale)
+    if not ok:
+        return "unresolved", {}  # abstain loudly: the LNA Gaussian is untrustworthy
     nlls: dict[str, float] = {}
     for param, _name in _ATTR_PARAMS:
         _rec, _aux, hist = fit_lyapunov_parameters(
@@ -516,6 +558,10 @@ def attribute_lyapunov_multi(
         points_by_mech if isinstance(points_by_mech, list)
         else next(iter(points_by_mech.values()))
     )
+    # Abstain loudly unless EVERY operating point's LNA is trustworthy (one bad Gaussian
+    # corrupts the shared-parameter joint fit).
+    if not all(lna_reliable(p.circuit, p.scale)[0] for p in points):
+        return "unresolved", {}
     nlls: dict[str, float] = {}
     for param, name in _ATTR_PARAMS:
         _val, combined, _hist = fit_lyapunov_multi(
