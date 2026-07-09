@@ -98,6 +98,30 @@ def _subsample_by_condition(
     return np.sort(np.concatenate(parts)) if parts else np.asarray([], dtype=np.int64)
 
 
+def _coalesced_gather(dset: Any, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """Gather ``⋃ [start, end)`` from a 1-D h5py dataset via **contiguous slice reads**.
+
+    The selected element ranges (one per selected row/col) are sorted, so adjacent
+    selections form contiguous spans; we merge them into maximal ``[lo, hi)`` runs and
+    read each run as a **slice** ``dset[lo:hi]`` — an h5py hyperslab read that is far
+    cheaper than the equivalent fancy-index ``dset[flat]`` (which pays a large
+    per-element selection overhead), while still reading only the selected bytes (so it
+    stays O(selection), not O(file) — critical at 150 GB). The concatenation preserves
+    the original range order, so the result is **byte-identical** to ``dset[flat]``.
+    Measured 4.6–5.4× faster uncompressed, 1.7–1.9× gzip (``scripts/perf/``).
+    """
+    if starts.size == 0:
+        return np.zeros(0, dset.dtype)
+    # A new run begins wherever a range does not start exactly where the last one ended.
+    new_run = np.empty(starts.size, dtype=bool)
+    new_run[0] = True
+    new_run[1:] = starts[1:] != ends[:-1]
+    run_lo = starts[new_run]
+    run_hi = ends[np.concatenate([new_run[1:], [True]])]
+    parts = [dset[int(lo):int(hi)] for lo, hi in zip(run_lo, run_hi, strict=True)]
+    return np.concatenate(parts)
+
+
 def _read_h5ad_rows(
     path: str, row_idx: np.ndarray, col_idx: np.ndarray
 ) -> np.ndarray:
@@ -106,8 +130,10 @@ def _read_h5ad_rows(
     For CSR, ``indptr[i]:indptr[i+1]`` is exactly row ``i``'s nonzero byte-range;
     we read the tiny ``indptr``, gather only the selected rows' ranges via h5py, build a
     small CSR, then subset columns in memory — so a 150 GB matrix costs ~the size of the
-    selection, not the whole file. (CSC handled symmetrically by gathering the column
-    panel; dense handled by fancy indexing.) Returns a dense float array.
+    selection, not the whole file. The gather coalesces adjacent selected rows into
+    contiguous slice reads (:func:`_coalesced_gather`) rather than one big fancy index —
+    same bytes, same output, several-fold faster. (CSC handled symmetrically by
+    gathering the column panel; dense handled by fancy indexing.) Returns a dense array.
     """
     import h5py
     import scipy.sparse as sp
@@ -122,16 +148,8 @@ def _read_h5ad_rows(
             indptr = node["indptr"][:]
             axis_idx = row_idx if enc == "csr_matrix" else col_idx
             starts, ends = indptr[axis_idx], indptr[axis_idx + 1]
-            flat = (
-                np.concatenate(
-                    [np.arange(s, e) for s, e in zip(starts, ends, strict=True)]
-                )
-                if len(axis_idx)
-                else np.zeros(0, dtype=np.int64)
-            )
-            data = node["data"][flat] if flat.size else np.zeros(0, node["data"].dtype)
-            idt = node["indices"].dtype
-            inds = node["indices"][flat] if flat.size else np.zeros(0, idt)
+            data = _coalesced_gather(node["data"], starts, ends)
+            inds = _coalesced_gather(node["indices"], starts, ends)
             nip = np.concatenate([[0], np.cumsum(ends - starts)]).astype(np.int64)
             if enc == "csr_matrix":
                 mat = sp.csr_matrix((data, inds, nip), shape=(len(row_idx), shape[1]))
