@@ -316,17 +316,25 @@ def _neomorphic_note(fit: EpistasisFit, threshold: float) -> str:
 
     Returns ``""`` unless the off-axis diagnostic is available *and* its
     ``neomorphic_ratio`` clears ``threshold`` (off-axis residual ≥ ``threshold`` × the
-    on-axis interaction). Never changes the call — it only flags that the scalar may
-    **under-count** an emergent/off-axis component (NUDGE-LIM-009).
+    on-axis interaction). Never changes the call — it flags that the scalar may
+    **under-count** an off-axis component, and — load-bearing honesty — that a large
+    off-axis residual is EQUALLY consistent with a batch / ambient / technical artifact
+    aligned with the A+B condition, so it must NOT be read as corroboration of a real
+    interaction (NUDGE-LIM-009 red-team Hole 2: an additive ambient offset on A+B fakes
+    synergy *and* raises this ratio — the flag would misdirect toward "emergent biology"
+    on a boring batch artifact). It is a caveat, never a discovery or a hidden-node claim.
     """
     ratio = fit.neomorphic_ratio
     off = fit.off_axis_residual
     if ratio is None or off is None or not np.isfinite(ratio) or ratio < threshold:
         return ""
     return (
-        f" | possible neomorphic / off-axis emergent structure — the scalar "
-        f"interaction may UNDER-count it (off-axis ‖ = {off:.2f} ≈ {ratio:.1f}× the "
-        f"on-axis interaction); see NUDGE-LIM-009"
+        f" | large off-axis residual (‖ = {off:.2f} ≈ {ratio:.1f}× the on-axis "
+        f"interaction): the scalar may UNDER-count an emergent (possible-neomorphic) "
+        f"component — BUT an off-axis residual is EQUALLY consistent with a batch / "
+        f"ambient / technical artifact aligned with the A+B condition (NUDGE-LIM-009), "
+        f"is NOT by itself evidence of emergent biology, and must not be read as "
+        f"corroboration of the interaction"
     )
 
 

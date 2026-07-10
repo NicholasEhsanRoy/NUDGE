@@ -206,7 +206,34 @@ anomalies:
       between the A+B condition and the singles can masquerade as an interaction; NUDGE
       depth-normalizes (size-factor to the median) and abstains on an underpowered or
       wide-CI combo, but cannot separate a confound that is perfectly aligned with the
-      A+B condition. (3) EFFECT-SPACE DEPENDENCE + SCALAR-PROJECTION BOUND: the additive
+      A+B condition. SHARPENED (red-team Hole 2): the residual confound need NOT be a depth
+      difference. Size-factor normalization corrects only a MULTIPLICATIVE library-size
+      difference, so an ADDITIVE, gene-level offset on the signature genes in the A+B
+      condition (ambient-RNA contamination, or a batch-specific expression shift
+      concentrated in the A+B 10x lane) SURVIVES normalization and produces a CONFIDENT
+      'synergistic' call — tight interaction CI entirely > 0, ΔBIC ~10^3 — tripping NO
+      abstention gate (the epistasis classifier sees only the projected scalar; the entire
+      depth/batch defense is the upstream size-factor step this confound bypasses). VERIFIED
+      end-to-end through the shipped bridge (combo_effect_scores -> attribute_synergy), 4/4
+      seeds (scripts/redteam/epistasis_pipeline_confound.py). Worse, the off-axis
+      neomorphic_ratio MIS-FIRES on such an artifact (1.4-1.8 >= 1.0), so the possible-
+      neomorphic under-count warning would misdirect a user toward "a hidden regulator /
+      emergent state" on a boring batch artifact — the exact over-read NUDGE-LIM-015 exists
+      to prevent. Two responses (SHIPPED): the neomorphic note wording now states an off-axis
+      residual is EQUALLY consistent with a batch/ambient/technical artifact and must not be
+      read as corroboration of the interaction (never emergent-biology evidence); and the
+      confound is LOCKED as a strict-xfail decoy (tests/inference/test_epistasis.py::
+      test_additive_ambient_offset_on_ab_must_not_fake_synergy) so it cannot silently change.
+      NO runtime gate is added: an additive offset perfectly aligned with the A+B condition
+      is, on count data with no orthogonal batch covariate or biologically-inert control-gene
+      set, INDISTINGUISHABLE at the pseudobulk scalar from real super-additivity (real
+      synergy also raises A+B's counts), so any gate sensitive enough to catch it would
+      false-abstain on genuine synergy — it is unsafe to build. Mitigation DIRECTION (not
+      applied, for the user/experimentalist): supply a batch/lane covariate ORTHOGONAL to the
+      A+B condition, or an inert control-gene panel, so a technical axis tracking A+B can be
+      detected; without one this confound is fundamentally unresolvable (as this clause
+      already conceded — the red-team VERIFIES the concession is a confident wrong call, not a
+      graceful abstention). (3) EFFECT-SPACE DEPENDENCE + SCALAR-PROJECTION BOUND: the additive
       null depends on the chosen effect space (NUDGE uses log-fold-change, i.e. Bliss
       independence; raw-count or HSA nulls would move the baseline), and the reported
       interaction is a SCALAR measured along the additive axis fixed by the two singles —
@@ -227,18 +254,26 @@ anomalies:
       FOXA1+FOXA3 reads additive; and the off-axis diagnostic flags the three synergy
       pairs (off-axis >= on-axis) while leaving the clean on-axis DUSP9+ETS2 masking
       unflagged (ratio 0.62). Guarded by the min-cells + CI-width abstention gates, the BIC
-      parsimony gate, and the Norman lock-in (tests/inference/test_epistasis.py). Inherits
-      the affine-readout bound NUDGE-LIM-006.
-    severity: minor
-    safety_relevance: context_dependent
+      parsimony gate, the Norman lock-in, and the additive-ambient-offset strict-xfail decoy
+      (tests/inference/test_epistasis.py). Inherits the affine-readout bound NUDGE-LIM-006.
+    severity: major
+    safety_relevance: safety_relevant
     safety_relevance_rationale: >-
       A false synergy call would send a combination-therapy or genetic-interaction
       follow-up chasing an emergent mechanism the data does not support — the confident-
-      wrong failure the project exists to avoid. The guarantee rests on the weakest-arm
-      inheritance rule (abstain when either single arm is underpowered), the CI-width and
-      BIC gates, and honest reporting of the effect space; too-loose thresholds, an
-      unmodelled depth/batch confound aligned with the A+B condition, or reading the
-      scalar residual as a hidden-node claim would each resurrect a false positive.
+      wrong failure the project exists to avoid, now VERIFIED reachable (red-team Hole 2: an
+      additive ambient offset aligned with A+B yields a confident 'synergistic', 4/4 seeds),
+      which is why this is graded major / safety_relevant rather than a mere abstention gap.
+      The guarantee rests on the weakest-arm inheritance rule (abstain when either single arm
+      is underpowered), the CI-width and BIC gates, and honest reporting of the effect space
+      — but these gates CANNOT see a batch/ambient axis aligned with A+B (that is upstream
+      normalization's job, and size-factor normalization is blind to a non-multiplicative
+      offset). The residual risk is therefore documented, the confound LOCKED as a strict-
+      xfail decoy, and the off-axis neomorphic flag re-worded so it can never be read as
+      corroboration; separating a perfectly-aligned additive confound requires an orthogonal
+      batch covariate or an inert control-gene set the caller must supply. Too-loose
+      thresholds, or reading the scalar residual as a hidden-node claim, would each resurrect
+      a false positive.
 
   - anomaly_id: NUDGE-LIM-012
     title: The bifurcation-proximity dial is a one-sided lower bound near the fold
@@ -479,3 +514,58 @@ anomalies:
       orthogonal to a global scale — remains trustworthy. Removing the per-context
       calibration or the depth-ratio abstention, or loosening it, would resurrect the false
       positive.
+
+  - anomaly_id: NUDGE-LIM-017
+    title: A near-fold operating point corrupts the multi-point joint fit — lna_reliable
+      is necessary but NOT sufficient
+    description: >-
+      In multi-operating-point covariance attribution (nudge.inference.lyapunov.
+      attribute_lyapunov_multi, the M3 breaker), NUDGE fits ONE shared kinetic value
+      jointly across several operating points of the same perturbed condition — the second
+      point is what separates gain from threshold (the confound one snapshot cannot break).
+      The load-bearing assumption is that each operating point contributes TRUSTWORTHY
+      linear-noise moments to the shared-parameter joint fit. The only per-point trust gate
+      was lna_reliable, which trips solely on lobe OVERLAP (a mode's √λmax(Σ) exceeding the
+      inter-mode separation — the variance-collapse ENDGAME) or on insufficient depth. A
+      point that is merely APPROACHING the saddle-node fold — its Lyapunov covariance
+      already swelling and its moments already biased, but its lobes NOT yet merged — passes
+      lna_reliable rated "ok", and because the fit shares one kinetic across all points, that
+      single corrupted point POISONS the joint argmin. Adding operating points is assumed to
+      only ever HELP (break the confound); instead a third point that is individually
+      "reliable" but near-fold ACTIVELY FLIPS a correct 2-point call to a wrong one. VERIFIED
+      (red-team Hole 1): a TRUE ceiling knockdown (vmax×0.6) on a mutual-repression toggle
+      seen at basals {0.05, 0.30, 0.60} — the 0.60 point near the fold but passing
+      lna_reliable — flips the correct 2-point 'ceiling' to a CONFIDENT WRONG 'threshold'
+      (gap ≈0.24–0.30 ≫ resolve_margin 0.03, 2/2 seeds;
+      scripts/redteam/nearfold_thirdpoint_hole.py). MITIGATION (SHIPPED): the joint fit is
+      now additionally gated on the bifurcation-proximity DIAL (nudge.inference.bifurcation.
+      bifurcation_proximity — its two DETERMINISTIC, depth-independent channels, critical
+      slowing and basin collapse, which lna_reliable ignores). attribute_lyapunov_multi
+      ABSTAINS (unresolved) unless EVERY operating point is well-buffered
+      (proximity ≤ well_buffered_margin, default 0.15) away from the fold. Because
+      proximity = max(deterministic, lobe) ≥ the lobe channel alone, this can only ADD
+      abstentions (fail-safe), never manufacture a call. Measured separation: the clean
+      breaker points sit at proximity 0.039 (basal 0.05) / 0.112 (basal 0.30), the corrupting
+      near-fold point at 0.231 — the margin clears the validated 2-point positive control by
+      ~34% and catches the near-fold point by ~35%. The "second, WELL-BUFFERED operating
+      point" caveat is now an ENFORCED precondition, not prose. Guarded by the near-fold
+      decoy + the multi-point recover-or-abstain tests
+      (tests/inference/test_lyapunov_toggle_ssa.py). Related: NUDGE-LIM-012 (the LNA breaks
+      down AT the fold — this is the same physics one step earlier, on the APPROACH).
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is a genuine confident-wrong hole (not merely an abstention gap): before the fix,
+      the multi-point breaker — the very machinery that is supposed to be MORE trustworthy
+      than a single snapshot because it fuses evidence — could be driven to a confident,
+      specific, WRONG mechanism by an operating point that every existing gate rated
+      reliable. That is exactly the failure the project exists to avoid, and it is
+      especially dangerous because a joint multi-point fit LOOKS more authoritative than one
+      snapshot, and because the tempting experimental instinct ("add another operating point
+      to be sure") is what triggers it. The guarantee now rests on the well-buffered
+      precondition: the deterministic proximity channels see the approach to the fold BEFORE
+      the noise lobes merge, so a near-fold point forces an honest abstention. Removing the
+      proximity gate, or loosening well_buffered_margin toward the fold, would resurrect the
+      false positive; the margin is deliberately far below the near-fold threshold
+      (NEAR_FOLD 0.55) because a corrupting point bites well before the switch is "near-fold"
+      in its own right.

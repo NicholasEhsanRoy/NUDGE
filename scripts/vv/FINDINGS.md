@@ -1036,15 +1036,27 @@ in the latent dynamics, not the readout projection). The only observable that co
 Verdict: **keep abstaining on toggle-gain**; it is a genuine identifiability wall, consistent with the
 FIM prediction and the `TOGGLE_ATTRIBUTION_RESEARCH.md` LNA-breaks-at-the-fold caveat.
 
-**Honest side-finding — a near-fold operating point can HURT.** At `pts=3` the probe's aggressive 3rd
-point (basal 0.60, which clears `lna_reliable` only *at the edge*: lobe std ≈ 1.94 vs separation ≈
-2.24) corrupted the shared-parameter joint fit and flipped a true **ceiling → confident `threshold`**
-(gap 0.30). So "add a second operating point" (the validated breaker is basal 0.05 + 0.30, 0 wrong)
-means *a clean, well-buffered* point — not "pile on as many as possible." A cheap safeguard: weight
-each operating point by its `lna_reliable` margin, or require a minimum buffer, so a marginal near-fold
-point cannot dominate. (This does not affect the gain verdict — gain abstains at 1/2/3 points.) The
-shipped production toggle path still abstains (`tests/verification/test_toggle_nd_safety.py`); this is
-a probe-surfaced caveat on the opt-in multi-point breaker, not a shipped fail-safe break.
+**Honest side-finding → red-team Hole 1 → SHIPPED FIX (`NUDGE-LIM-017`).** At `pts=3` the probe's
+aggressive 3rd point (basal 0.60, which clears `lna_reliable` only *at the edge*: lobe std ≈ 1.94 vs
+separation ≈ 2.24) corrupted the shared-parameter joint fit and flipped a true **ceiling → confident
+`threshold`** (gap 0.30). The fail-safe red-team (`design/FAILSAFE_REDTEAM.md`, Hole 1) FORMALIZED this
+into a confident-wrong reproduction (`scripts/redteam/nearfold_thirdpoint_hole.py`, 2/2 seeds, gap
+0.24–0.30 ≫ `resolve_margin` 0.03) — a genuine break: the multi-point breaker, *more* trusted than one
+snapshot, driven to a confident WRONG mechanism by a point every existing gate rated reliable. **Root
+cause:** `lna_reliable` trips only at lobe *overlap* / low depth, so a point still *approaching* the
+fold — its Lyapunov moments already biased, lobes not yet merged — passes it and poisons the joint
+argmin. **Fix (shipped):** `attribute_lyapunov_multi` now gates on the bifurcation-proximity DIAL (its
+two *deterministic* channels — critical slowing + basin collapse — which `lna_reliable` ignores) and
+ABSTAINS unless every operating point is well-buffered (`proximity ≤ well_buffered_margin`, default
+0.15). Measured separation: the validated breaker points sit at proximity 0.039 (basal 0.05) / 0.112
+(0.30), the corrupting point at 0.231 — the margin clears the positive control by ~34% and catches the
+near-fold point by ~35%. `proximity = max(det, lobe) ≥ det`, so the gate can only ADD abstentions
+(fail-safe). After the fix the repro reports **0 confident-wrong holes** (pts=2 → `ceiling`, pts=3 →
+`unresolved`); the "add a *well-buffered* second operating point" caveat is now an ENFORCED
+precondition, not prose. Regression-locked by the near-fold decoy
+(`tests/inference/test_lyapunov_toggle_ssa.py::test_near_fold_third_point_abstains_not_confident_wrong`,
+`@pytest.mark.decoy`) + the multi-point recover-or-abstain tests. (Unrelated to the gain verdict —
+gain abstains at 1/2/3 points regardless.)
 
 # Phase 4i — hidden-node ABSTENTION: a legible differential, never a positive claim
 

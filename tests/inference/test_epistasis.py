@@ -35,6 +35,73 @@ def _cells(mean: float, *, n: int = 400, sd: float = 1.0, seed: int = 0) -> np.n
     return np.random.default_rng(seed).normal(mean, sd, size=n)
 
 
+def _ambient_confound_adata(seed: int) -> object:
+    """A combo whose A+B is genuinely Bliss-ADDITIVE but carries an ADDITIVE (non-
+    multiplicative) ambient count offset on the signature genes in the A+B condition ONLY —
+    a batch/ambient shift concentrated in the A+B 10x lane. Ported from the red-team repro
+    ``scripts/redteam/epistasis_pipeline_confound.py`` (Hole 2). Size-factor normalization
+    corrects a *multiplicative* library-size difference, so this *additive* offset survives
+    it and reads as super-additive.
+    """
+    import anndata as ad
+    import pandas as pd
+
+    n_genes, n_sig, n_cells = 200, 20, 700
+    rng = np.random.default_rng(seed)
+
+    def counts(sig_rate: float, base_rate: float, batch: float) -> np.ndarray:
+        lam = np.full((n_cells, n_genes), base_rate, dtype=float)
+        lam[:, :n_sig] = sig_rate + batch
+        return rng.poisson(lam).astype(np.float32)
+
+    base, d = 1.0, 1.5
+    blocks = {
+        "control": counts(base, base, 0.0),
+        "A": counts(base + d, base, 0.0),
+        "B": counts(base + d, base, 0.0),
+        "AB": counts(base + 2 * d, base, 3.0),  # additive sum + ambient offset (confound)
+    }
+    X = np.vstack(list(blocks.values()))
+    cond = np.concatenate([[k] * n_cells for k in blocks])
+    obs = pd.DataFrame({"condition": cond})
+    obs["total_counts"] = X.sum(axis=1)
+    var = pd.DataFrame(index=[f"g{i}" for i in range(n_genes)])
+    return ad.AnnData(X=X, obs=obs, var=var)
+
+
+@pytest.mark.decoy
+@pytest.mark.xfail(
+    strict=True,
+    reason="NUDGE-LIM-009 (red-team Hole 2): an ADDITIVE ambient offset on the A+B "
+    "signature genes is invisible to size-factor (multiplicative) normalization and, being "
+    "perfectly aligned with the A+B condition with no orthogonal batch covariate, cannot be "
+    "separated from real super-additivity — NUDGE currently returns a confident "
+    "'synergistic'. LOCKED here as strict-xfail so the known hole cannot silently change; "
+    "when an orthogonal-covariate / inert-gene guard fixes it this XPASSes and prompts "
+    "removing the mark.",
+)
+def test_additive_ambient_offset_on_ab_must_not_fake_synergy() -> None:
+    # The fail-safe DESIRED behavior: truth is ADDITIVE (A+B is the Bliss sum of A and B),
+    # so NUDGE must NOT emit a confident synergistic/buffering call. It currently does — the
+    # confound bypasses the ONLY defense (size-factor normalization) — so this assertion
+    # fails today (strict-xfail). The off-axis neomorphic flag ALSO mis-fires here (it reads
+    # as "emergent structure"); its wording now carries the batch-artifact caveat so it can
+    # never be read as corroboration (see _neomorphic_note / NUDGE-LIM-009).
+    from nudge.inference.bridge import combo_effect_scores
+
+    adata = _ambient_confound_adata(seed=0)
+    ctrl, a, b, ab, geom = combo_effect_scores(
+        adata,
+        control_label="control",
+        a_label="A",
+        b_label="B",
+        ab_label="AB",
+        return_geometry=True,
+    )
+    res = attribute_synergy(ctrl, a, b, ab, n_boot=400, seed=0, geometry=geom)
+    assert res.call not in ("synergistic", "buffering"), res.reason
+
+
 def test_additive_combo_reads_additive() -> None:
     """A+B lands exactly on effect(A)+effect(B): the additive null holds."""
     ctrl = _cells(0.0, seed=1)

@@ -9,6 +9,32 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team + two hardenings (`design/FAILSAFE_REDTEAM.md`).** An adversarial
+  pass tried to make each capability emit a *confident, specific, WRONG* call past its
+  abstention gates. It found **2 verified holes** (3 attacks HELD); both are now closed or
+  locked:
+  - **Hole 1 → FIXED (`NUDGE-LIM-017`).** A near-fold 3rd operating point corrupted the
+    multi-point covariance breaker (`attribute_lyapunov_multi`) and flipped a true
+    **ceiling → confident `threshold`** (gap ≈0.24–0.30 ≫ `resolve_margin`), because the
+    only per-point trust gate (`lna_reliable`) trips solely at lobe *overlap* while a point
+    *approaching* the fold is already biasing the joint fit. Fixed by gating the joint fit
+    on the **bifurcation-proximity dial** (its two deterministic channels `lna_reliable`
+    ignores): it abstains unless every operating point is well-buffered
+    (`proximity ≤ well_buffered_margin`, default `0.15`) — the "well-buffered second point"
+    caveat becomes an enforced precondition. `proximity = max(det, lobe) ≥ det`, so the gate
+    can only *add* abstentions. Regression-locked by a near-fold decoy
+    (`tests/inference/test_lyapunov_toggle_ssa.py`). Repro now reports 0 confident-wrong.
+  - **Hole 2 → LOCKED + sharpened (`NUDGE-LIM-009`).** An **additive** (ambient / batch)
+    count offset on the A+B signature genes is invisible to size-factor (multiplicative)
+    normalization and — perfectly aligned with A+B, with no orthogonal batch covariate —
+    fakes a confident `synergistic` (ΔBIC ~10³, 4/4 seeds), *and* mis-fires the off-axis
+    neomorphic flag toward "emergent biology". No runtime gate is added (any gate sensitive
+    enough would false-abstain on real synergy — unsafe); instead the confound is **locked
+    as a strict-xfail decoy**, `NUDGE-LIM-009` is **sharpened** (additive-offset failure
+    mode + the required orthogonal-covariate mitigation, bumped to *major / safety_relevant*),
+    and the neomorphic note is **re-worded** so an off-axis residual can never be read as
+    corroboration of the interaction (it is equally consistent with a batch artifact).
+
 - **Comparative / differential attribution — WHICH knob differs between two contexts
   (`nudge.inference.differential`, `NUDGE-METHOD-010`, `NUDGE-LIM-016`):** given the SAME
   perturbation in two **contexts** (a drug-resistant vs sensitive line; donor A vs B;

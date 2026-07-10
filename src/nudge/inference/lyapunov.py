@@ -34,6 +34,7 @@ import optax
 from jax import Array
 
 from nudge.core.circuit import Circuit, Params
+from nudge.inference.bifurcation import bifurcation_proximity
 from nudge.inference.fit import FreeParam
 
 __all__ = [
@@ -557,6 +558,7 @@ def attribute_lyapunov_multi(
     steps: int = 200,
     resolve_margin: float = 0.03,
     confound_gap: float = 0.05,
+    well_buffered_margin: float = 0.15,
     seed: int = 0,
 ) -> tuple[str, dict[str, float]]:
     """Multi-operating-point attribution → ``(label, joint NLLs)``: breaks the confound.
@@ -566,6 +568,20 @@ def attribute_lyapunov_multi(
     (:func:`fit_lyapunov_multi`); the combined NLLs are compared. With ≥2 points
     gain and threshold separate, so — unlike the single-condition call — it can return a
     bare ``gain``/``threshold``/``ceiling`` when one clearly wins, else ``unresolved``.
+
+    **Well-buffered precondition (NUDGE-LIM-017).** The breaker assumes each operating
+    point contributes *trustworthy* moments to the shared-parameter joint fit. But
+    :func:`lna_reliable` — the only per-point trust gate — trips solely at lobe *overlap*
+    (or low depth); a point still *approaching* the saddle-node fold, whose Lyapunov
+    covariance is already biased but whose noise lobes have not yet merged, passes it and
+    **poisons the joint argmin** (a near-fold 3rd toggle point flips a true ``ceiling`` to
+    a confident ``threshold`` — ``scripts/redteam/nearfold_thirdpoint_hole.py``). So the
+    fit is additionally gated on the bifurcation-proximity **dial**
+    (:func:`~nudge.inference.bifurcation.bifurcation_proximity`, whose two *deterministic*,
+    depth-independent channels ``lna_reliable`` ignores): it **abstains** unless every
+    operating point is well-buffered (``proximity ≤ well_buffered_margin``) away from the
+    fold. The "second, *well-buffered* operating point" caveat becomes an enforced
+    precondition, not prose.
     """
     points = (
         points_by_mech if isinstance(points_by_mech, list)
@@ -575,6 +591,16 @@ def attribute_lyapunov_multi(
     # corrupts the shared-parameter joint fit).
     if not all(lna_reliable(p.circuit, p.scale)[0] for p in points):
         return "unresolved", {}
+    # NUDGE-LIM-017: lna_reliable trips only at lobe OVERLAP / low depth, so a point still
+    # APPROACHING the fold (deterministic proximity rising, lobes not yet merged) passes it
+    # yet biases the shared-parameter joint fit. Gate on the proximity DIAL (the two
+    # deterministic channels lna_reliable ignores): abstain unless EVERY point is
+    # well-buffered away from the fold. proximity = max(det, lobe) ≥ det, so this can only
+    # add abstentions (fail-safe), never manufacture a call.
+    for p in points:
+        score = bifurcation_proximity(p.circuit)
+        if score is not None and score.proximity > well_buffered_margin:
+            return "unresolved", {}
     nlls: dict[str, float] = {}
     for param, name in _ATTR_PARAMS:
         _val, combined, _hist = fit_lyapunov_multi(
