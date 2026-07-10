@@ -1079,3 +1079,69 @@ with its rank **capped** so it is never the lone leading answer (on an `off-mode
 read-only `knowledge.explain` backbone) + a Mechanism Card + `notebooks/Hidden_Node_Abstention.ipynb`.
 Pure packaging/knowledge layer with **zero import of `fit`** — it consumes verdicts, never
 re-attributes, and never touches the decoy battery. Additive/opt-in.
+
+# Phase 4j — comparative / differential attribution: WHICH knob differs between two contexts
+
+**Capability (`nudge.inference.differential`, `NUDGE-METHOD-010`, `NUDGE-LIM-016`).** The same
+perturbation, run in **two contexts** (a drug-resistant vs sensitive line; donor A vs B; disease
+vs healthy), can differ mechanistically in the switch's **threshold** (`K`), **gain** (`n`), or
+**ceiling** (`v_max`) — a distinction linear differential expression structurally cannot make (a
+raised ceiling → *more of the same drug*; a rewired gain/threshold → *a different class*). NUDGE
+fits the two contexts **jointly** with a **shared-vs-per-context** parameter structure and
+**BIC-selects which single knob must differ** — enumerating `{shared, ΔK, Δn, Δv_max}` and picking
+the min-BIC model (a Δ model must *earn* its extra per-context parameter over the shared null,
+`BIC = k·ln N − 2·log L`). It **reuses the shipped LNA machinery verbatim**: the differentiable
+Gaussian-mixture forward model (mode means + Lyapunov covariances) from `nudge.inference.lyapunov`,
+per-context depth pinning via `calibrate_from_wt`, and the BIC parsimony pattern from
+`model_select`. Additive / opt-in — it never touches `fit()` or the decoy battery.
+
+**The confound guard (`NUDGE-LIM-016`, the load-bearing honesty point).** A sequencing-depth /
+batch difference *aligned with the context axis* mimics a **ceiling** difference, because depth
+(global `scale`) and `v_max` both multiply the mode means (the measured `scale⇄vmax` degeneracy).
+NUDGE (1) pins depth/noise **per context from each context's OWN control** (a depth difference
+captured by the controls is calibrated out — the per-sample library-size analogue; this requires
+each context's control to be from the SAME library as its perturbed cells), and (2) **abstains
+(`unresolved`) whenever the two contexts' pinned depths differ beyond a ratio** — a depth/batch
+difference aligned with the context axis — because it cannot certify that an apparent ceiling /
+no-clear difference is not a masked depth artifact. The **one exception** is a *cleanly-resolved
+threshold or gain* difference, which reshapes the distribution (orthogonal to a global scale) and
+survives a depth difference (measured: a Δn pair with the contexts sequenced 1.6× apart still
+recovers `gain-diff`). An **OFF-baseline diagnostic** (the differential low-activity-quantile shift
+in each context's data vs its own control) was prototyped and **measured too noisy to be
+load-bearing** — on the 1-node switch the OFF mode's linear-noise CV is ≈ 1/√basal ≈ 2, so the
+genuine-ceiling OFF shift (≈ 1.0–1.56 across seeds) *overlaps* the on-samples-batch shift
+(≈ 1.46–2.25); it is reported for transparency only, and the guard turns on the **stable
+per-context depth ratio** instead.
+
+**Results (synthetic ground truth; `tests/inference/test_differential.py`, 7 slow tests green in
+~234 s).** A KNOWN single-knob difference between two contexts, drawn from the LNA Gaussian mixture:
+
+- **Δv_max → `ceiling-diff`** (a raised ceiling, factor ×1.4): recovered, `is_reliable`. The
+  drug-resistance headline — *more of the same drug*.
+- **Δn → `gain-diff`** (a rewired gain, n ÷ 1.8): recovered — *a different class*, not just more dose.
+- **no-difference → `no-difference`**: the same mechanism in both contexts is correctly read as no
+  attributable difference.
+- **ΔK → recover-or-abstain**: threshold is the **hardest** to resolve from a bistable snapshot —
+  the self-activation switch's *stable modes barely move with K* (K mainly moves the unstable
+  saddle, not the modes), so a ΔK pair recovers `threshold-diff` when the signal is strong enough or
+  else abstains (`no-difference` / `unresolved`), **never** a wrong mechanism. This is exactly the
+  measured identifiability hierarchy **gain > ceiling > threshold** (§2).
+- **Confounded pair → `unresolved`** (context B — control AND perturbed — sequenced ~1.6× deeper,
+  a depth/batch difference aligned with the context axis, NO real mechanism difference): the
+  depth-ratio guard fires across seeds 1–3 (depth ratio ≈ 1.5–1.6) — NUDGE abstains, **never** a
+  spurious `ceiling-diff`.
+- **Underpowered / untrustworthy context → `unresolved`** (too few cells, or `lna_reliable` False).
+- **0 confident-wrong** mechanism-difference calls across a mechanism × seed sweep (the headline
+  safety property).
+
+Robustness engineered in: each per-context knob is **bounded** (a smooth `tanh` reparam around
+nominal) so a free fit cannot run off to the LNA variance-collapse likelihood spike (n→∞ shrinks the
+Lyapunov covariance → an unbounded likelihood), and a Δ model that wanders past the fold
+(monostable → frozen roots → non-finite NLL) is scored **+inf** (unfittable, never a winner) so a
+NaN can never poison the argmin. The classifier's fast gate logic is locked by 8 no-fit unit tests.
+
+**Wiring.** `nudge differential PATH.npz` CLI verb + the `differential` MCP tool +
+`service.differential_arrays` / `differential_file` (a `.npz` of four activity arrays:
+`data_a`/`control_a`/`data_b`/`control_b`) + a Mechanism Card (`NUDGE-METHOD-010`) +
+`notebooks/Differential.ipynb`. A real-data touch (sci-Plex A549 vs MCF7; Gladstone donors) is a
+deferred best-effort follow-up; the synthetic ground truth is the load-bearing validation.

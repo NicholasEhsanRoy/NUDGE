@@ -86,6 +86,17 @@ Highlights so far:
   residual is *consistent with, does not prove* an unmeasured regulator (`nudge
   diagnose-abstention`) — see
   [`notebooks/Hidden_Node_Abstention.ipynb`](notebooks/Hidden_Node_Abstention.ipynb).
+- **Comparative / differential attribution** (`NUDGE-METHOD-010`) — the SAME perturbation
+  in **two contexts** (drug-resistant vs sensitive line; donor A vs B; disease vs healthy):
+  isolate whether the difference is in **threshold** (`K`), **gain** (`n`), or **ceiling**
+  (`v_max`), a call linear differential expression structurally cannot make (a raised
+  ceiling → **more of the same drug**; a rewired gain/threshold → a **different class**).
+  Fits the two contexts **jointly** and **BIC-selects** which single knob differs, or
+  abstains. The honesty crux (`NUDGE-LIM-016`): a depth/batch shift aligned with the context
+  axis mimics a ceiling difference, so depth is pinned **per context** from each control and
+  NUDGE **abstains** when the two contexts' depths differ beyond a ratio — never a spurious
+  mechanism from an artifact (`nudge differential`) — see
+  [`notebooks/Differential.ipynb`](notebooks/Differential.ipynb).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap

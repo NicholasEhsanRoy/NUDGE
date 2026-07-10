@@ -928,3 +928,145 @@ def diagnose_abstention(
         neomorphic_ratio_threshold=neomorphic_ratio_threshold,
     )
     return inadequacy_to_dict(report)
+
+
+# --------------------------------------------------------------------------- #
+# comparative / differential attribution — the SAME perturbation in two contexts
+# (resistant vs sensitive line; donor A vs B; disease vs healthy): isolate whether
+# the mechanistic difference is in K (threshold), n (gain), or v_max (ceiling) — a
+# call linear differential expression structurally cannot make — or abstain. Reuses
+# the shipped LNA multi-operating-point machinery + BIC parsimony (inference.
+# differential, NUDGE-METHOD-010). Confound guard: per-context depth pinning + the
+# OFF-baseline ceiling/depth guard (NUDGE-LIM-016).
+# --------------------------------------------------------------------------- #
+def differential_to_dict(res: Any) -> dict[str, Any]:
+    """Serialise a ``DifferentialResult`` to a plain JSON-able dict (CLI / MCP)."""
+    f = res.fit
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "is_reliable": res.is_reliable,
+        "selected_model": f.selected,
+        "best_diff_model": f.best_diff,
+        "target_edge": f.target_edge,
+        "bic": dict(f.bic),
+        "n_params": dict(f.n_params),
+        "log2_ratio": f.log2_ratio,
+        "ci_log2": list(f.ci_log2),
+        "n_cells": {"a": f.n_cells_a, "b": f.n_cells_b},
+        "depth": {
+            "scale_a": f.scale_a,
+            "scale_b": f.scale_b,
+            "depth_ratio": f.depth_ratio,
+        },
+        "off_baseline_shift": {
+            "a": f.off_shift_a,
+            "b": f.off_shift_b,
+            "ratio": f.off_shift_ratio,
+        },
+        "lna_ok": {"a": f.lna_ok_a, "b": f.lna_ok_b},
+        "estimates": {
+            "a": {m: dict(f.est_a[m]) for m in f.est_a},
+            "b": {m: dict(f.est_b[m]) for m in f.est_b},
+        },
+    }
+
+
+def _switch_circuit(
+    circuit: str = "ras_switch_1node",
+    *,
+    n: float = 6.0,
+    vmax: float = 2.5,
+    k: float = 1.0,
+    basal: float = 0.2,
+) -> Any:
+    """Build a named bistable switch motif for differential attribution (shared topology)."""
+    from nudge import circuits as _circuits
+
+    factory = getattr(_circuits, circuit, None)
+    if factory is None:
+        raise ValueError(f"unknown circuit {circuit!r} (see nudge.circuits)")
+    return factory(n=n, vmax=vmax, K=k, basal=basal)
+
+
+def differential_arrays(
+    data_a: Any,
+    control_a: Any,
+    data_b: Any,
+    control_b: Any,
+    *,
+    circuit: str = "ras_switch_1node",
+    n: float = 6.0,
+    vmax: float = 2.5,
+    k: float = 1.0,
+    basal: float = 0.2,
+    target_edge: int = 0,
+    steps: int = 250,
+    n_boot: int = 0,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Differential attribution from four activity arrays — the programmatic entry point.
+
+    ``data_x`` / ``control_x`` are ``(n_cells, n_species)`` activity-space arrays for each
+    context's perturbed cells and its OWN control. Fits the shared switch topology
+    (``circuit`` + kinetics) jointly and BIC-selects which single knob — **threshold**
+    (K), **gain** (n), or **ceiling** (v_max) — differs between the contexts, or abstains
+    (``no-difference`` / ``unresolved``). The confound guard pins depth per context from
+    each control and abstains on a ceiling call corrupted by a depth/batch shift
+    (NUDGE-LIM-016).
+    """
+    import numpy as np
+
+    from nudge.inference.differential import Context, attribute_differential
+
+    circ = _switch_circuit(circuit, n=n, vmax=vmax, k=k, basal=basal)
+    ctx_a = Context(
+        name="A", data=np.asarray(data_a, dtype=float), control=np.asarray(control_a, float)
+    )
+    ctx_b = Context(
+        name="B", data=np.asarray(data_b, dtype=float), control=np.asarray(control_b, float)
+    )
+    res = attribute_differential(
+        ctx_a, ctx_b, circ,
+        target_edge=target_edge, steps=steps, n_boot=n_boot, seed=seed,
+    )
+    return differential_to_dict(res)
+
+
+def differential_file(
+    path: str,
+    *,
+    circuit: str = "ras_switch_1node",
+    n: float = 6.0,
+    vmax: float = 2.5,
+    k: float = 1.0,
+    basal: float = 0.2,
+    target_edge: int = 0,
+    steps: int = 250,
+    n_boot: int = 0,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Differential attribution from a ``.npz`` of two contexts — the CLI / MCP entry.
+
+    The ``.npz`` holds four ``(n_cells, n_species)`` **activity-space** arrays:
+    ``data_a`` / ``control_a`` (context A's perturbed cells + its own control) and
+    ``data_b`` / ``control_b`` (context B). Attributes whether the SAME perturbation
+    differs between the two contexts in its switch's **threshold** / **gain** / **ceiling**
+    — or abstains. Returns the verdict, the per-model BIC, the winning knob's Δ estimate +
+    (optional) bootstrap CI, the per-context depth, and the confound diagnostics.
+    """
+    import numpy as np
+
+    with np.load(path) as npz:
+        missing = [k2 for k2 in ("data_a", "control_a", "data_b", "control_b")
+                   if k2 not in npz]
+        if missing:
+            raise KeyError(f"{path} is missing array(s) {missing}; need data_a/control_a"
+                           "/data_b/control_b")
+        arrays = {k2: np.asarray(npz[k2], dtype=float) for k2 in
+                  ("data_a", "control_a", "data_b", "control_b")}
+    return differential_arrays(
+        arrays["data_a"], arrays["control_a"], arrays["data_b"], arrays["control_b"],
+        circuit=circuit, n=n, vmax=vmax, k=k, basal=basal,
+        target_edge=target_edge, steps=steps, n_boot=n_boot, seed=seed,
+    )

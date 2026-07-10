@@ -431,6 +431,54 @@ def build_server() -> Any:
             depth_confounded=depth_confounded,
         )
 
+    @mcp.tool()
+    def differential(
+        path: str,
+        circuit: str = "ras_switch_1node",
+        n: float = 6.0,
+        vmax: float = 2.5,
+        k: float = 1.0,
+        basal: float = 0.2,
+        target_edge: int = 0,
+        steps: int = 250,
+        n_boot: int = 0,
+    ) -> dict[str, Any]:
+        """Comparative attribution — WHICH knob differs for the SAME perturbation in TWO contexts.
+
+        Given the SAME perturbation run in two **contexts** — a drug-resistant vs sensitive
+        line, donor A vs B, disease vs healthy — isolate whether the mechanistic difference
+        is in the switch's **threshold** (`K`), **gain** (`n`), or **ceiling** (`v_max`), a
+        distinction linear differential expression structurally **cannot** make. A resistant
+        line with a raised *ceiling* needs more dose of the SAME drug; one with a rewired
+        *gain / threshold* needs a DIFFERENT drug class. Fits the shared switch **jointly**
+        with a shared-vs-per-context parameter structure and **BIC-selects** which single
+        knob must differ (`shared` / `ΔK` / `Δn` / `Δv_max`), or abstains.
+
+        `path` is a `.npz` with four `(n_cells, n_species)` **activity-space** arrays:
+        `data_a` / `control_a` (context A's perturbed cells + its own control) and
+        `data_b` / `control_b`. The switch topology is `circuit` (a `nudge.circuits`
+        factory) at nominal `n` / `vmax` / `k` / `basal`. Returns the verdict
+        (`threshold-diff` / `gain-diff` / `ceiling-diff` / `no-difference` / `unresolved`),
+        the per-model BIC, the winning knob's Δ estimate, per-context depth, and the
+        confound diagnostics. **Fail-safe (`NUDGE-LIM-016`):** depth is pinned PER CONTEXT
+        from each control, and a ceiling call corrupted by a depth/batch shift aligned with
+        the context axis (the OFF baseline moved) abstains `unresolved` rather than emit a
+        spurious ceiling difference; an underpowered / untrustworthy context abstains too.
+        """
+        from nudge.service import differential_file
+
+        return differential_file(
+            path,
+            circuit=circuit,
+            n=n,
+            vmax=vmax,
+            k=k,
+            basal=basal,
+            target_edge=target_edge,
+            steps=steps,
+            n_boot=n_boot,
+        )
+
     return mcp
 
 

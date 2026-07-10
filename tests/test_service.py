@@ -244,3 +244,32 @@ def test_multi_reporter_file_csv_wiring(tmp_path) -> None:
     assert set(out) >= {
         "call", "reason", "winner", "panel_r2", "ci_log2_k", "consistency_ratio"
     }
+
+
+@pytest.mark.slow
+def test_differential_file_npz_wiring(tmp_path) -> None:
+    """The ``.npz`` path the CLI/MCP share: a two-context ceiling difference round-trips.
+
+    A synthetic raised-ceiling difference between two contexts (the drug-resistance story)
+    is written as four activity arrays and round-tripped through the shared
+    ``differential_file`` — the joint BIC fit recovers ``ceiling-diff``.
+    """
+    import numpy as np
+
+    from nudge.circuits import ras_switch_1node
+    from nudge.inference.differential import simulate_context_pair
+    from nudge.service import differential_file
+
+    circ = ras_switch_1node(n=6.0, vmax=2.5, K=1.0, basal=0.2)
+    a, b = simulate_context_pair(
+        circ, mechanism="ceiling", factor=1.4, n_cells=2000,
+        scale_a=25.0, scale_b=25.0, obs_sd=0.5, seed=1,
+    )
+    npz = tmp_path / "contexts.npz"
+    np.savez(npz, data_a=a.data, control_a=a.control, data_b=b.data, control_b=b.control)
+
+    out = differential_file(str(npz), basal=0.2, vmax=2.5, n=6.0, k=1.0, steps=250)
+    assert out["call"] == "ceiling-diff", out["reason"]
+    assert out["best_diff_model"] == "vmax"
+    assert out["is_reliable"] is True
+    assert set(out) >= {"call", "reason", "bic", "depth", "off_baseline_shift", "estimates"}

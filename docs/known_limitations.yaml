@@ -419,3 +419,63 @@ anomalies:
       observationally-overlapping causes and names the experiment that would distinguish
       each. Reading the differential as a verdict, or loosening the hedged wording, would
       resurrect the false positive.
+
+  - anomaly_id: NUDGE-LIM-016
+    title: Differential attribution — a depth/batch shift aligned with the context axis
+      is confounded with a CEILING difference
+    description: >-
+      In comparative / differential attribution (nudge.inference.differential,
+      NUDGE-METHOD-010), NUDGE fits the SAME perturbation in two contexts (a drug-resistant
+      vs sensitive line, donor A vs B, disease vs healthy) jointly and BIC-selects which
+      single knob — threshold (K), gain (n), or ceiling (v_max) — differs between them. The
+      load-bearing confound is a SEQUENCING-DEPTH / BATCH difference ALIGNED WITH THE
+      CONTEXT AXIS: because a global depth/library-size scale and the ceiling v_max both
+      MULTIPLY the mode means, they are degenerate (the scale⇄vmax degeneracy documented in
+      nudge.inference.lyapunov.calibrate_from_wt), so a per-context depth or batch effect
+      that happens to line up with the context (resistant cells sequenced deeper, or a
+      perturbation batch that tracks the line) mimics a CEILING difference — the classic
+      "batch aligned with perturbation" decoy, now at the CONTEXT level. NUDGE defends on
+      two fronts. (1) It pins depth/noise PER CONTEXT from each context's OWN control
+      (calibrate_from_wt per context), so a depth difference captured by the controls is
+      calibrated out before attribution — the analogue of per-sample library-size
+      normalization; this REQUIRES each context's control to come from the SAME library as
+      its perturbed cells (the standard experimental design). (2) When the two contexts'
+      pinned depths DIFFER BEYOND A RATIO — a depth/batch difference aligned with the
+      context axis — NUDGE ABSTAINS (unresolved): it cannot certify that an apparent
+      ceiling / no-clear difference is not a masked depth artifact. The one exception is a
+      CLEANLY-RESOLVED threshold or gain difference, which RESHAPES the distribution
+      (orthogonal to a global scale) and so survives a depth difference and stays callable;
+      only the ceiling channel is confounded with depth. (An OFF-baseline diagnostic —
+      the differential shift of the low-activity quantile in each context's data vs its own
+      control — is reported for transparency but is NOT load-bearing: the OFF mode's
+      linear-noise spread is too large to reliably separate a genuine ceiling from an
+      on-samples batch, which is exactly why the guard turns on the stable per-context
+      depth ratio.) NUDGE also abstains when either context is underpowered (too few cells)
+      or its linear-noise Gaussian is untrustworthy (lna_reliable — low depth / near a
+      bifurcation / monostable). VERIFIED on
+      synthetic ground truth: a ΔK / Δn / Δv_max pair recovers WHICH knob differs (or
+      abstains — threshold is the hardest to resolve from a bistable snapshot, consistent
+      with the measured identifiability hierarchy gain > ceiling > threshold, FINDINGS §2),
+      a no-difference pair reads no-difference, and a CONFOUNDED pair (a depth/batch shift
+      aligned with the context axis but NO real mechanism difference) ABSTAINS unresolved —
+      never a spurious mechanism-difference call, 0 confident-wrong across seeds. Reported
+      Δ estimates are APPARENT population parameters (with bootstrap CIs), not molecular
+      constants, and inherit the readout-nonlinearity bound (NUDGE-LIM-006). Guarded by the
+      confound + fail-safe tests (tests/inference/test_differential.py).
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is the honesty crux of comparative attribution: a depth/batch difference aligned
+      with the context axis is the single most likely way to manufacture a CONFIDENT WRONG
+      "ceiling difference" — and it is precisely the artifact a real study is most exposed
+      to (the two lines / donors / conditions are often sequenced or prepped in ways that
+      track the biology). Calling ceiling-diff off such a shift would send a follow-up
+      chasing "more of the same drug" when the true difference is a sequencing artifact —
+      the confident-wrong failure the project exists to avoid — and it LOOKS authoritative
+      because a joint BIC fit is more convincing than a t-test. The guarantee rests on
+      pinning depth PER CONTEXT from each control and ABSTAINING whenever the per-context
+      depths differ beyond a ratio (a depth/batch difference aligned with the context axis),
+      unless the winner is a cleanly-resolved threshold/gain difference, which — being
+      orthogonal to a global scale — remains trustworthy. Removing the per-context
+      calibration or the depth-ratio abstention, or loosening it, would resurrect the false
+      positive.

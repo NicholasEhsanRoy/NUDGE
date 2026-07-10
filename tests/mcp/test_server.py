@@ -31,6 +31,7 @@ def test_server_registers_the_expected_tools() -> None:
         "robustness",
         "design",
         "multi_reporter",
+        "differential",
         "diagnose_abstention",
         "explain_abstention",
         "list_mechanisms",

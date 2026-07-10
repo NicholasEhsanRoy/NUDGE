@@ -827,6 +827,79 @@ def diagnose_abstention(
     )
 
 
+# --------------------------------------------------------------------------- #
+# differential (the SAME perturbation in two contexts — which knob differs?)
+# --------------------------------------------------------------------------- #
+@app.command("differential")
+def differential(
+    path: str = typer.Argument(
+        ..., help="a .npz with data_a/control_a/data_b/control_b activity arrays"
+    ),
+    circuit: str = typer.Option(
+        "ras_switch_1node", help="the shared switch motif (nudge.circuits factory)"
+    ),
+    n: float = typer.Option(6.0, help="nominal Hill n (gain) of the switch"),
+    vmax: float = typer.Option(2.5, help="nominal v_max (ceiling)"),
+    k: float = typer.Option(1.0, "--k", help="nominal K (threshold)"),
+    basal: float = typer.Option(0.2, help="nominal basal (OFF level)"),
+    target_edge: int = typer.Option(0, help="the attributable edge index"),
+    steps: int = typer.Option(250, help="optimizer steps per nested-model fit"),
+    n_boot: int = typer.Option(0, help="bootstrap resamples for the winning-knob CI"),
+    seed: int = typer.Option(0, help="fit RNG seed"),
+) -> None:
+    """Isolate WHICH knob differs for the SAME perturbation across two contexts.
+
+    Given the same perturbation in two **contexts** (resistant vs sensitive line; donor A
+    vs B; disease vs healthy) as four activity arrays, fits the shared switch **jointly**
+    and BIC-selects which single knob must differ — **threshold** (K) / **gain** (n) /
+    **ceiling** (v_max) — or abstains (**no-difference** / **unresolved**). A raised
+    *ceiling* means more dose of the SAME drug; a rewired *gain/threshold* means a
+    DIFFERENT class — a call linear differential expression cannot make. **Confound
+    guard:** depth is pinned per context from each control, and a ceiling call corrupted
+    by a depth/batch shift aligned with the context axis abstains (NUDGE-LIM-016).
+    """
+    from nudge.service import differential_file
+
+    out = differential_file(
+        path,
+        circuit=circuit,
+        n=n,
+        vmax=vmax,
+        k=k,
+        basal=basal,
+        target_edge=target_edge,
+        steps=steps,
+        n_boot=n_boot,
+        seed=seed,
+    )
+    bic = out["bic"]
+    best_fin = min(v for v in bic.values() if v == v and v != float("inf"))
+    _echo(
+        f"differential  (edge {out['target_edge']}, "
+        f"n_a={out['n_cells']['a']}, n_b={out['n_cells']['b']})"
+    )
+    _echo("  ΔBIC vs best (lower = more parsimonious):")
+    labels = {"shared": "shared (no diff)", "K": "ΔK (threshold)",
+              "n": "Δn (gain)", "vmax": "Δv_max (ceiling)"}
+    for m in ("shared", "n", "K", "vmax"):
+        v = bic[m]
+        shown = "inf" if (v != v or v == float("inf")) else f"{v - best_fin:+8.1f}"
+        _echo(f"    {labels[m]:20} {shown}")
+    d = out["depth"]
+    o = out["off_baseline_shift"]
+    _echo(
+        f"  per-context depth: scale_a={d['scale_a']:.1f} scale_b={d['scale_b']:.1f} "
+        f"(ratio {d['depth_ratio']:.2f})   OFF-shift ratio {o['ratio']:.2f}"
+    )
+    _echo(f"\n  → CALL: {out['call'].upper()}")
+    _echo(f"     {out['reason']}")
+    _echo(
+        "\n  note: a depth/batch shift aligned with the context axis mimics a CEILING "
+        "\n  difference; NUDGE pins depth per context + guards the ceiling call "
+        "(NUDGE-LIM-016)."
+    )
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()

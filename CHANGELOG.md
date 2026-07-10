@@ -9,6 +9,32 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Comparative / differential attribution — WHICH knob differs between two contexts
+  (`nudge.inference.differential`, `NUDGE-METHOD-010`, `NUDGE-LIM-016`):** given the SAME
+  perturbation in two **contexts** (a drug-resistant vs sensitive line; donor A vs B;
+  disease vs healthy), isolates whether the mechanistic difference is in the switch's
+  **threshold** (`K`), **gain** (`n`), or **ceiling** (`v_max`) — a distinction linear
+  differential expression structurally **cannot** make (a raised *ceiling* → more dose of
+  the SAME drug; a rewired *gain / threshold* → a DIFFERENT class). Fits the two contexts
+  **jointly** with a **shared-vs-per-context** parameter structure and **BIC-selects**
+  which single knob must differ (`shared` / `ΔK` / `Δn` / `Δv_max`), reusing the shipped
+  LNA Gaussian-mixture forward model + the BIC parsimony pattern; or abstains
+  (`no-difference` / `unresolved`). **Confound guard (the load-bearing honesty point,
+  `NUDGE-LIM-016`):** a sequencing-depth / batch difference aligned with the context axis
+  is degenerate with a **ceiling** difference (`scale ⇄ v_max`), so depth is pinned PER
+  CONTEXT from each context's OWN control (`calibrate_from_wt`), and when the two contexts'
+  pinned depths **differ beyond a ratio** (a depth/batch difference aligned with the context
+  axis) NUDGE **abstains** rather than risk a spurious `ceiling-diff` — *unless* the winner
+  is a cleanly-resolved threshold / gain difference, which reshapes the distribution
+  (orthogonal to a global scale) and survives.
+  **Validated on synthetic ground truth (`FINDINGS` Phase 4j):** a Δv_max pair recovers
+  `ceiling-diff` and a Δn pair recovers `gain-diff`; a no-difference pair reads
+  `no-difference`; a ΔK pair recovers-or-abstains (threshold is hardest from a bistable
+  snapshot — the measured hierarchy gain > ceiling > threshold, `FINDINGS` §2); and the
+  depth-aligned-with-context confound **abstains `unresolved`**, **0 confident-wrong across
+  seeds**. Additive / opt-in — it never touches `fit()` or the decoy battery. Wired into
+  the `nudge differential` CLI verb + the `differential` MCP tool + `service.differential_*`
+  + a Mechanism Card + `notebooks/Differential.ipynb`.
 - **Hidden-node abstention — the honest differential (`nudge.inference.hidden_node`,
   `NUDGE-METHOD-009`, `NUDGE-LIM-015`):** turns a bare **`off-model`** verdict (or a fired
   diagnostic residual) into a legible **differential diagnosis** — it **enumerates** the
