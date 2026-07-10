@@ -86,21 +86,79 @@ The demo-facing run; surfaces MCP/UX friction a headless run can't. Two variants
 
 ---
 
-## The linchpin — problem selection (needs your domain input)
+## The linchpin — SOLVED with a synthetic blind test (no real-data hunt needed)
 
-Make-or-break for validity. The target must satisfy **all** of:
-- **Post-cutoff** (published after the model's ~Jan-2026 training) so the answer isn't memorized.
-- A **public dataset NUDGE can actually run** (Perturb-seq counts / a dose-response series / a
-  cross-modality readout / a two-context comparison — something in NUDGE's vocabulary).
-- A **known-correct mechanistic answer** to grade against — ideally a **threshold-vs-gain-vs-
-  ceiling** (or synergy / differential) call that is **non-obvious from priors**, so the eval
-  genuinely tests "did it use the data," and where a **calibrated abstention** may be the correct
-  outcome.
-- **Contamination guard:** prefer a problem whose answer a strong model cannot guess without the
-  data; enforce no-web; and check the transcript reasons from NUDGE's output.
+Rather than scavenge for a post-cutoff real dataset (contamination-risky, and a "known answer" is
+hard to certify), **generate the blind test from NUDGE's own synthetic generator.** A freshly
+generated dataset with a random seed has a ground truth that **cannot exist in any training
+corpus — memorization is mathematically impossible**, so Claude *must* use the MCP tools and
+reason from the data. The ground truth is exact and free, so grading is unambiguous, and we
+control the difficulty.
 
-*(If you don't have a candidate in hand, a second research pass can shortlist 2026 screens/dose-
-response results with public data + a clean mechanistic answer.)*
+**The generator (`scripts/eval/make_blind_case.py`, additive — reuses `data/synthetic` /
+`data/stochastic`, never touches `fit.py`/`core`):**
+1. Pick a hidden circuit + a single ground-truth mechanism (a **pure threshold shift** for the
+   first case; the seed + params are the answer key).
+2. Simulate ~10k cells (control + perturbed) and write `blind_test.h5ad` in the exact shape the
+   `attribute` MCP tool / `service.attribute_file` ingests (raw counts, `obs['condition']`,
+   markers).
+3. **SCRUB for blindness (integrity-critical):** neutral condition labels (`control` /
+   `compound-A`, never `threshold_guide`); strip ALL generator metadata (`uns`, seeds,
+   mechanism tags) so nothing in the file leaks the answer.
+4. Write a held-out `answer_key.json` (mechanism, params, seed) **kept OUT of the agent's working
+   dir** — for the grader only.
+
+**Honest fictional framing (a specialized "story" wrapper agent).** The agent is TOLD it is a
+synthetic / fictional test case — this is **not a lie**, and it is exactly the signal that says
+"you can't look this up; use the tools as on a genuinely novel problem." The wrapper invents a
+credible cover (a fictional newly-characterized molecule / lab context) that **says nothing about
+threshold-vs-gain-vs-ceiling** — the story must not hint at the mechanism, and the scrub above
+must hold, or the blind test is void.
+
+**Integrity rules (make-or-break):** the agent's dir holds `blind_test.h5ad` + the story + the
+MCP tools — **NOT** the generator script, the seed, or `answer_key.json`. The generator and the
+ground truth are isolated from the agent so it cannot reverse-engineer the answer.
+
+**Upgrade — a CALIBRATION BATTERY, not one case.** Because generation is free, build a suite:
+pure `threshold` / `gain` / `ceiling`, a `synergy` and a `differential` case, and — the ones that
+matter most for our thesis — **abstention cases**: a nonlinear-readout confound and a
+near-identifiability-boundary case where the *correct* scientist behavior is an **honest
+abstention**. The eval then scores **calibration** across the suite: does the AI scientist abstain
+when the data can't decide, or does it get confidently wrong?
+
+**The money-shot demo — the ablation.** Run the *same* blind case **WITH NUDGE (the MCP)** vs
+**WITHOUT** (the raw `.h5ad` + generic tools only). If NUDGE-equipped Claude reaches the right
+call / abstains correctly while un-equipped Claude confidently guesses wrong, that single
+side-by-side *is* the demo — rigorous, honest, and watchable.
+
+### Status + generalizing beyond gene circuits
+
+**Working (gene-circuit attribution):** `scripts/eval/make_blind_case.py` generates a scrubbed
+blind case for the `attribute` path — a `ras_switch_1node` perturbation (threshold `K` / gain `n`
+/ ceiling `vmax`) at ~10k cells, with **background genes** so library-size normalization is
+meaningful (a single-gene screen degenerates) and an adequate **depth** so NUDGE's LNA runs the
+mechanism fit rather than the depth guard. Verified: no leak in the agent file (only
+`obs['condition']` ∈ {control, target-gene}; empty `uns`), answer key held out, and NUDGE returns
+an honest single-snapshot verdict (`unresolved` — the calibrated "need a 2nd operating point"
+answer the key documents).
+
+**Generalize to every NUDGE capability (next).** The blind-test pattern is capability-agnostic:
+each capability has (a) a synthetic generator with a known ground truth, (b) a scrub that strips
+the leak, (c) a held-out answer key, (d) a calibrated expected verdict. Extend `make_blind_case`
+into a small registry keyed by capability:
+- **dose-response / cross-modality** (the flagship RESOLVING cases — a knockdown/dose series →
+  `switch`/`threshold`, or a fluorescence curve) — gives the clean *positive* call a single
+  snapshot can't, so the ablation shows NUDGE resolving where a naive read can't;
+- **multi-operating-point / multi-reporter** — the confound-breakers (resolve threshold/ceiling);
+- **differential / epistasis** — two-context / combination cases (incl. the confound decoys);
+- **temporal gLV (microbiome ecology)** — a `lotka_volterra` trajectory with a known α/β/ε
+  perturbation (reuse the gLV generator; the Stein/MDSINE framing) → recover the moved parameter
+  or abstain on the α⇄βᵢᵢ degeneracy;
+- **fibrillization / new physics models** — as those capabilities land (the `nudge-jax-physics`
+  hardening-loop role builds them), each ships a blind-case generator alongside.
+Each generalized case reuses the same integrity rules (scrub, held-out key, no reverse-engineering
+the generator) and the same calibration rubric (correct call OR honest abstention; confident-wrong
+is the only hard fail).
 
 ---
 
