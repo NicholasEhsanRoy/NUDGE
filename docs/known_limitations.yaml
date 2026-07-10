@@ -537,19 +537,31 @@ anomalies:
       seen at basals {0.05, 0.30, 0.60} — the 0.60 point near the fold but passing
       lna_reliable — flips the correct 2-point 'ceiling' to a CONFIDENT WRONG 'threshold'
       (gap ≈0.24–0.30 ≫ resolve_margin 0.03, 2/2 seeds;
-      scripts/redteam/nearfold_thirdpoint_hole.py). MITIGATION (SHIPPED): the joint fit is
-      now additionally gated on the bifurcation-proximity DIAL (nudge.inference.bifurcation.
-      bifurcation_proximity — its two DETERMINISTIC, depth-independent channels, critical
-      slowing and basin collapse, which lna_reliable ignores). attribute_lyapunov_multi
-      ABSTAINS (unresolved) unless EVERY operating point is well-buffered
-      (proximity ≤ well_buffered_margin, default 0.15) away from the fold. Because
-      proximity = max(deterministic, lobe) ≥ the lobe channel alone, this can only ADD
-      abstentions (fail-safe), never manufacture a call. Measured separation: the clean
-      breaker points sit at proximity 0.039 (basal 0.05) / 0.112 (basal 0.30), the corrupting
-      near-fold point at 0.231 — the margin clears the validated 2-point positive control by
-      ~34% and catches the near-fold point by ~35%. The "second, WELL-BUFFERED operating
-      point" caveat is now an ENFORCED precondition, not prose. Guarded by the near-fold
-      decoy + the multi-point recover-or-abstain tests
+      scripts/redteam/nearfold_thirdpoint_hole.py). A FIRST fix gated the joint fit on the
+      bifurcation-proximity DIAL with a hard margin (abstain if any point's proximity >
+      well_buffered_margin, default 0.15) — but red-team ROUND 2 proved that margin a
+      KNIFE-EDGE (scripts/redteam/nearfold_knifeedge_regression.py): a 3rd point at proximity
+      0.146 (just under 0.15) still flipped the true ceiling to a confident threshold (gap
+      0.53, 2/2 seeds). Measuring the corruption ONSET revealed WHY a hard margin cannot work:
+      the validated useful 2nd point sits at proximity 0.112 and the corruption begins at
+      0.119 — a 0.007 window — and, decisively, the onset is NON-MONOTONIC in proximity (a
+      3rd point at 0.125 is clean while 0.119 and 0.132 both corrupt), so proximity simply
+      does not separate a useful operating point from a corrupting one near the fold. Any hard
+      proximity threshold there is scientifically invalid. MITIGATION (SHIPPED, red-team round
+      2): the hard gate is replaced by two threshold-free mechanisms. (1) GRADED DOWN-WEIGHTING
+      — each operating point's contribution to the joint loss decays smoothly (Gaussian in its
+      excess bifurcation proximity past well_buffered_margin), so a FAR near-fold point (the
+      round-1 witness at proximity 0.231) is weighted ~0 and cannot corrupt the fit (fit_
+      lyapunov_multi gains a per-point weights argument). (2) BEST-BUFFERED-PAIR CORROBORATION
+      — with >2 points, a resolved bare mechanism is accepted ONLY if it AGREES with the call
+      from the two MOST-BUFFERED points; if a marginal point changed the answer, NUDGE
+      ABSTAINS. Threshold-free, this closes the 0.007 knife-edge that no margin or weighting
+      can, while keeping a genuinely well-buffered multi-point set resolvable and letting a far
+      near-fold point be harmlessly down-weighted rather than corrupt the fit (the round-1
+      {0.05,0.30,0.60} witness now honestly ABSTAINS via corroboration — measured — instead of
+      emitting the confident-wrong 'threshold'; never a wrong bare mechanism, 0 across seeds).
+      Guarded by the near-fold decoy (now a fail-safe assertion: never the wrong 'threshold')
+      + the knife-edge regression + the multi-point recover-or-abstain tests
       (tests/inference/test_lyapunov_toggle_ssa.py). Related: NUDGE-LIM-012 (the LNA breaks
       down AT the fold — this is the same physics one step earlier, on the APPROACH).
     severity: major
@@ -562,13 +574,14 @@ anomalies:
       reliable. That is exactly the failure the project exists to avoid, and it is
       especially dangerous because a joint multi-point fit LOOKS more authoritative than one
       snapshot, and because the tempting experimental instinct ("add another operating point
-      to be sure") is what triggers it. The guarantee now rests on the well-buffered
-      precondition: the deterministic proximity channels see the approach to the fold BEFORE
-      the noise lobes merge, so a near-fold point forces an honest abstention. Removing the
-      proximity gate, or loosening well_buffered_margin toward the fold, would resurrect the
-      false positive; the margin is deliberately far below the near-fold threshold
-      (NEAR_FOLD 0.55) because a corrupting point bites well before the switch is "near-fold"
-      in its own right.
+      to be sure") is what triggers it. The load-bearing lesson (red-team round 2): a HARD
+      proximity margin is scientifically invalid here because the corruption onset is
+      non-monotonic in proximity and only ~0.007 above the useful operating point, so it
+      cannot be separated by a threshold. The guarantee now rests on the best-buffered-pair
+      CORROBORATION (threshold-free): a bare mechanism is trusted only when the most-buffered
+      pair confirms it, so a marginal point can never override the well-buffered evidence.
+      Removing the corroboration check, or reintroducing a hard proximity gate as the sole
+      defense, would resurrect the false positive.
 
   - anomaly_id: NUDGE-LIM-018
     title: The constitutive control rejects "no switch" but does NOT point-identify the knob
@@ -617,3 +630,61 @@ anomalies:
       Loosening the rejection gate (the absolute margin, the structure-ratio vs the flat
       no-control span, or the argmin-off-n=1 requirement) toward a claim of the exact knob
       would resurrect over-interpretation; the conjunction is deliberately conservative.
+      See also NUDGE-LIM-019: the biological-switch verdict is additionally bounded by a
+      shared-capture precondition between the control and the circuit population.
+
+  - anomaly_id: NUDGE-LIM-019
+    title: The constitutive control and the circuit population must share a capture/depth
+      scale — an unmodeled mismatch re-opens NUDGE-LIM-006
+    description: >-
+      In the constitutive-reporter calibration control (nudge.inference.constitutive,
+      NUDGE-METHOD-011), the control is a SEPARATE population — constitutively-driven reporter
+      cells read at KNOWN activity doses — used to anchor the reporter transfer function
+      (Km, h, Vmax) so the circuit-n profile can reject "no switch". The load-bearing,
+      previously-unstated PRECONDITION: the control and the circuit population must be measured
+      on the SAME capture / sequencing-depth scale (co-sequenced, or normalized to a shared
+      spike-in / reference). The module compares the control's reporter counts to the
+      population's directly (log1p counts + energy distance) with NO relative-depth
+      normalization between the two populations, and single-cell samples ROUTINELY differ in
+      capture efficiency. VERIFIED (red-team round 2): reading the control at ~0.5x the
+      population's capture efficiency mis-anchors the reporter Vmax LOW; the with-control
+      circuit-n profile then develops a spurious well away from n=1 and REJECTS "no switch" —
+      a confident 'biological-switch' verdict on a TRULY LINEAR (n=1) circuit, i.e. exactly
+      the NUDGE-LIM-006 readout-only artifact the capability exists to reject, resurrected
+      through a batch/capture confound (scripts/redteam/constitutive_control_batch_confound.py,
+      3/3 seeds; a CLEAN control at matched efficiency correctly abstains 'unresolved').
+      Critically, this DEFEATS the module's own honesty predicate as originally written:
+      ConstitutiveResult.is_confident_wrong counted only bare threshold/gain/ceiling calls, so
+      it structurally EXCLUDED 'biological-switch' — treating a falsifiable positive as
+      unconditionally safe. RESPONSES (SHIPPED): (1) the honesty contract is broadened — a new
+      ConstitutiveResult.asserts_biological_switch surfaces the falsifiable positive, and
+      is_confident_wrong's docstring + every doc now state the biological-switch verdict is
+      valid ONLY under the shared-capture precondition (the framing is 'adversarially bounded',
+      NOT 'structurally fail-safe / 0 confident-wrong'); (2) the confound is LOCKED as a
+      strict-xfail decoy (tests/inference/test_constitutive.py) so it cannot silently change;
+      (3) the experimental-design precondition (co-measure the control with the population) is
+      documented as a requirement, alongside the constitutive control itself. NO runtime gate
+      is added here: a capture-efficiency difference between the two populations is, without a
+      switch-independent shared reference (the reporter FLOOR / a spike-in), indistinguishable
+      from a real switch at the count-magnitude level (a real switch ALSO raises the
+      population's counts), so a naive magnitude gate would false-abstain on genuine switches.
+      A principled robustness fix (anchor both populations to the switch-independent reporter
+      floor / a shared spike-in) is DESIGNED and DOCUMENTED as future work in
+      design/CONSTITUTIVE_CONTROL.md (Option B) but deliberately deferred — matched capture is
+      a biologically reasonable requirement to state rather than to solve under time pressure.
+      Inherits / re-opens NUDGE-LIM-006 when the precondition is violated.
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is a genuine confident-wrong hole (not merely an abstention gap) in the very
+      capability built to REMOVE a confident-wrong (NUDGE-LIM-006): a routine batch artifact —
+      a capture-efficiency difference between the constitutive control and the circuit
+      population — makes NUDGE assert a real biological switch on a linear circuit. It is
+      especially dangerous because it slips past the module's own is_confident_wrong guard
+      (which was scoped too narrowly to bare-knob calls) and because a 'biological-switch'
+      verdict reads as authoritative. The guarantee now rests on the shared-capture
+      precondition being STATED (co-measure the control with the population), the honest
+      'adversarially bounded' framing (never 'structurally fail-safe'), the asserts_biological_
+      switch surface, and the strict-xfail decoy that locks the confound. Reading a
+      biological-switch verdict without confirming matched capture, or restoring the
+      'structurally fail-safe / 0 confident-wrong' language, would resurrect the false positive.

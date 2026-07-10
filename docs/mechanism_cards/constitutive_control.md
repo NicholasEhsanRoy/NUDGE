@@ -118,9 +118,14 @@ negative, and the existing `generate_readout_nonlinearity_decoy` remains the aff
   is FLAT (span ≈ 0.001 — degenerate); WITH it, `n = 1` is REJECTED (Δloss ≈ 0.026 ≫ the flat
   span, argmin off `n = 1`) → `biological-switch`. A LINEAR circuit (`n = 1`, the LIM-006
   hazard): WITH the control the profile does NOT reject `n = 1` (Δloss ≈ 0) → `unresolved`
-  (the confident false positive becomes an honest abstention). **0 confident-wrong across
-  seeds.** A real-data realization needs a fluorescent-reporter titration paired with a
-  perturbation screen (uncommon in public data), which is why this is a stretch feature.
+  (the confident false positive becomes an honest abstention). **0 confident-wrong across seeds
+  on the clean-control validation.** **Adversarially bounded (`NUDGE-LIM-019`):** the
+  `biological-switch` verdict is a falsifiable positive claim valid ONLY when the control and
+  the circuit population share a capture/depth scale — an unmodeled capture-efficiency mismatch
+  between the two populations re-anchors the reporter and re-opens `NUDGE-LIM-006` (red-team
+  round 2; locked as a strict-xfail decoy). A real-data realization needs a fluorescent-reporter
+  titration paired with a perturbation screen (uncommon in public data), which is why this is a
+  stretch feature.
 
 ## Implementation Mapping
 
@@ -151,7 +156,10 @@ reference must resolve to a real attribute.)*
 - `tests/inference/test_constitutive.py::test_linear_circuit_lim006_hazard_abstains_not_confident_wrong`
   — the LIM-006 hazard (a linear circuit) ABSTAINS `unresolved`, never a bare switch.
 - `tests/inference/test_constitutive.py::test_never_confident_wrong_across_ground_truth` —
-  0 confident-wrong across ground truths.
+  0 confident-wrong across ground truths (clean-control validation).
+- `tests/inference/test_constitutive.py::test_capture_efficiency_mismatch_must_not_fake_biological_switch`
+  — the `NUDGE-LIM-019` capture-scale confound, LOCKED as a strict-xfail (a control read at a
+  different capture efficiency than the population must not fake a `biological-switch`).
 - `tests/inference/test_constitutive.py::test_affine_reporter_is_no_confound` — an ~affine
   reporter is correctly read as `no-confound`.
 - `tests/mcp/test_server.py::test_server_registers_the_expected_tools` — the `constitutive`

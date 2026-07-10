@@ -117,33 +117,37 @@ def test_multi_operating_point_recovers_or_abstains(param: str, expected: str) -
 
 @pytest.mark.slow
 @pytest.mark.decoy
-def test_near_fold_third_point_abstains_not_confident_wrong() -> None:
-    # NUDGE-LIM-017 decoy (red-team Hole 1). A TRUE ceiling (vmax×0.6) seen at three
-    # operating points where the 3rd (basal=0.60) sits aggressively near the toggle's fold
-    # but STILL PASSES lna_reliable (its noise lobes have not yet merged). Before the
-    # well-buffered proximity gate, adding this near-fold point flipped the correct 2-point
-    # 'ceiling' to a CONFIDENT WRONG 'threshold' (gap ≈0.24–0.30 ≫ resolve_margin 0.03;
-    # scripts/redteam/nearfold_thirdpoint_hole.py). The gate must instead ABSTAIN.
+def test_near_fold_third_point_never_confident_wrong() -> None:
+    # NUDGE-LIM-017 decoy (red-team Hole 1 + the round-2 knife-edge). A TRUE ceiling
+    # (vmax×0.6) seen at three operating points where the 3rd is near the toggle's fold but
+    # STILL PASSES lna_reliable. Before the fix, adding it flipped the correct 2-point
+    # 'ceiling' to a CONFIDENT WRONG 'threshold' (gap ≫ resolve_margin). A hard proximity
+    # margin proved a knife-edge (the corruption onset is non-monotonic and only ~0.007 above
+    # the useful operating point), so the fix is graded down-weighting + best-buffered-pair
+    # CORROBORATION. The fail-safe assertion: the 3rd point must NEVER yield the wrong
+    # 'threshold'/'gain' — ceiling (a far point down-weighted out) or unresolved (a marginal
+    # point failing corroboration) are both correct-or-abstain outcomes.
     op_clean1 = _operating_point(0.05, "vmax", seed=0)
-    op_clean2 = _operating_point(0.30, "vmax", seed=0)
-    op_nearfold = _operating_point(0.60, "vmax", seed=0)  # the corrupting near-fold point
+    op_clean2 = _operating_point(0.30, "vmax", seed=0)  # proximity 0.112 — the useful 2nd pt
+    op_nearfold = _operating_point(0.60, "vmax", seed=0)  # proximity 0.231 — far near-fold
 
-    # POSITIVE CONTROL: the two clean, well-buffered points still resolve the true ceiling —
-    # proving the gate isolates the near-fold point as the culprit, not the toggle itself.
+    # POSITIVE CONTROL: the two clean, well-buffered points resolve the true ceiling.
     clean, _ = attribute_lyapunov_multi(
         [op_clean1, op_clean2], target_edge=0, steps=200, seed=0
     )
     assert clean == "ceiling", f"clean 2-point control regressed: got {clean!r}"
 
-    # THE DECOY: adding the near-fold 3rd point must ABSTAIN, never a confident wrong call.
+    # THE DECOY: adding the near-fold 3rd point must NEVER produce a confident WRONG mechanism.
     label, _ = attribute_lyapunov_multi(
         [op_clean1, op_clean2, op_nearfold], target_edge=0, steps=200, seed=0
     )
-    assert label not in _BARE, (
-        f"near-fold 3rd point produced a confident bare mechanism {label!r} for a true "
+    assert label not in ("threshold", "gain"), (
+        f"near-fold 3rd point produced a confident WRONG mechanism {label!r} for a true "
         "ceiling — NUDGE-LIM-017 fail-safe violated"
     )
-    assert label == "unresolved", f"expected abstention (unresolved), got {label!r}"
+    assert label in ("ceiling", "unresolved"), (
+        f"expected correct-or-abstain (ceiling/unresolved), got {label!r}"
+    )
 
 
 @pytest.mark.slow

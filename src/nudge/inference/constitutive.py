@@ -29,12 +29,20 @@ reporter):
   ``n``-profile develops a well; ``Δloss(n=1) ≫`` the noise floor). The data now say the
   ultrasensitivity is **biological**.
 
-**What this turns a confident-wrong into (fail-safe, never a bare mechanism).**
+**What this turns a confident-wrong into (an ADVERSARIALLY-BOUNDED fail-safe).**
 :func:`classify_constitutive` returns at most a ``biological-switch`` verdict — *the
 ultrasensitivity is a real circuit switch, reject the readout-only explanation* — or an honest
 ``unresolved`` abstention, or ``no-confound`` when the calibrated reporter is ~affine (no
-LIM-006 to fix). It **never** emits a bare ``threshold``/``gain``/``ceiling`` call, so it can
-only move a confident false positive *toward* a correct call or an abstention.
+LIM-006 to fix). It **never** emits a bare ``threshold``/``gain``/``ceiling`` call. But
+``biological-switch`` IS a *falsifiable positive claim* (surfaced as
+:attr:`ConstitutiveResult.asserts_biological_switch`), valid ONLY under the control's
+precondition: the constitutive control and the circuit population must be measured on a
+**SHARED capture/depth scale**. If they are not — an unmodeled capture-efficiency mismatch
+between the two populations — the control mis-anchors the reporter ``Vmax`` and can assert
+``biological-switch`` on a LINEAR circuit (a re-opened ``NUDGE-LIM-006`` artifact; verified,
+red-team round 2). So the guarantee is *adversarially bounded* (``NUDGE-LIM-019``), not
+unconditional: it moves a confident false positive toward a correct call or an abstention
+**when the control shares the population's capture scale.**
 
 **Honest caveat (confirmed in validation, preserved here).** The control lets NUDGE *reject
 "no switch"* but does **not** point-identify the circuit ``n`` (recovered ≈ 5 vs true 3 — the
@@ -437,13 +445,29 @@ class ConstitutiveResult:
 
     @property
     def is_confident_wrong(self) -> bool:
-        """Structurally always ``False``: the module never emits a bare mechanism call.
+        """``True`` iff a bare ``threshold``/``gain``/``ceiling`` was emitted — structurally
+        ``False`` (this module never localizes a knob).
 
-        The strongest positive verdict is ``biological-switch`` (a real switch exists,
-        reject the readout-only explanation); it never localizes the knob, so it cannot be
-        confidently wrong about threshold/gain/ceiling — the whole point of the mitigation.
+        **Do NOT read this as "the result cannot be wrong."** ``biological-switch`` is a
+        *falsifiable positive claim* this predicate deliberately does NOT cover (see
+        :attr:`asserts_biological_switch`); it is valid only under the shared-capture
+        precondition and CAN be wrong if that is violated — an unmodeled control-vs-population
+        capture-efficiency mismatch mis-anchors the reporter and yields ``biological-switch``
+        on a LINEAR circuit (``NUDGE-LIM-019``, verified red-team round 2). The honest framing
+        of this capability is *adversarially bounded*, not "structurally fail-safe".
         """
         return self.call in {"threshold", "gain", "ceiling"}
+
+    @property
+    def asserts_biological_switch(self) -> bool:
+        """``True`` iff the verdict is the falsifiable POSITIVE claim ``biological-switch``.
+
+        This is the claim bounded by ``NUDGE-LIM-019``: it presumes the constitutive control
+        and the circuit population share a capture/depth scale. Treat ``True`` as "NUDGE
+        asserts a real switch, *conditional* on matched capture", never an unconditional
+        certainty. Complements :attr:`is_confident_wrong` (which only tracks bare-knob calls).
+        """
+        return self.call == "biological-switch"
 
 
 def profile_circuit_n(

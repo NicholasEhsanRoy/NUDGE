@@ -1086,7 +1086,11 @@ def constitutive_to_dict(res: Any) -> dict[str, Any]:
     return {
         "call": res.call,
         "reason": res.reason,
-        "confident_wrong": res.is_confident_wrong,
+        "confident_wrong": res.is_confident_wrong,  # bare-knob only (structurally False)
+        # The falsifiable POSITIVE claim, bounded by the shared-capture precondition
+        # (NUDGE-LIM-019). Surfaced so a caller never reads biological-switch as an
+        # unconditional certainty.
+        "asserts_biological_switch": res.asserts_biological_switch,
         "calibration": {
             "reporter_hill_h": c.h,
             "ci_h": list(c.ci_h),

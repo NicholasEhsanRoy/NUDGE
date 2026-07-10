@@ -125,8 +125,14 @@ at KNOWN doses (bypassing the circuit) and anchors the readout using **readout p
 ONLY** (gradient-proven no leak), then a profile over circuit `n` **rejects "no switch"** for
 a real switch → `biological-switch`, while the LIM-006 hazard (a linear circuit) **abstains**
 `unresolved` — turning a confident false positive into a correct call *or* an honest
-abstention, **0 confident-wrong**, and never point-identifying `n` (the honest caveat,
-`NUDGE-LIM-018`). Run it: `nudge constitutive --demo` /
+abstention, and never point-identifying `n` (the honest caveat, `NUDGE-LIM-018`). This
+guarantee is **adversarially bounded, not unconditional** (`NUDGE-LIM-019`): our own round-2
+red-team then broke *this* capability too — a control-vs-population **capture-efficiency
+mismatch** (a routine batch difference) re-anchors the reporter and can assert
+`biological-switch` on a linear circuit, so the `biological-switch` verdict is valid only when
+the control shares the population's capture scale (a stated experimental-design precondition),
+and the confound is locked as a strict-xfail decoy. Even the tool built to *close* a
+confident-wrong has its own honestly-documented bound. Run it: `nudge constitutive --demo` /
 [`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
 
 **We red-teamed our own fail-safe — found 2 holes, and turned each into a guarantee.**

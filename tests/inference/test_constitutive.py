@@ -154,6 +154,46 @@ def test_affine_reporter_is_no_confound() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# NUDGE-LIM-019 (red-team round 2): a control-vs-population capture-efficiency mismatch
+# re-opens NUDGE-LIM-006 — LOCKED as a strict-xfail so it cannot silently change.
+# --------------------------------------------------------------------------- #
+@pytest.mark.decoy
+@pytest.mark.slow
+@pytest.mark.xfail(
+    strict=True,
+    reason="NUDGE-LIM-019: the constitutive control and the circuit population must share a "
+    "capture/depth scale, but the module applies NO relative-depth normalization between the "
+    "two populations. Reading the control at ~0.5x the population's capture efficiency "
+    "mis-anchors the reporter Vmax and makes NUDGE assert 'biological-switch' on a LINEAR "
+    "circuit (the LIM-006 artifact resurrected via a batch/capture confound; 3/3 seeds). No "
+    "safe runtime gate exists without a switch-independent shared reference (a magnitude gate "
+    "would false-abstain on real switches), so this is LOCKED as strict-xfail; the "
+    "shared-capture precondition is documented, and the Option B robustness fix is designed in "
+    "design/CONSTITUTIVE_CONTROL.md. When a shared-reference anchor fixes it this XPASSes and "
+    "prompts removing the mark.",
+)
+def test_capture_efficiency_mismatch_must_not_fake_biological_switch() -> None:
+    # DESIRED (fail-safe) behavior: the truth is a LINEAR (n=1) circuit, so with the control
+    # read at a DIFFERENT capture efficiency than the population, NUDGE must NOT assert a real
+    # switch — it should abstain. It currently asserts 'biological-switch' (a confident-wrong),
+    # so this assertion fails today (strict-xfail). asserts_biological_switch is the
+    # falsifiable positive claim (NUDGE-LIM-019) that must never fire on a linear circuit.
+    params = _switch_params(1.0)  # LINEAR circuit — the LIM-006 hazard
+    pop, control, _ = generate_constitutive_dataset(
+        params, n_cells=600, n_ctrl_doses=10, n_ctrl_reps=200, seed=0
+    )
+    # The control is a SEPARATE population, here read at ~0.5x the population's capture
+    # efficiency (a routine single-cell batch difference — no shared normalization).
+    confounded = ConstitutiveControl(
+        activity=control.activity, response=control.response * 0.5
+    )
+    res = profile_circuit_n(
+        pop, confounded, params, n_grid=_GRID, restarts=3, steps=600, n_model_cells=400, seed=0
+    )
+    assert not res.asserts_biological_switch, res.reason
+
+
+# --------------------------------------------------------------------------- #
 # input validation
 # --------------------------------------------------------------------------- #
 def test_control_requires_four_distinct_doses() -> None:

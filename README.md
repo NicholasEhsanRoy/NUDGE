@@ -106,10 +106,13 @@ Highlights so far:
   *bypassing the circuit* — anchors the readout (using **readout parameters only**, no
   circuit leak), and a profile over circuit `n` then **rejects "no switch"** for a genuine
   switch → **biological**, or **abstains** for a linear circuit whose apparent
-  ultrasensitivity lives in the reporter. **Fail-safe:** it turns the confident false
-  positive into a correct call **or** an honest abstention, never a bare knob, and it does
-  **not** point-identify `n` (that needs a second anchor; `NUDGE-LIM-018`) (`nudge
-  constitutive --demo`) — see
+  ultrasensitivity lives in the reporter. **Adversarially bounded (`NUDGE-LIM-019`):** it
+  turns the confident false positive into a correct call **or** an honest abstention and never
+  a bare knob — but `biological-switch` is a falsifiable positive claim, valid **only when the
+  control and the circuit population share a capture/depth scale** (co-measured); an unmodeled
+  capture mismatch between the two populations re-opens `NUDGE-LIM-006` (a red-team round-2
+  finding, now locked as a strict-xfail decoy). It also does **not** point-identify `n` (needs
+  a second anchor; `NUDGE-LIM-018`) (`nudge constitutive --demo`) — see
   [`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
 
 **The fail-safe guarantee is adversarially red-teamed**

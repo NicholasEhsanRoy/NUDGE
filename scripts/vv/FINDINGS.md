@@ -377,14 +377,30 @@ reduced 6-point grid / 400-cell / 3-restart budget): a TRUE switch (circuit `n=3
 `h=6`) → WITHOUT control span ≈ **0.0007–0.0014** (FLAT), WITH control **n=1 rejection ≈
 0.026–0.032** (argmin off `n=1`) → verdict `biological-switch`; the LIM-006 hazard (a LINEAR
 circuit `n=1`) → **n=1 rejection ≈ 0.000** → verdict `unresolved` (the confident false positive
-becomes an honest abstention); **0 confident-wrong across seeds**. The gate is a fail-safe
-conjunction (absolute margin AND ≥5× the flat no-control span AND profile min off `n=1`), the
-verdict is NEVER a bare threshold/gain/ceiling (`is_confident_wrong` structurally False), and
-the `biological-switch` reason states loudly that it does NOT point-identify `n` (`NUDGE-LIM-018`
-— needs a second anchor). The no-circuit-leak property is enforced structurally and checked:
-`control_loss_circuit_gradient` returns exactly 0 for every circuit parameter. Tests:
-`tests/inference/test_constitutive.py`; card: `docs/mechanism_cards/constitutive_control.md`;
-demo: `notebooks/Constitutive_Control.ipynb`.
+becomes an honest abstention); **0 confident-wrong across seeds** on the clean-control
+validation. The gate is a conjunction (absolute margin AND ≥5× the flat no-control span AND
+profile min off `n=1`); the verdict is never a bare threshold/gain/ceiling, and the
+`biological-switch` reason states loudly that it does NOT point-identify `n` (`NUDGE-LIM-018` —
+needs a second anchor). The no-circuit-leak property is enforced structurally and checked:
+`control_loss_circuit_gradient` returns exactly 0 for every circuit parameter.
+
+**ADVERSARIALLY BOUNDED, not "structurally fail-safe" (red-team round 2 → `NUDGE-LIM-019`).**
+The honesty framing was corrected after round 2 found a genuine confident-wrong: the control is
+a SEPARATE population, and a control-vs-population **capture-efficiency mismatch** (~0.5×, a
+routine single-cell batch difference — no relative-depth normalization is applied between the
+two populations) mis-anchors the reporter `Vmax` and makes the profile assert `biological-switch`
+on a TRULY LINEAR circuit — the `NUDGE-LIM-006` artifact resurrected (3/3 seeds,
+`scripts/redteam/constitutive_control_batch_confound.py`; a clean matched control abstains). It
+slipped past the module's own `is_confident_wrong` because that predicate counted only bare-knob
+calls, treating the falsifiable `biological-switch` positive as unconditionally safe. Fixes
+(shipped): the contract is broadened (`ConstitutiveResult.asserts_biological_switch` surfaces the
+positive claim; `is_confident_wrong` is documented as bare-knob-only), the framing is
+**adversarially bounded** — `biological-switch` is valid ONLY when the control shares the
+population's capture scale (a stated experimental-design precondition) — and the confound is
+LOCKED as a strict-xfail decoy. The principled robustness fix (anchor both populations to the
+switch-independent reporter floor / a spike-in) is designed as future work in
+`design/CONSTITUTIVE_CONTROL.md` (Option B). Tests: `tests/inference/test_constitutive.py`; card:
+`docs/mechanism_cards/constitutive_control.md`; demo: `notebooks/Constitutive_Control.ipynb`.
 
 ---
 

@@ -9,6 +9,34 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team ROUND 2 (core engine) + two fixes (`design/FAILSAFE_REDTEAM_2.md`).**
+  A second adversarial pass targeting the core engine found **2 more verified confident-wrong
+  holes** — both in work shipped the same day — and both are now fixed:
+  - **Constitutive capture-scale confound → FIXED honesty contract + LOCKED (`NUDGE-LIM-019`).**
+    The constitutive control is a *separate* population; a control-vs-population
+    **capture-efficiency mismatch** (~0.5×, a routine single-cell batch difference — the module
+    applies no relative-depth normalization between the two populations) mis-anchors the reporter
+    `Vmax` and makes NUDGE assert `biological-switch` on a **linear** circuit (the `NUDGE-LIM-006`
+    artifact resurrected; 3/3 seeds). It slipped past the module's own `is_confident_wrong`
+    (scoped to bare-knob calls only). Fixes: the honesty contract is broadened
+    (`ConstitutiveResult.asserts_biological_switch` surfaces the falsifiable positive), the
+    framing is corrected from "structurally fail-safe / 0 confident-wrong" to **adversarially
+    bounded** (`biological-switch` is valid only when the control shares the population's capture
+    scale — a stated precondition), the confound is **locked as a strict-xfail decoy**, and the
+    principled robustness fix (anchor to the switch-independent reporter floor / a spike-in) is
+    designed as future work (`design/CONSTITUTIVE_CONTROL.md`, Option B).
+  - **Near-fold multi-fit — the round-1 `NUDGE-LIM-017` hard margin was a KNIFE-EDGE → replaced.**
+    A 3rd operating point at proximity 0.146 (just under the 0.15 margin) still flipped a true
+    ceiling → confident `threshold` (gap 0.53). Measuring the corruption onset showed *why* a hard
+    margin is scientifically invalid: the useful 2nd point (proximity 0.112) and a corrupting one
+    (0.119) sit **0.007 apart**, and the onset is **non-monotonic** in proximity. The hard gate is
+    replaced by **graded near-fold down-weighting** (a far near-fold point is weighted ~0 in the
+    joint loss so it cannot corrupt the fit) **+ best-buffered-pair corroboration** (a bare
+    mechanism is accepted only if the two most-buffered points confirm it, else abstain —
+    threshold-free, closing the knife-edge). Measured after the fix: the {0.05,0.30} control still
+    resolves the true ceiling, and every near-fold 3rd point (proximity 0.119 / 0.146 / 0.231)
+    honestly ABSTAINS — 0 confident-wrong. Regression-locked by the knife-edge + near-fold decoys.
+
 - **Constitutive-reporter calibration control — the `NUDGE-LIM-006` mitigation
   (`nudge.inference.constitutive`, `NUDGE-METHOD-011`, `NUDGE-LIM-018`):** removes a known
   **confident-wrong** failure mode. NUDGE assumes an *affine* reporter; a **nonlinear**
@@ -31,7 +59,9 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   (`scripts/vv/constitutive_control.py`; FINDINGS "NUDGE-LIM-006 mitigation"): a true switch
   (`n=3`) through a nonlinear reporter (`h=6`) → `biological-switch` (n=1 rejection ≈0.026 vs
   a flat no-control span ≈0.001), a linear circuit (`n=1`, the LIM-006 hazard) → `unresolved`
-  (n=1 rejection ≈0), 0 confident-wrong across seeds. Additive / opt-in (never touches
+  (n=1 rejection ≈0), 0 confident-wrong across seeds **on the clean-control validation** (the
+  `biological-switch` verdict is adversarially bounded by the shared-capture precondition —
+  `NUDGE-LIM-019`, see the red-team round-2 entry above). Additive / opt-in (never touches
   `fit()`'s default, the decoy battery, or the Lyapunov / epistasis paths); reuses the
   shipped Hill primitive + energy distance. Wired into `nudge constitutive` CLI + the
   `constitutive` MCP tool + `service.constitutive_file` + a Mechanism Card +

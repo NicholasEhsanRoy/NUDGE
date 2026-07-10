@@ -100,3 +100,56 @@ result: mechanism attribution from single-cell snapshots is **fundamentally conf
 reporter nonlinearity**, and a **constitutive-reporter calibration** is a concrete,
 simulation-validated experimental design that restores identifiability enough to reject
 "no switch." That is both a NUDGE roadmap item and a suggestion any lab could act on.
+
+---
+
+## The capture-scale confound (`NUDGE-LIM-019`) and its future robustness fix (Option B)
+
+**The hole (red-team round 2, verified).** The constitutive control is a **separate
+population**, and single-cell samples routinely differ in **capture / sequencing efficiency**.
+The shipped module compares the control's reporter counts to the circuit population's directly
+(`log1p` counts + energy distance) with **no relative-depth normalization between the two
+populations**. Reading the control at ~0.5× the population's efficiency mis-anchors the reporter
+`Vmax` low, so the with-control `n`-profile develops a spurious well away from `n=1` and asserts
+`biological-switch` on a **truly linear (n=1) circuit** — re-opening exactly the `NUDGE-LIM-006`
+artifact this capability exists to reject (`scripts/redteam/constitutive_control_batch_confound.py`,
+3/3 seeds). It slipped past the module's own `is_confident_wrong` guard because that predicate
+was scoped to bare knob calls only.
+
+**What shipped (the honest, safe response — "Option A").** No runtime gate: a capture-scale
+difference between the two populations is, *without a switch-independent shared reference*,
+indistinguishable from a real switch at the count-magnitude level (a real switch also raises the
+population's counts), so a naïve magnitude gate would false-abstain on genuine switches. Instead:
+the shared-capture **precondition** is now stated; the verdict is reframed as **adversarially
+bounded** (not "structurally fail-safe"); the falsifiable positive is surfaced
+(`ConstitutiveResult.asserts_biological_switch`); and the confound is **locked** as a strict-xfail
+decoy. Matched capture between the control and the population is a reasonable *experimental-design*
+requirement to state — like asking for the constitutive control itself.
+
+**Option B — the fundamental fix (DESIGNED, deferred; do not lose this idea).** Anchor both
+populations to a **switch-independent shared reference** so a capture-efficiency difference
+normalizes out *without* cancelling the switch signal:
+
+1. **The reporter FLOOR as the shared reference.** The reporter's OFF-state level
+   (`readout_base`) is the *same molecule at its basal level in both populations* and is
+   **independent of whether the circuit switches** (an OFF cell reads the floor whether the
+   circuit is linear or bistable). Estimate the floor in each population — in the **control**
+   from its lowest-dose point(s); in the **circuit population** from its low-activity quantile
+   (the OFF sub-population; robust because even a switch keeps an OFF mode populated at the
+   depths where the LNA is trustworthy). The ratio *floor(control) / floor(population)* is a
+   **capture-scale estimator that carries no switch information**, so rescaling the control to
+   match the population's floor corrects the confound while leaving the switch signal intact.
+   Unlike a total-count size factor (degenerate with `Vmax`, the classic `scale⇄vmax` problem),
+   the floor anchor is orthogonal to the ON amplitude.
+2. **A spike-in alternative.** If an exogenous spike-in / housekeeping panel is co-measured in
+   both populations, use it as the depth reference directly (the standard normalization) — the
+   most robust option when the experimental design provides it.
+3. **Fail-safe fallback.** When neither the floor nor a spike-in can be estimated reliably
+   (e.g. the population has no resolvable OFF mode, or the control lacks a near-zero dose),
+   **abstain** (`unresolved`) rather than assume matched capture — converting the current silent
+   confident-wrong into an honest abstention.
+
+Option B would let the module **recover** the correct call under a capture mismatch (not merely
+abstain), turning `NUDGE-LIM-019` from a locked bound into a solved case. It is deferred (not
+attempted under time pressure) because the floor-estimation-from-a-mixed-population step needs
+its own validation to avoid trading one confound for another. Tracked here so it is not lost.

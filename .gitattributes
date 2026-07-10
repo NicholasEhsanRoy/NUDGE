@@ -1,0 +1,3 @@
+# Exclude Jupyter notebooks from GitHub language statistics (count as documentation,
+# not code) — they are demo/narrative surfaces, not the library.
+*.ipynb linguist-documentation

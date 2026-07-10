@@ -474,6 +474,7 @@ def fit_lyapunov_multi(
     k_modes: int = 2,
     steps: int = 200,
     learning_rate: float = 0.05,
+    weights: list[float] | None = None,
     seed: int = 0,
 ) -> tuple[float, float, list[float]]:
     """Fit ONE shared kinetic value jointly across a list of operating ``points``.
@@ -484,11 +485,21 @@ def fit_lyapunov_multi(
     differs at another (the snapshot constraint ``n·ln(K/B)`` moves with ``B``), so a
     shared ``K`` fits both poorly. Each point keeps its own weights + pinned scale/obs.
 
+    ``weights`` (optional, one per point) scale each point's contribution to the joint
+    loss — a **graded near-fold down-weighting** (NUDGE-LIM-017): a point approaching the
+    fold contributes less, so it cannot dominate the shared-parameter argmin. ``None`` ⇒
+    equal weights (the original behaviour). The combined NLL is the weight-normalized mean.
+
     Returns ``(recovered shared value, combined mean NLL, history)``.
     """
     n_pts = len(points)
     if n_pts == 0:
         raise ValueError("need at least one operating point")
+    w_pt = (
+        jnp.ones(n_pts) if weights is None
+        else jnp.asarray(np.asarray(weights, dtype=float))
+    )
+    w_sum = jnp.maximum(jnp.sum(w_pt), 1e-9)
     bases = [p.circuit.base_params() for p in points]
     ys = [jnp.asarray(np.asarray(p.data, dtype=np.float32)) for p in points]
     eyes = [jnp.eye(p.circuit.n_species) for p in points]
@@ -514,8 +525,8 @@ def fit_lyapunov_multi(
                 cov_obs = point.scale**2 * cov + point.obs_sd**2 * eyes[i]
                 comps.append(w[k] + _mvn_logpdf(ys[i], point.scale * mu, cov_obs))
             ll = jax.scipy.special.logsumexp(jnp.stack(comps), axis=0)
-            total = total - jnp.mean(ll)
-        return total / n_pts
+            total = total - w_pt[i] * jnp.mean(ll)
+        return total / w_sum
 
     @jax.jit
     def step(
@@ -550,6 +561,20 @@ def fit_lyapunov_multi(
     return float(np.exp(theta[0])), float(np.mean(history[-20:])), history
 
 
+def _proximity_weight(prox: float, full_thresh: float, width: float = 0.04) -> float:
+    """Graded near-fold down-weight for one operating point (NUDGE-LIM-017).
+
+    A well-buffered point (``proximity ≤ full_thresh``) keeps full weight 1.0; past the
+    threshold the weight decays as a Gaussian in the excess proximity, so a FAR near-fold
+    point (e.g. the round-1 witness at proximity 0.231) contributes ~0 to the joint fit and
+    cannot corrupt it. Points *just* past the threshold are only mildly down-weighted — the
+    best-pair corroboration handles those, since proximity cannot separate a useful point
+    (measured 0.112) from a corrupting one (0.119).
+    """
+    excess = max(prox - full_thresh, 0.0)
+    return float(np.exp(-((excess / width) ** 2)))
+
+
 def attribute_lyapunov_multi(
     points_by_mech: dict[str, list[OperatingPoint]] | list[OperatingPoint],
     *,
@@ -569,19 +594,27 @@ def attribute_lyapunov_multi(
     gain and threshold separate, so — unlike the single-condition call — it can return a
     bare ``gain``/``threshold``/``ceiling`` when one clearly wins, else ``unresolved``.
 
-    **Well-buffered precondition (NUDGE-LIM-017).** The breaker assumes each operating
-    point contributes *trustworthy* moments to the shared-parameter joint fit. But
-    :func:`lna_reliable` — the only per-point trust gate — trips solely at lobe *overlap*
-    (or low depth); a point still *approaching* the saddle-node fold, whose Lyapunov
-    covariance is already biased but whose noise lobes have not yet merged, passes it and
-    **poisons the joint argmin** (a near-fold 3rd toggle point flips a true ``ceiling`` to
-    a confident ``threshold`` — ``scripts/redteam/nearfold_thirdpoint_hole.py``). So the
-    fit is additionally gated on the bifurcation-proximity **dial**
-    (:func:`~nudge.inference.bifurcation.bifurcation_proximity`, whose two *deterministic*,
-    depth-independent channels ``lna_reliable`` ignores): it **abstains** unless every
-    operating point is well-buffered (``proximity ≤ well_buffered_margin``) away from the
-    fold. The "second, *well-buffered* operating point" caveat becomes an enforced
-    precondition, not prose.
+    **Near-fold robustness (NUDGE-LIM-017).** The breaker assumes each operating point
+    contributes *trustworthy* moments to the shared-parameter joint fit. But
+    :func:`lna_reliable` — the per-point LNA gate — trips solely at lobe *overlap* (or low
+    depth); a point still *approaching* the saddle-node fold, whose Lyapunov covariance is
+    already biased but whose noise lobes have not yet merged, passes it and **poisons the
+    joint argmin** (a near-fold 3rd toggle point flips a true ``ceiling`` to a confident
+    ``threshold`` — ``scripts/redteam/nearfold_thirdpoint_hole.py``). A hard proximity gate
+    is a **knife-edge** and does not close it: measurement (``well_buffered_margin`` probe)
+    shows a *useful* second operating point (proximity 0.112) and a *corrupting* one (0.119)
+    sit only 0.007 apart, so proximity cannot separate them and neither a threshold nor a
+    pure proximity weighting suffices. Two mechanisms are used instead:
+
+    1. **Graded down-weighting** (:func:`_proximity_weight`) — each point's contribution to
+       the joint loss decays smoothly with its bifurcation proximity past
+       ``well_buffered_margin``, so a *far* near-fold point (the round-1 witness at proximity
+       0.231) is effectively ignored and cannot corrupt the fit.
+    2. **Best-buffered-pair corroboration** — with >2 points, a resolved bare mechanism is
+       accepted only if it AGREES with the call from the two *most-buffered* points; if a
+       marginal point changed the answer, NUDGE **abstains**. Threshold-free, it closes the
+       0.007 knife-edge that weighting cannot, while keeping a genuinely well-buffered
+       multi-point set resolvable.
     """
     points = (
         points_by_mech if isinstance(points_by_mech, list)
@@ -591,25 +624,38 @@ def attribute_lyapunov_multi(
     # corrupts the shared-parameter joint fit).
     if not all(lna_reliable(p.circuit, p.scale)[0] for p in points):
         return "unresolved", {}
-    # NUDGE-LIM-017: lna_reliable trips only at lobe OVERLAP / low depth, so a point still
-    # APPROACHING the fold (deterministic proximity rising, lobes not yet merged) passes it
-    # yet biases the shared-parameter joint fit. Gate on the proximity DIAL (the two
-    # deterministic channels lna_reliable ignores): abstain unless EVERY point is
-    # well-buffered away from the fold. proximity = max(det, lobe) ≥ det, so this can only
-    # add abstentions (fail-safe), never manufacture a call.
-    for p in points:
-        score = bifurcation_proximity(p.circuit)
-        if score is not None and score.proximity > well_buffered_margin:
-            return "unresolved", {}
-    nlls: dict[str, float] = {}
-    for param, name in _ATTR_PARAMS:
-        _val, combined, _hist = fit_lyapunov_multi(
-            points, ("edge", target_edge, param),
-            k_modes=k_modes, steps=steps, seed=seed,
-        )
-        nlls[name] = combined
-    ordered = sorted(nlls, key=lambda k: nlls[k])
-    best, second = ordered[0], ordered[1]
-    if nlls[second] - nlls[best] > resolve_margin:
-        return best, nlls
-    return "unresolved", nlls
+
+    # Per-point bifurcation proximity (the deterministic dial lna_reliable ignores).
+    prox = [
+        (s.proximity if (s := bifurcation_proximity(p.circuit)) is not None else 0.0)
+        for p in points
+    ]
+
+    def _resolve(idx: list[int]) -> tuple[str, dict[str, float]]:
+        """Graded-weighted joint fit over the points ``idx`` → (call, NLLs)."""
+        pts = [points[i] for i in idx]
+        wts = [_proximity_weight(prox[i], well_buffered_margin) for i in idx]
+        nlls: dict[str, float] = {}
+        for param, name in _ATTR_PARAMS:
+            _val, combined, _hist = fit_lyapunov_multi(
+                pts, ("edge", target_edge, param),
+                k_modes=k_modes, steps=steps, weights=wts, seed=seed,
+            )
+            nlls[name] = combined
+        ordered = sorted(nlls, key=lambda k: nlls[k])
+        best, second = ordered[0], ordered[1]
+        if nlls[second] - nlls[best] > resolve_margin:
+            return best, nlls
+        return "unresolved", nlls
+
+    call, nlls = _resolve(list(range(len(points))))
+    # Best-buffered-pair corroboration: proximity cannot separate a useful 2nd point (0.112)
+    # from a corrupting near-fold one (0.119), so require the resolved bare mechanism to be
+    # confirmed by the two MOST-BUFFERED points. If a marginal point changed the answer,
+    # abstain (fail-safe) — this, not the graded weighting, is what closes the knife-edge.
+    if call in ("gain", "threshold", "ceiling") and len(points) > 2:
+        order = sorted(range(len(points)), key=lambda i: prox[i])
+        pair_call, _ = _resolve(order[:2])
+        if pair_call != call:
+            return "unresolved", nlls
+    return call, nlls
