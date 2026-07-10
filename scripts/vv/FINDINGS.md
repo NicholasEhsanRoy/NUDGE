@@ -1003,3 +1003,45 @@ averaged away** — the honest new gate this capability adds.
 > `notebooks/Multi_Reporter.ipynb`. A real-panel demonstration (e.g. OCT4/NANOG self-renewal
 > reporters of the pluripotency latent) is a deferred follow-up — the synthetic
 > degeneracy-break is the load-bearing validation (we do NOT force a real-data claim).
+# Abstention catalogue + the toggle-gain deep dive: gain is a FUNDAMENTAL covariance-channel limit
+
+A read-only analysis (`design/ABSTENTION_ANALYSIS.md`) maps every surface on which NUDGE declines a
+mechanism call and classifies each **fundamental** (keep abstaining) vs **addressable** (a concrete
+lever resolves it). Most addressable ones reduce to *one clean second operating point / a constitutive
+control*; the fundamental ones to *"the data isn't a switch"* and *"the LNA dies at the fold — where
+gain lives on a toggle."* Two numerical probes back the sharpest case (`scripts/analysis/`).
+
+**The toggle-gain abstention is fundamental, and survives a 3rd operating point (measured).** The open
+question was whether `attribute_lyapunov_multi`'s gain abstention (`unresolved` 3/3 on independent SSA,
+while threshold + ceiling resolve) is fixable. Probe B (`toggle_gain_abstention_probe.py`, resolved-
+channel NLL gap vs resolve_margin 0.03):
+
+| true mechanism | pts=1 | pts=2 | pts=3 |
+|---|---|---|---|
+| **gain** (n×0.6) | `unresolved` gap 0.019 | `unresolved` gap **0.0009** | `unresolved` gap **0.0001** |
+| threshold (K×1.6) | `ceiling` 0.036 | **`threshold`** 0.344 | **`threshold`** 0.094 |
+| ceiling (vmax×0.6) | `unresolved` 0.001 | **`ceiling`** 0.202 | `threshold` 0.304 ⚠ |
+
+Adding operating points **shrinks** the gain gap toward zero (0.019→0.0001) — the *opposite* of
+threshold/ceiling — so more conditions is provably **not** the lever for gain. Mechanistic root
+(`toggle_gain_mechanism.py`, deterministic): a mild gain change barely moves the LNA mode means/covs
+while the LNA is trustworthy (rel. Δcov ≤ 0.17 for n_eff ≥ 3.0), and its covariance signature only
+becomes large (Δcov ≈ 1.0) as `n` reaches the saddle-node — exactly where `lna_reliable` **abstains**,
+just before bistability is lost. Gain (Hill `n`) shapes the *transition region / relaxation timescale*
+(a large-deviation property), not the deep-basin stationary covariance the channel reads; deep in a
+toggle basin both species are saturated against the repression threshold so the Jacobian — hence the
+covariance — is ~independent of `n`. **Multi-reporter (Cap 6) cannot fix it either** (the blindness is
+in the latent dynamics, not the readout projection). The only observable that could carry it is
+**time-resolved data** (Cap 4) or a near-fold non-Gaussian likelihood — a method change, unmeasured.
+Verdict: **keep abstaining on toggle-gain**; it is a genuine identifiability wall, consistent with the
+FIM prediction and the `TOGGLE_ATTRIBUTION_RESEARCH.md` LNA-breaks-at-the-fold caveat.
+
+**Honest side-finding — a near-fold operating point can HURT.** At `pts=3` the probe's aggressive 3rd
+point (basal 0.60, which clears `lna_reliable` only *at the edge*: lobe std ≈ 1.94 vs separation ≈
+2.24) corrupted the shared-parameter joint fit and flipped a true **ceiling → confident `threshold`**
+(gap 0.30). So "add a second operating point" (the validated breaker is basal 0.05 + 0.30, 0 wrong)
+means *a clean, well-buffered* point — not "pile on as many as possible." A cheap safeguard: weight
+each operating point by its `lna_reliable` margin, or require a minimum buffer, so a marginal near-fold
+point cannot dominate. (This does not affect the gain verdict — gain abstains at 1/2/3 points.) The
+shipped production toggle path still abstains (`tests/verification/test_toggle_nd_safety.py`); this is
+a probe-surfaced caveat on the opt-in multi-point breaker, not a shipped fail-safe break.

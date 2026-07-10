@@ -1,0 +1,15 @@
+
+==========================================================================
+(B) DOES A 3RD OPERATING POINT HELP? shared-parameter multi fit on SSA
+    resolved-channel NLL gap = NLL(2nd best) - NLL(best); margin=0.03
+==========================================================================
+WARNING:2026-07-10 02:05:00,719:jax._src.xla_bridge:966: An NVIDIA GPU may be present on this machine, but a CUDA-enabled jaxlib is not installed. Falling back to cpu.
+        gain  pts=1  seed=0          unresolved  gap=0.0192   gain=7.524  threshold=7.525  ceiling=7.505
+        gain  pts=2  seed=0          unresolved  gap=0.0009   gain=7.690  threshold=7.691  ceiling=7.692
+        gain  pts=3  seed=0          unresolved  gap=0.0001   gain=7.789  threshold=7.789  ceiling=7.789
+   threshold  pts=1  seed=0             ceiling  gap=0.0363   gain=6.825  threshold=6.830  ceiling=6.788
+   threshold  pts=2  seed=0           threshold  gap=0.3436   gain=7.054  threshold=6.705  ceiling=7.049
+   threshold  pts=3  seed=0           threshold  gap=0.0945   gain=7.249  threshold=7.154  ceiling=7.276
+     ceiling  pts=1  seed=0          unresolved  gap=0.0014   gain=6.440  threshold=6.441  ceiling=6.471
+     ceiling  pts=2  seed=0             ceiling  gap=0.2017   gain=6.844  threshold=6.866  ceiling=6.642
+     ceiling  pts=3  seed=0           threshold  gap=0.3043   gain=7.142  threshold=6.838  ceiling=7.257
