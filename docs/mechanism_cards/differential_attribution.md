@@ -5,7 +5,7 @@ role: attribution-method
 registry_name: DifferentialAttribution
 vulnerable_to_decoys: []
 documented_limitation: [NUDGE-LIM-006, NUDGE-LIM-016]
-validated_in_regime: {min_cells_per_context: 300, requires: "a per-context control + an approximately-correct shared switch topology", notes: "Fits the SAME perturbation in TWO contexts (drug-resistant vs sensitive line; donor A vs B; disease vs healthy) JOINTLY with a shared-vs-per-context parameter structure and BIC-selects which SINGLE knob differs — threshold (K) / gain (n) / ceiling (v_max) — or abstains (no-difference / unresolved). Reuses the shipped LNA Gaussian-mixture forward model (mode means + Lyapunov covariances) and the BIC parsimony pattern; depth/noise is pinned PER CONTEXT from each context's OWN control (calibrate_from_wt). Confound guard (NUDGE-LIM-016): a depth/batch shift aligned with the context axis is degenerate with a ceiling difference (scale⇄vmax), so a ceiling call whose OFF baseline moved vs its control, or whose per-context depths differ, ABSTAINS. Validated on synthetic ground truth: a Δv_max / Δn pair recovers WHICH knob differs, a no-difference pair reads no-difference, a ΔK threshold pair recovers-or-abstains (threshold is the hardest from a bistable snapshot, FINDINGS §2), and a confounded (depth-aligned-with-context, no real mechanism) pair abstains unresolved — never a spurious mechanism-difference call, 0 confident-wrong across seeds. Reported Δ estimates are APPARENT population parameters, not molecular constants (NUDGE-LIM-006)."}
+validated_in_regime: {min_cells_per_context: 300, requires: "a per-context control + an approximately-correct shared switch topology", notes: "Fits the SAME perturbation in TWO contexts (drug-resistant vs sensitive line; donor A vs B; disease vs healthy) JOINTLY with a shared-vs-per-context parameter structure and BIC-selects which SINGLE knob differs — threshold (K) / gain (n) / ceiling (v_max) — or abstains (no-difference / unresolved). Reuses the shipped LNA Gaussian-mixture forward model (mode means + Lyapunov covariances) and the BIC parsimony pattern; depth/noise is pinned PER CONTEXT from each context's OWN control (calibrate_from_wt). Confound guard (NUDGE-LIM-016): a depth/batch shift aligned with the context axis is degenerate with a ceiling difference (scale⇄vmax), so when the per-context depths (pinned from each control) differ beyond a ratio NUDGE ABSTAINS — unless the winner is a cleanly-resolved threshold/gain difference (orthogonal to a global scale). A second channel (P1): a constant additive/ambient offset on ONE context's PERTURBED cells only (control clean) is invisible to the control-keyed depth ratio yet fakes a confident gain-diff; a MEASURED one-sided OFF-baseline-inflation guard (gate 4b, off_shift_max=2.5, separating confident-wrong offset off_shift >= 2.99 from genuine <= 1.96, FINDINGS P1) abstains on it, with a residual bound on the deflating direction. Validated on synthetic ground truth: a Δv_max / Δn pair recovers WHICH knob differs, a no-difference pair reads no-difference, a ΔK threshold pair recovers-or-abstains (threshold is the hardest from a bistable snapshot, FINDINGS §2), and both a depth-aligned-with-context confound AND an additive perturbed-offset confound abstain unresolved — never a spurious mechanism-difference call, 0 confident-wrong across seeds. Reported Δ estimates are APPARENT population parameters, not molecular constants (NUDGE-LIM-006)."}
 references: [Das2009, HuangFerrell1996, ElfEhrenberg2003]
 ---
 
@@ -79,6 +79,19 @@ around nominal) so it cannot run off to the LNA variance-collapse likelihood spi
    ceiling / no-clear difference is not a masked depth artifact and **abstains** — *unless*
    the winner is a cleanly-resolved **threshold** or **gain** difference, which reshapes
    the distribution (orthogonal to a global scale) and survives.
+4b. **unresolved — the additive perturbed-condition offset (`NUDGE-LIM-016`, P1).** The
+   depth guard (gate 4) keys on the *controls*, so it is blind to a constant additive /
+   ambient offset on ONE context's *perturbed* cells only (its control clean): `depth_ratio`
+   stays ≈ 1, yet the offset shifts and compresses that context's modes and the joint BIC
+   misreads it as reduced cooperativity (a spurious `gain-diff`). Such an offset TRANSLATES
+   the perturbed OFF baseline up relative to that context's own control (`off_shift` ≫ 1),
+   while a genuine knob difference leaves the OFF mode anchored near basal (`off_shift` ≈ 1).
+   So before any positive call NUDGE **abstains** when either context's perturbed OFF
+   baseline is inflated above its own control beyond `off_shift_max` (a MEASURED separator —
+   every confident-wrong offset had `off_shift` ≥ 2.99, the strongest genuine difference only
+   ≤ 1.96; `FINDINGS` §P1). One-sided (inflation only): a genuine knob *reduction* deflates
+   the OFF baseline and does not trip it. **Residual:** a *deflating* perturbed-only offset
+   (dropout-like) aliases with a genuine reduction and is not caught (`NUDGE-LIM-016`).
 5. **threshold-diff / gain-diff / ceiling-diff.** The winning Δ model earns its parameter
    over the shared null and beats the other Δ models (and the ceiling channel is only
    called when the per-context depths match).
@@ -106,13 +119,15 @@ around nominal) so it cannot run off to the LNA variance-collapse likelihood spi
 | Failure mode | Guard / witness | Limitation |
 |---|---|---|
 | A depth/batch shift aligned with the context axis faking a ceiling difference | per-context depth pinning + the depth-ratio abstention → `unresolved` (`tests/inference/test_differential.py::test_confound_depth_aligned_with_context_abstains`) | `NUDGE-LIM-016` |
+| An additive/ambient offset on ONE context's *perturbed* cells (control clean) faking a `gain-diff` (P1) | the one-sided OFF-baseline-inflation guard (gate 4b) → `unresolved` (`tests/inference/test_differential.py::test_decoy_additive_perturbed_offset_abstains`) | `NUDGE-LIM-016` |
 | Gain vs threshold not separable from a bistable snapshot | the Δ-model tie gate → `unresolved` (`test_fail_safe_never_confident_wrong`) | `NUDGE-LIM-016` |
 | An underpowered / near-bifurcation context | the `lna_reliable` + `min_cells` gate → `unresolved` (`test_underpowered_context_abstains`) | `NUDGE-LIM-016` |
 | A nonlinear readout faking ultrasensitivity | the affine-readout bound shared with all attribution | `NUDGE-LIM-006` |
 
-There is **no dedicated differential decoy battery yet** (`vulnerable_to_decoys: []`) — the
-confounded-abstention test *is* the batch-aligned-with-context decoy at the context level;
-a broader synthetic decoy battery is future work.
+There is **no entry in the count-model decoy battery yet** (`vulnerable_to_decoys: []`) — the
+differential confound decoys live as `slow` tests instead: the depth-aligned-with-context
+test *and* the P1 additive-perturbed-offset test (`test_decoy_additive_perturbed_offset_abstains`)
+are the context-level decoys NUDGE must resist; a broader synthetic decoy battery is future work.
 
 ## Identifiability regime
 
@@ -159,6 +174,11 @@ reference must resolve to a real attribute.)*
 - `tests/inference/test_differential.py::test_confound_depth_aligned_with_context_abstains`
   — the confounded case (batch aligned with the context axis, no real mechanism) abstains
   `unresolved` (`NUDGE-LIM-016`).
+- `tests/inference/test_differential.py::test_decoy_additive_perturbed_offset_abstains` — the
+  P1 decoy: an additive/ambient offset on one context's *perturbed* cells (control clean),
+  the three verified confident-wrong `gain-diff` cases, now abstain `unresolved` via the
+  one-sided OFF-baseline-inflation guard (`NUDGE-LIM-016`); paired with
+  `test_decoy_additive_offset_zero_is_no_difference` (offset 0 → `no-difference`).
 - `tests/inference/test_differential.py::test_fail_safe_never_confident_wrong` — 0
   confident-wrong mechanism-difference calls across a mechanism / seed sweep.
 - `tests/test_service.py::test_differential_file_npz_wiring` — the `.npz` service

@@ -35,11 +35,27 @@ is a *cleanly-resolved threshold or gain* difference, which **reshapes** the dis
 (orthogonal to a global scale) and so survives a depth difference and is still callable —
 only the ceiling channel is confounded with depth. NUDGE also abstains when either context
 is underpowered or its LNA is untrustworthy
-(:func:`~nudge.inference.lyapunov.lna_reliable`). (An OFF-baseline diagnostic —
-``off_shift_ratio`` — is reported for transparency but is *not* load-bearing: the OFF mode's
-linear-noise spread is too large to separate a genuine ceiling from an on-samples batch
-reliably, which is exactly why the guard turns on the stable per-context depth ratio and why
-NUDGE requires the per-context control to come from the same library as its perturbed cells.)
+(:func:`~nudge.inference.lyapunov.lna_reliable`).
+
+**Second confound channel: an ADDITIVE perturbed-condition offset (``NUDGE-LIM-016`` P1).**
+The depth guard above keys on the two *controls*, so it is structurally blind to a constant
+additive / ambient offset applied to ONE context's **perturbed** cells only (its control
+left clean) — the per-context ``depth_ratio`` stays ≈ 1. Such an offset nonetheless shifts
+that context's perturbed modes and *compresses* their separation, which the joint BIC
+misreads as reduced cooperativity — a confident spurious ``gain-diff`` where the truth is
+no-difference. It leaves a fingerprint the depth ratio cannot: it TRANSLATES the perturbed
+OFF baseline **up** relative to that context's own control (``off_shift`` ≫ 1), whereas a
+genuine ``K`` / ``n`` / ``v_max`` difference leaves the OFF mode anchored near basal
+(``off_shift`` ≈ 1). So before any positive call NUDGE **abstains** when either context's
+perturbed OFF baseline is inflated above its own control beyond ``off_shift_max`` (a MEASURED
+separator — every confident-wrong offset had ``off_shift`` ≥ 2.99, the strongest genuine
+difference only ≤ 1.96; ``FINDINGS`` §P1). This is why the OFF-baseline shift, previously
+reported only for transparency, is now **one-sided load-bearing**: the *inflation* direction
+cleanly separates an additive offset from a mechanism difference. **Residual bound (honest):**
+the guard is one-sided — a *deflating* perturbed-only offset (dropout-like, ``off_shift`` < 1)
+aliases with a genuine knob *reduction* and is NOT separable, so it remains unguarded and
+documented (``NUDGE-LIM-016``); and NUDGE still requires each context's control to come from
+the same library as its perturbed cells.
 """
 
 from __future__ import annotations
@@ -353,19 +369,37 @@ def _fit_model(
 #: Low activity quantile probing the OFF mode for the confound guard.
 _Q_OFF = 0.3
 
+#: Max inflation of EITHER context's perturbed OFF baseline above its OWN control
+#: (``max(off_shift_a, off_shift_b)``) before the additive-perturbed-offset guard abstains
+#: (``classify_differential`` gate 4b, ``NUDGE-LIM-016`` P1). A constant additive/ambient
+#: offset on ONE context's perturbed cells (its control clean) TRANSLATES that context's OFF
+#: baseline up relative to its control while a GENUINE knob difference leaves the OFF mode
+#: anchored near basal. MEASURED separation (FINDINGS §P1, the default red-team regime):
+#: every confident-wrong additive-offset call had ``off_shift ≥ 2.99``; the strongest
+#: genuine gain/ceiling/threshold difference (up to ×3–4) inflated the OFF baseline to only
+#: ``≤ 1.96``. This threshold sits in that gap with margin on both sides — it is a measured
+#: separator, NOT an arbitrary cut. One-sided (inflation only): a genuine *reduction*
+#: deflates the OFF baseline below 1 and never trips it (which is why a symmetric guard is
+#: invalid — it would over-abstain on a genuine gain/ceiling reduction; see FINDINGS §P1).
+_OFF_SHIFT_INFLATION_MAX = 2.5
+
 
 def _off_baseline_shift(data: np.ndarray, control: np.ndarray) -> float:
     """How far a context's data OFF baseline has moved vs its OWN control (≈ 1 = fixed).
 
-    A **reported diagnostic, NOT load-bearing.** The ``_Q_OFF`` quantile of each cell's
+    **One-sided load-bearing (``NUDGE-LIM-016`` P1).** The ``_Q_OFF`` quantile of each cell's
     total activity (row-sum, clipped ≥ 0 since counts cannot be negative) probes the OFF
-    mode; the ratio in the perturbed data to the control cancels the context's depth. In
-    principle a genuine ceiling change leaves the OFF baseline fixed (ratio ≈ 1) while a
-    batch on the samples moves it — but the OFF mode's linear-noise spread is too large for
-    this to separate a ceiling from an on-samples batch reliably (the genuine-ceiling and
-    batch shifts overlap across seeds), so the confound guard turns on the **stable
-    per-context depth ratio** instead (:func:`classify_differential`, ``NUDGE-LIM-016``).
-    Reported for transparency (``off_shift_ratio``).
+    mode; the ratio in the perturbed data to the control cancels the context's depth. A
+    genuine ``K`` / ``n`` / ``v_max`` difference leaves the OFF baseline anchored near basal
+    (ratio ≈ 1; measured ≤ 1.96 even for a ×3–4 difference), while a constant additive /
+    ambient offset on the *perturbed* cells TRANSLATES it up (ratio ≫ 1; ≥ 2.99 for every
+    confident-wrong offset, ``FINDINGS`` §P1). The **inflation** direction is therefore a
+    clean, measured separator and drives the gate-4b abstention
+    (:func:`classify_differential`, ``off_shift_max``). The **deflation** direction is NOT:
+    a genuine reduction and a dropout-like offset both push the ratio below 1 and overlap
+    (which is why the guard is one-sided and a deflating perturbed-only offset stays an
+    unguarded residual, ``NUDGE-LIM-016``). Historically this diagnostic was reported for
+    transparency only; P1's measurement made its inflation side load-bearing.
     """
     d = np.clip(np.asarray(data, dtype=float).sum(axis=1), 0.0, None)
     c = np.clip(np.asarray(control, dtype=float).sum(axis=1), 0.0, None)
@@ -550,6 +584,7 @@ def classify_differential(
     resolve_margin: float = 6.0,
     min_cells: int = 300,
     depth_ratio_max: float = 1.5,
+    off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
 ) -> tuple[str, str]:
     """Turn a joint fit into a conservative verdict — the fail-safe classifier.
 
@@ -573,6 +608,13 @@ def classify_differential(
     4. **unresolved — the two Δ models tie.** The winning Δ model does not beat the
        runner-up Δ model by ``resolve_margin`` (the measured gain⇄threshold confound): the
        difference is real but WHICH knob moved is unidentifiable — abstain, don't guess.
+    4b. **unresolved — the additive perturbed-offset confound (``NUDGE-LIM-016``, P1).**
+       Either context's perturbed OFF baseline is inflated above its OWN control beyond
+       ``off_shift_max`` — the fingerprint of a constant additive / ambient offset on that
+       context's *perturbed* cells only (its control clean), which the control-keyed
+       ``depth_ratio`` (gate 2) is structurally blind to but which the joint BIC misreads as
+       reduced cooperativity (a spurious ``gain-diff``). One-sided (inflation only): a
+       genuine knob *reduction* deflates the OFF baseline and does not trip it.
     5. **threshold-diff / gain-diff / ceiling-diff.** The winning Δ model earns its
        parameter over the shared null AND beats the other Δ models. Returns
        ``(call, reason)``.
@@ -636,6 +678,42 @@ def classify_differential(
             "measured gain⇄threshold confound) — NUDGE abstains rather than guess"
         )
 
+    # 4b. the additive perturbed-condition offset confound (NUDGE-LIM-016, P1). The
+    # control-keyed depth guard (gate 2) is BLIND to a constant additive / ambient offset
+    # applied to ONE context's PERTURBED cells only (its control clean): the per-context
+    # depth_ratio is pinned from the two controls, so it stays ≈ 1 and gate 2 never
+    # engages. But such an offset shifts that context's perturbed modes and COMPRESSES
+    # their separation, which the joint LNA-BIC reads as reduced cooperativity — a confident
+    # spurious gain-diff (verified, FINDINGS §P1). It leaves a MEASURABLE fingerprint the
+    # depth_ratio cannot: it TRANSLATES the perturbed OFF baseline UP relative to that
+    # context's own control (off_shift ≫ 1), whereas a genuine K/n/v_max difference leaves
+    # the OFF mode anchored near basal (off_shift ≈ 1; measured ≤ 1.96 even for a ×3–4
+    # difference, vs ≥ 2.99 for every confident-wrong offset — FINDINGS §P1). So before
+    # emitting ANY positive *-diff, if EITHER context's perturbed OFF baseline is inflated
+    # above its own control beyond _OFF_SHIFT_INFLATION_MAX — an additive/ambient artifact
+    # on the perturbed condition, degenerate with a mechanism difference — NUDGE ABSTAINS.
+    # One-sided by construction: a genuine reduction DEFLATES the OFF baseline (off_shift
+    # < 1) and never trips this, so genuine gain/ceiling/threshold reductions still resolve
+    # (a symmetric guard would over-abstain on them — FINDINGS §P1). Residual bound: a
+    # DEFLATING perturbed-only offset (dropout-like) aliases with a genuine reduction and is
+    # NOT caught here (NUDGE-LIM-016).
+    finite_off = [v for v in (fit.off_shift_a, fit.off_shift_b) if np.isfinite(v)]
+    off_infl = max(finite_off) if finite_off else float("nan")
+    if np.isfinite(off_infl) and off_infl > off_shift_max:
+        which = "A" if fit.off_shift_a == off_infl else "B"  # the inflated context
+        return "unresolved", (
+            f"context {which}'s perturbed OFF baseline is inflated {off_infl:.2f}× above "
+            f"its OWN control (> {off_shift_max:g}) — the fingerprint of a constant "
+            "additive / ambient offset on that context's PERTURBED cells (a batch / "
+            "background artifact on the perturbed condition only). Its control-derived "
+            f"depth ratio ({fit.depth_ratio:.2f}) stays ≈ 1, so the depth guard is blind to "
+            "it, but such an offset shifts and compresses the perturbed modes — degenerate "
+            f"with a reduced-cooperativity ({_CALL_OF[fit.best_diff]}) signal. NUDGE cannot "
+            "certify the apparent difference is mechanistic rather than a masked "
+            "perturbed-condition artifact, so it abstains (NUDGE-LIM-016). A genuine knob "
+            "difference leaves the OFF mode anchored near basal (off_shift ≈ 1)"
+        )
+
     # 5. a resolved mechanistic difference.
     lo, hi = fit.ci_log2
     ci_txt = (
@@ -674,6 +752,7 @@ def attribute_differential(
     resolve_margin: float = 6.0,
     min_cells: int = 300,
     depth_ratio_max: float = 1.5,
+    off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
 ) -> DifferentialResult:
     """Fit + classify a two-context differential in one call — the CLI / MCP entry point.
 
@@ -700,6 +779,7 @@ def attribute_differential(
         resolve_margin=resolve_margin,
         min_cells=min_cells,
         depth_ratio_max=depth_ratio_max,
+        off_shift_max=off_shift_max,
     )
     return DifferentialResult(fit=fit, call=call, reason=reason)
 
