@@ -129,6 +129,28 @@ abstention, **0 confident-wrong**, and never point-identifying `n` (the honest c
 `NUDGE-LIM-018`). Run it: `nudge constitutive --demo` /
 [`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
 
+**We red-teamed our own fail-safe — found 2 holes, and turned each into a guarantee.**
+Beyond the *passive* decoy battery, we ran an adversarial pass
+([`design/FAILSAFE_REDTEAM.md`](design/FAILSAFE_REDTEAM.md)) whose sole mandate was to make
+*any* capability emit a confident, specific, **WRONG** mechanism call past its abstention
+gates. It found **2 real holes** (3 other attacks HELD) — and each became an *enforced
+guard*, not a footnote. **(Hole 1 — FIXED, `NUDGE-LIM-017`.)** A near-fold third operating
+point corrupted the multi-point covariance breaker and flipped a true **ceiling → confident
+`threshold`** — the *more-trusted* joint fit driven wrong by a point every existing gate
+rated reliable. We traced the root cause (the per-point trust gate `lna_reliable` only trips
+at *lobe overlap*, blind to a point still *approaching* the fold, whose moments are already
+biased), fixed it by additionally gating on the **bifurcation-proximity dial's two
+deterministic channels** (abstain unless every operating point is well-buffered), and
+regression-locked it with a decoy — the reproduction now reports **0 confident-wrong**.
+**(Hole 2 — LOCKED + sharpened, `NUDGE-LIM-009`.)** An *additive* ambient/batch offset on a
+combination condition bypasses size-factor (multiplicative) normalization and fakes
+**synergy**. Here we made the harder, honest call: no *safe* runtime gate exists — any gate
+sensitive enough to catch it would false-abstain on *real* synergy — so we LOCKED it as a
+strict-`xfail` decoy and **sharpened** the limitation (bumped to major/safety-relevant, with
+the required orthogonal-covariate mitigation named), rather than ship a gate that trades one
+failure for another. Finding a confident-wrong hole in your own tool and *reporting it as a
+win* — closing it or locking it, never hiding it — is the fail-safe thesis applied to itself.
+
 **Generalizing beyond one gene — and knowing when to stop.** We took the saddle gain gate
 toward multi-species switches (the canonical 2-node toggle) in bite-size milestones, each
 ending with the full slow lane green *and identical to baseline* (the decoy battery is the
@@ -272,7 +294,10 @@ abstain?" traversal is `nudge.knowledge` today and a SPARQL graph in
 ### The one thing to take away
 
 NUDGE's core promise is a **fail-safe guarantee** — never confidently wrong, abstain
-loudly — and this week we did the hard thing: we *attacked* that guarantee with
+loudly — and this week we did the hard thing *twice*: we *attacked* that guarantee with
 independent stochastic data and a genuinely harder problem (emergent bistability), found
-where it bent, and **extended it rather than quietly breaking it** — with a multi-agent
-Claude workflow doing real, verified R&D in the loop.
+where it bent, and **extended it rather than quietly breaking it**; then we **adversarially
+red-teamed our own tool**, found two confident-wrong holes, and turned each into an enforced
+guard or a locked, documented limitation — never a hidden one. Reporting a hole in your own
+fail-safe as a *win* is the thesis applied to itself — with a multi-agent Claude workflow
+doing real, verified R&D in the loop.

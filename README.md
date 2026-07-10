@@ -112,9 +112,23 @@ Highlights so far:
   constitutive --demo`) — see
   [`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
 
-Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
-and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap
-and [`JUDGES_GUIDE.md`](JUDGES_GUIDE.md) for a guided tour.
+**The fail-safe guarantee is adversarially red-teamed**
+([`design/FAILSAFE_REDTEAM.md`](design/FAILSAFE_REDTEAM.md)): a dedicated pass tried to force
+*any* capability into a confident, specific, wrong call past its abstention gates. It surfaced
+**2 holes** (3 further attacks held), both now handled — one **closed** (a near-fold operating
+point corrupting the multi-point covariance fit → a well-buffered proximity gate,
+`NUDGE-LIM-017`) and one **locked + documented** (an additive ambient/batch offset faking
+synergy, where no safe runtime gate exists → a strict-`xfail` decoy + a sharpened
+`NUDGE-LIM-009`). A found hole is a *win*: closed or locked, never hidden.
+
+Not yet: **time-resolved / temporal attribution** (data-gated); **real-data lock-ins for the
+newest capabilities** — constitutive-control (needs a constitutively-driven reporter
+titration, uncommon in public data), multi-reporter, and differential are synthetic-validated
+with real-data demos deferred; and **provenance tracking** (`provenance.py`) is a stub. (Now
+shipped, previously "not yet": `design()` inversion, the Laplace uncertainty layer, and a
+real-data fail-safe validation — the Gladstone T-cell screen, where NUDGE honestly abstained.)
+See [`design/STATE.md`](design/STATE.md) for the live roadmap and
+[`JUDGES_GUIDE.md`](JUDGES_GUIDE.md) for a guided tour.
 
 ## Install
 
