@@ -1330,7 +1330,20 @@ deflating measurement scale are fundamentally degenerate (both shrink the OFF cl
 abstains on both — killing the deflating confound at the cost of no longer resolving a strong genuine
 ceiling reduction; a per-context multiplicative scale without an independent depth anchor cannot be
 separated from a ceiling change. NUDGE still requires each context's control to come from the same
-library as its perturbed cells. Decoy: `test_decoy_multiplicative_perturbed_scale_abstains` (8 cases,
+library as its perturbed cells.
+
+**Precision (P4-fix red-team re-scan, `design/hardening/runs/000000013`, HOLES_FOUND: 0).** "CLOSED
+for the inflating scale" means against a *uniform* or *smoothly content-dependent* inflating scale
+(the physically-motivated forms — both caught: the smooth content-capture bias trips gate 4c because
+its gain bleeds into the upper OFF cluster). A *pathological* scale confined **strictly** to
+above-median (ON-mode) cells leaves the OFF cluster untouched and evades the `off_scale` fingerprint —
+but it then raises the ON mode with an anchored OFF spread, i.e. it is observationally **identical to
+a genuine ceiling change** (not a distinguishable confident-wrong, and no plausible physical
+generator). Repros: `scripts/redteam/differential_subset_scale_confound.py` (the degenerate evader,
+HELD as not-a-hole), `..._content_capture_confound.py` + `..._doublet_rate_confound.py` (realistic
+siblings, caught).
+
+Decoy: `test_decoy_multiplicative_perturbed_scale_abstains` (8 cases,
 inflating + deflating) + the factor-1 positive control + the genuine-ceiling positive control
 `test_genuine_ceiling_inflation_still_resolves_past_gate_4c` + the strict-xfail bound lock
 `test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound`.

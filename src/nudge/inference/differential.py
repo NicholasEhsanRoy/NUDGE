@@ -67,8 +67,13 @@ fingerprint: it multiplies the OFF-cluster **spread** by ``c`` too (``off_scale`
 whereas a genuine ``v_max`` difference leaves the OFF mode's spread anchored at basal
 (``off_scale`` ≈ 1). So before a ``ceiling-diff`` call NUDGE **abstains** when the perturbed
 OFF-cluster scale departs from its control beyond a MEASURED band (gate 4c). **INFLATION is
-CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 left ``off_scale`` ≤ 1.18; every
-inflating confound ``c`` ≥ 1.5 drove it ≥ 1.43; ``FINDINGS`` §P4). **DEFLATION is BOUNDED, not
+CLOSED** against a *uniform* or *smoothly content-dependent* inflating scale — a clean
+measured gap (genuine ceiling ×1.4–×4 left ``off_scale`` ≤ 1.18; every such inflating confound
+``c`` ≥ 1.5 drove it ≥ 1.43; ``FINDINGS`` §P4). (A pathological scale confined *strictly* to
+above-median cells leaves the OFF cluster untouched and so evades this fingerprint — but it is
+then observationally *identical* to a genuine ceiling change, i.e. not a distinguishable
+confident-wrong, and has no plausible physical generator; red-team `runs/000000013`.)
+**DEFLATION is BOUNDED, not
 closed:** a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
 OFF cluster into the same band as a deflating scale (both ``off_scale`` ≈ 0.5–0.75) — they are
 INDISTINGUISHABLE, so the lower guard abstains on both, correctly killing the deflating confound
@@ -443,7 +448,10 @@ def _off_baseline_shift(data: np.ndarray, control: np.ndarray) -> float:
 #: and test regimes, 3 seeds): a genuine ceiling INFLATION (×1.4–×4) left the perturbed/control
 #: OFF-cluster scale ratio ≤ 1.18; every inflating multiplicative confound (``c`` ≥ 1.5) drove it
 #: ≥ 1.43 — a gap no genuine ceiling crosses. 1.30 is that gap's midpoint: a measured separator,
-#: NOT an arbitrary cut. INFLATION is therefore CLOSED.
+#: NOT an arbitrary cut. INFLATION is therefore CLOSED against a uniform or smoothly
+#: content-dependent inflating scale (a scale confined strictly to above-median cells evades
+#: this OFF-cluster fingerprint, but is then indistinguishable from a genuine ceiling change;
+#: red-team runs/000000013).
 _OFF_SCALE_INFLATION_MAX = 1.30
 #: DEFLATION is BOUNDED, not closed. A genuine ceiling *reduction* collapses the switch toward
 #: monostable and shrinks the OFF cluster (ratio ≈ 0.64) into the same band as a DEFLATING scale

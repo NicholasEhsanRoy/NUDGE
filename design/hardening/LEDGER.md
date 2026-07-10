@@ -8,18 +8,18 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000012-orchestrator-P4-merge.md`. That immutable record is the source of truth;
+`runs/000000013-redteam-P4rescan.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
 **Status: RUNNING.** P3 **CLOSED**; P1 & P4 **CLOSED (inflating) / BOUNDED (deflating) +
-merged** (both differential confound channels hardened, audits PASS, re-verified). Now:
-P4-fix red-team re-scan, then P2.
+merged** — `differential` is fully hardened: its P4-fix re-scan returned **HOLES_FOUND: 0**
+(both perturbed-side channels held; an above-median-only evader is degenerate-with-genuine,
+not a hole; the "INFLATION CLOSED" wording was tightened to match the measurement). Now: P2.
 
-- **Next agent:** `nudge-red-team` — re-scan (P4-fix regression check + fresh sweep). Then
-  `nudge-uq-fixer` on **P2** (multi_reporter per-condition batch-scale confound, LIM-014 —
-  the same class as P4), then `nudge-audit` → merge → `nudge-red-team`.
+- **Next agent:** `nudge-uq-fixer` on **P2** (multi_reporter per-condition batch-scale
+  confound, LIM-014 — the same class as P4), then `nudge-audit` → merge → `nudge-red-team`.
 - **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep with P2
-  also fixed.
+  also fixed. (This is the LAST OPEN problem in the queue.)
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
@@ -76,6 +76,7 @@ last; never edit a past row):
 | 000000010 | `runs/000000010-uq-fixer-P4.md` | uq-fixer | P4 (LIM-016) | fix claim: measured ceiling-scoped OFF-cluster-scale gate 4c band [0.80,1.30]; inflation CLOSED / deflation BOUNDED; commit `f5d0b87` |
 | 000000011 | `runs/000000011-audit-P4.md` | audit | P4 fix | **AUDIT: PASS** — hole gone both directions, genuine ceiling increases resolve, reduction-sacrifice narrow+honest, frozen core untouched |
 | 000000012 | `runs/000000012-orchestrator-P4-merge.md` | orchestrator | P4 merge | independently re-verified + merged → `ebda9c6` (3 conflicts resolved); P4 CLOSED/BOUNDED |
+| 000000013 | `runs/000000013-redteam-P4rescan.md` | redteam | P4-fix re-scan | **HOLES_FOUND: 0** — both differential gates held (above-median evader = degenerate-with-genuine, not a hole); orchestrator tightened "INFLATION CLOSED" wording; commit `47a8400` |
 
 ---
 
