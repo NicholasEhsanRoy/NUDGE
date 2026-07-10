@@ -9,6 +9,34 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team ROUND 3, P2 fix — the multi-reporter per-condition batch/depth scale
+  (`NUDGE-LIM-014`; `scripts/redteam/multi_reporter_batch_confound.py`).** A uniform
+  multiplicative scale `c` on the whole PERTURBED reporter panel (a batch / sequencing-depth /
+  instrument-gain difference between the control-condition and perturbed-condition measurement)
+  is invisible to the control-only consistency guard and the module applied no per-condition
+  depth normalization, so it aliased 1:1 onto a shared latent-ceiling change `A = c` — a
+  confident `ceiling` (CI excludes 0, margins ≫ thresholds) where the truth is **no-effect**
+  (reproduced 6/6 across 2 seeds × 3 factors, robust to realistic floors).
+  - **CLOSED (measurable floors) by a ceiling-scoped FLOOR-CONSISTENCY gate.** A *genuine*
+    ceiling scales only the ON term `gain·A·f` and leaves each reporter's OFF baseline (floor,
+    dose→0) **fixed**; a *batch* scales the whole perturbed signal so every reporter's floor is
+    rescaled by `c`. NUDGE now measures `off_on_coupling = log(perturbed/control OFF baseline) /
+    log(A)` — ≈ 0 for a genuine ceiling, ≈ 1 for a batch — and abstains `unresolved` before a
+    `ceiling` call when `off_on_coupling > 0.5` (the physical midpoint). Measured median
+    separation: genuine ceiling 0.00–0.10 vs batch 0.67–1.00, at BOTH tiny (0.0,0.02) and
+    realistic (0.2,0.6) floors. Additive (`multi_reporter.py` only; frozen core untouched); the
+    genuine `ceiling`/`threshold`/`gain` positive controls, `no-effect`, `off-model`, and
+    single-reporter abstentions are all preserved (0 confident-wrong, no over-abstention on the
+    positive controls).
+  - **Residual BOUND (locked, not closed).** On a (near-)ZERO-floor panel the perturbed OFF
+    doses are pure ON-leakage, which a batch and a genuine ceiling scale identically — genuinely
+    inseparable. NUDGE detects this (`floor_measurability < 0.6`) and abstains `unresolved` on
+    BOTH (never a confident-wrong, at the cost of over-abstaining a real floorless ceiling);
+    separating them needs an independent depth anchor (spike-in / housekeeping / no-response
+    reporter) NUDGE does not yet ingest. `NUDGE-LIM-014` sharpened; measured in
+    `scripts/vv/FINDINGS.md` (P2); regression-locked by a batch-scale decoy + the
+    genuine-ceiling positive control + a strict-xfail floorless-bound marker
+    (`tests/inference/test_multi_reporter.py`).
 - **Fail-safe red-team ROUND 2 (core engine) + two fixes (`design/FAILSAFE_REDTEAM_2.md`).**
   A second adversarial pass targeting the core engine found **2 more verified confident-wrong
   holes** — both in work shipped the same day — and both are now fixed:

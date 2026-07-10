@@ -1049,6 +1049,63 @@ averaged away** — the honest new gate this capability adds.
 > `notebooks/Multi_Reporter.ipynb`. A real-panel demonstration (e.g. OCT4/NANOG self-renewal
 > reporters of the pluripotency latent) is a deferred follow-up — the synthetic
 > degeneracy-break is the load-bearing validation (we do NOT force a real-data claim).
+
+## P2 — a per-condition batch/depth scale faked a confident `ceiling`; the floor-consistency gate (CLOSED + a near-zero-floor BOUND, `NUDGE-LIM-014`)
+
+**The hole (red-team round 3, HOLE 2; `scripts/redteam/multi_reporter_batch_confound.py`).**
+Multiply EVERY perturbed reporter by one factor `c` — a batch / sequencing-depth /
+instrument-gain difference between the control-condition and perturbed-condition measurement,
+consistent across the panel — on a `mechanism="none"` panel (truth = **no-effect**). The
+consistency guard (gate 1) is computed on the **control** curves and is structurally blind to
+a confound on the perturbed condition; and multi_reporter applied **no per-condition depth
+normalization**. `c·(floor + gain·f)` aliases 1:1 onto a shared latent-ceiling change `A = c`.
+Reproduced (independently, seeds 0–1 × factors {0.5, 0.6, 0.75}): **6/6 confident `ceiling`**,
+`A_perturbed/A_wt` = `c` to 3 digits, bootstrap CI excludes 0 (e.g. `c=0.5` → CI [−1.03, −1.00]),
+knob_margin 130–1002 (≫ 1.5), effect_margin 174–1712 (≫ 1.4). Positive controls (`c=1.0`)
+correctly returned `no-effect`.
+
+**Root cause, measured.** The discriminator is the **OFF baseline / floor** (dose→0, latent
+OFF). A *genuine* ceiling scales only the ON term `gain·A·f` and leaves each reporter's floor
+**unchanged** (perturbed floor ≈ pinned control floor); a *batch* scales the whole perturbed
+signal so **every** reporter's floor is rescaled by `c`. Statistic:
+`off_on_coupling = log(median perturbed/control OFF baseline) / log(A)` — ≈ 0 when the floor is
+fixed (ceiling), ≈ 1 when it moves fully with the ON scale (batch). Measured **median
+off_on_coupling** (3 seeds × 2 floor regimes):
+
+| regime | clean (no-effect) | batch c∈{0.5,0.75} | genuine ceiling (÷3) |
+|---|---|---|---|
+| tiny floors (0.0, 0.02) | — | **+0.91 … +1.01** | **+0.06 … +0.11** |
+| realistic floors (0.2, 0.6) | — | **+0.67 … +0.78** | **−0.04 … +0.01** |
+
+Clean separation at BOTH floor regimes (gap straddles the physical midpoint 0.5 with margin
+≥ 0.4). **The near-zero-floor BOUND.** At `floor_range=(0.0, 0.0)` (floors *exactly* zero) the
+perturbed OFF doses are pure ON-leakage `gain·A·f`, which a batch and a genuine ceiling scale
+*identically* — both give `off_on_coupling ≈ 1.0`, **genuinely inseparable**. Detected by
+`floor_measurability` (panel-median fraction of the OFF baseline that is real floor vs
+ON-leakage): ≈ 0.96 at realistic floors, 0.52–0.70 at the red-team's tiny floors, and ≤ 0.18
+(often negative) at floor = 0.
+
+**The fix (additive, in `multi_reporter.py`; frozen core untouched).** A ceiling-scoped
+floor-consistency gate (analogue of the differential per-context depth pin the multi-reporter
+path lacked). Before a `ceiling` call: (a) if `floor_measurability < 0.6` → abstain
+`unresolved` (no measurable depth anchor — the documented BOUND); (b) else if
+`off_on_coupling > 0.5` → abstain `unresolved` (the batch fingerprint). Thresholds are the
+physical midpoint (0.5, halfway between "floor fixed" = 0 and "floor fully rescaled" = 1) and
+the measurability floor separating the resolvable regime from the floorless one — both read off
+the separation sweep, not tuned.
+
+**Re-validation (0 confident-wrong).** Batch confound now **abstains 9/9** (3 seeds × 3
+factors, tiny floors) and **4/4** at realistic floors (`unresolved`, reason cites
+NUDGE-LIM-014). The required positive control — a genuine `ceiling` (factor 3) at realistic
+floors — **still resolves 3/3** (`off_on_coupling` ≈ 0.00–0.01). Every other guard holds:
+`threshold`/`gain` resolve, clean `none` → `no-effect`, `hidden_latent_reporter` → `off-model`,
+single reporter → `unresolved`, and floorless genuine ceiling → `unresolved` (the honest BOUND,
+locked by a strict-xfail). Verdict: **the confident-wrong hole is CLOSED** (measurable floors),
+with an honest **residual BOUND** (over-abstention, never confident-wrong) on (near-)zero-floor
+panels that need an independent depth anchor (spike-in / housekeeping / no-response reporter).
+Locks: `tests/inference/test_multi_reporter.py` (batch-scale decoy + genuine-ceiling positive
+control + floorless-bound strict-xfail).
+
 # Abstention catalogue + the toggle-gain deep dive: gain is a FUNDAMENTAL covariance-channel limit
 
 A read-only analysis (`design/ABSTENTION_ANALYSIS.md`) maps every surface on which NUDGE declines a
