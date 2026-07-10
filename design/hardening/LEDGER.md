@@ -8,25 +8,24 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000013-redteam-P4rescan.md`. That immutable record is the source of truth;
+`runs/000000016-orchestrator-P2-merge.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3 **CLOSED**; P1 & P4 **CLOSED (inflating) / BOUNDED (deflating) +
-merged** — `differential` is fully hardened: its P4-fix re-scan returned **HOLES_FOUND: 0**
-(both perturbed-side channels held; an above-median-only evader is degenerate-with-genuine,
-not a hole; the "INFLATION CLOSED" wording was tightened to match the measurement). Now: P2.
+**Status: RUNNING — all four round-3 holes CLOSED/BOUNDED + merged; running the FINAL sweep.**
+P3 CLOSED; P1 & P4 CLOSED (inflating) / BOUNDED (deflating); P2 CLOSED (measurable floors) /
+BOUNDED (near-zero floors). The problem queue is **EMPTY** (all OPEN work fixed + audited +
+merged).
 
-- **Next agent:** `nudge-uq-fixer` on **P2** (multi_reporter per-condition batch-scale
-  confound, LIM-014 — the same class as P4), then `nudge-audit` → merge → `nudge-red-team`.
-- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep with P2
-  also fixed. (This is the LAST OPEN problem in the queue.)
+- **Next agent:** `nudge-red-team` — the FINAL FULL sweep across the hardened capabilities.
+- **STOP** when it reports `HOLES_FOUND: 0` after a genuine sweep. If it finds a NEW hole,
+  that hole is queued and the fix loop resumes (`[3 → 4 → 1]`).
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
 
 ---
 
-## Problem queue (found, not yet fixed)
+## Problem queue (found, not yet fixed) — **EMPTY** (all four round-3 holes closed; see "Closed problems")
 
 Reported by red-team round 3 (`design/FAILSAFE_REDTEAM_3.md`); **pending independent UQ
 validation** (role 3 re-reproduces before fixing — status reflects that they are red-team
@@ -34,7 +33,7 @@ claims, not yet main-loop-verified).
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-| **P2** | `multi_reporter` | LIM-014 | Multiplicative batch factor on the **perturbed** panel aliases 1:1 to a ceiling change → confident `ceiling` where truth is no-effect — consistency guard checks only the control curves. | `scripts/redteam/multi_reporter_batch_confound.py` | OPEN |
+*(no OPEN rows — P3/P1/P4/P2 are all in "Closed problems" below.)*
 
 **Systemic pattern (the through-line for fixes):** every hole across rounds 1–3 is a confound
 applied to the **perturbed / one** condition, invisible to a guard keyed on the **control**.
@@ -77,6 +76,9 @@ last; never edit a past row):
 | 000000011 | `runs/000000011-audit-P4.md` | audit | P4 fix | **AUDIT: PASS** — hole gone both directions, genuine ceiling increases resolve, reduction-sacrifice narrow+honest, frozen core untouched |
 | 000000012 | `runs/000000012-orchestrator-P4-merge.md` | orchestrator | P4 merge | independently re-verified + merged → `ebda9c6` (3 conflicts resolved); P4 CLOSED/BOUNDED |
 | 000000013 | `runs/000000013-redteam-P4rescan.md` | redteam | P4-fix re-scan | **HOLES_FOUND: 0** — both differential gates held (above-median evader = degenerate-with-genuine, not a hole); orchestrator tightened "INFLATION CLOSED" wording; commit `47a8400` |
+| 000000014 | `runs/000000014-uq-fixer-P2.md` | uq-fixer | P2 (LIM-014) | fix claim: ceiling-scoped floor/OFF-consistency gate (`off_on_coupling` ≈0 genuine vs ≈1 batch); CLOSED measurable / BOUNDED near-zero floor; commit `b870354` |
+| 000000015 | `runs/000000015-audit-P2.md` | audit | P2 fix | **AUDIT: PASS** — hole gone (seeds 0,1,2), genuine ceiling resolves 4/4, near-zero-floor bound narrow+honest, frozen core untouched |
+| 000000016 | `runs/000000016-orchestrator-P2-merge.md` | orchestrator | P2 merge | independently re-verified + merged → `1d091c1` (2 additive doc conflicts resolved); P2 CLOSED/BOUNDED; queue now EMPTY |
 
 ---
 
@@ -87,6 +89,7 @@ last; never edit a past row):
 | **P3** | `design/invert` | LIM-013 | **CLOSED** — safety gate now fires on `delta > margin` OR absolute `proximity_after ≥ NEAR_FOLD` (reuses the shipped constant → agrees with `classify_robustness` on the identical circuit); one-sided caveat carried on the SAFE branch. Passing decoy + 3 regression tests. 0 confident-wrong; positive control still "OK". | `a263789` (merge `017bd58`) | `runs/000000003-audit-P3.md` (PASS) |
 | **P1** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — measured one-sided gate 4b abstains when a context's perturbed OFF baseline is inflated >2.5× its own control (separator: confident-wrong `off_shift≥2.99` vs genuine `≤1.96`). Deflating perturbed-only offset aliases with a genuine reduction → documented residual, not guarded. Decoy + tests; genuine ceiling/gain still resolve (no over-abstention). | `b562da9` (merge `99d73b8`) | `runs/000000007-audit-P1.md` (PASS) |
 | **P4** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — the MULTIPLICATIVE sibling of P1: a per-context multiplicative perturbed-only scale fakes a confident `ceiling-diff`, slipping under gate 2 AND the P1 gate 4b (`off_shift`≈1 for a multiplicative factor). Measured ceiling-scoped gate 4c on the OFF-cluster SCALE (raw MAD, perturbed÷control), band [0.80,1.30] (genuine ceiling ×1.4–4 → ≤1.18; inflating confound c≥1.5 → ≥1.43). Deflating confound is degenerate with a genuine strong ceiling reduction → both abstain (a strict-xfail-locked honest bound; the narrow sacrifice verified by the audit). Genuine ceiling increases + gain/threshold still resolve. | `f5d0b87` (merge `ebda9c6`) | `runs/000000011-audit-P4.md` (PASS) |
+| **P2** | `multi_reporter` | LIM-014 | **CLOSED (measurable floors) / BOUNDED (near-zero floors)** — a per-condition multiplicative batch scale on the perturbed panel fakes a confident `ceiling` (control-only consistency guard blind; no per-condition depth normalization). Measured ceiling-scoped floor/OFF-consistency gate: a genuine ceiling leaves each reporter's floor fixed (`off_on_coupling`≈0) while a batch rescales every floor with the ON amplitude (≈1); abstain when the floor moves with the ceiling (cut 0.5 = physical midpoint) or floors are unmeasurable. On a (near-)zero-floor panel a batch ≡ a real ceiling without an independent anchor → both abstain (strict-xfail-locked honest bound). Genuine ceiling/threshold/gain still resolve. | `b870354` (merge `1d091c1`) | `runs/000000015-audit-P2.md` (PASS) |
 
 *(P1/P2 remain OPEN in the queue above. When each passes audit its row moves here with the
 fix commit + the audit run record, so the queue only holds OPEN work while the full history
