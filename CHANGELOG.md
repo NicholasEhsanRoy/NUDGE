@@ -28,6 +28,37 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   still cleared "OK" (no over-abstention). Regression-locked by three `tests/design/
   test_invert.py` cases; the deterministic repro
   (`scripts/redteam/design_safety_gate_absolute_proximity.py`) now exits "no hole".
+- **Fail-safe red-team P1-RESCAN — P4: the MULTIPLICATIVE perturbed-condition scale confound in
+  `differential` FIXED (`NUDGE-LIM-016` sharpened).** A re-scan of the P1 fix found the sharpest
+  differential confound yet: a constant **multiplicative factor `c` on ONE context's PERTURBED
+  cells only** (its control clean) aliases a genuine **ceiling (`v_max`) difference 1:1** (both
+  multiply the ON mode) and slips past **both** earlier guards — the control-keyed `depth_ratio`
+  stays ≈ 1 (gate 2 blind) **and** a factor scales the near-zero OFF *baseline* to near-zero, so the
+  additive `off_shift` stays ≈ 1 (gate 4b blind). Result: a confident spurious **`ceiling-diff`**
+  where the truth is `no-difference`, both inflating and deflating (verified,
+  `scripts/redteam/differential_multiplicative_confound.py`, **9 confident-wrong across 2 seeds**).
+  **Fix (measured, ceiling-scoped):** a new classifier gate (4c) abstains (`unresolved`) before a
+  `ceiling-diff` when either context's perturbed **OFF-cluster SCALE** (`off_scale` = the
+  median-absolute-deviation of the below-median-activity cells, perturbed vs its own control) leaves
+  the measured band `[0.80, 1.30]` — a multiplicative factor dilates the OFF-cluster spread by `c`
+  (`off_scale` ≈ `c`) while a genuine `v_max` difference leaves it anchored at basal. The guard is
+  **ceiling-scoped** (a global scale is degenerate with `v_max` specifically), so a genuine
+  gain/threshold difference reshapes the distribution and is **untouched** (no over-abstention).
+  **INFLATION is CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 ≤ 1.18; every inflating
+  confound `c` ≥ 1.5 ≥ 1.43; midpoint 1.30 is the upper guard; `FINDINGS` §P4). **DEFLATION is
+  BOUNDED** — a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
+  OFF cluster into the same band as a deflating scale (indistinguishable), so the lower guard abstains
+  on both, killing the deflating confound at the honest cost of no longer resolving a strong genuine
+  ceiling reduction (a per-context multiplicative scale without an independent depth anchor cannot be
+  separated from a ceiling change). Re-validated through the shipped path: **0 confident-wrong across
+  2 seeds** (inflating + deflating), and every positive control still resolves (genuine
+  `ceiling-diff` ×1.4/×2.0, `gain-diff`, `no-difference`, the additive P1 confound still caught by
+  gate 4b). Regression-locked by a decoy (`test_decoy_multiplicative_perturbed_scale_abstains`, 8
+  cases + the factor-1 positive control + a genuine-ceiling positive control + a **strict-xfail bound
+  lock** for the sacrificed genuine ceiling reduction) and 4 fast unit tests; the module docstring,
+  the Mechanism Card, `design/STATE.md`, `README.md`, and `NUDGE-LIM-016` all name the multiplicative
+  channel so nothing implies differential's perturbed-side confounds are all closed. Frozen core
+  untouched (`fit.py` / `core/` unchanged).
 - **Fail-safe red-team ROUND 3 hardening — P1: the additive perturbed-condition offset
   confound in `differential` FIXED (`NUDGE-LIM-016` sharpened; `design/FAILSAFE_REDTEAM_3.md`
   HOLE 1).** The differential depth guard keys `depth_ratio` on the two **controls**, so it was
