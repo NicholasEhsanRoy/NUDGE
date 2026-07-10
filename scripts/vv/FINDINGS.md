@@ -1191,3 +1191,45 @@ NaN can never poison the argmin. The classifier's fast gate logic is locked by 8
 `data_a`/`control_a`/`data_b`/`control_b`) + a Mechanism Card (`NUDGE-METHOD-010`) +
 `notebooks/Differential.ipynb`. A real-data touch (sci-Plex A549 vs MCF7; Gladstone donors) is a
 deferred best-effort follow-up; the synthetic ground truth is the load-bearing validation.
+
+## Temporal / Lotka–Volterra attribution (NUDGE-METHOD-012) — the extensibility thesis
+
+**The reframe.** NUDGE observes steady-state *snapshots*; the deferred Capability 4 (temporal)
+was shelved because scRNA-seq is destructive. Microbiome longitudinal data provides real
+per-community **trajectories** with a designed perturbation contrast, so the *same*
+abstain-and-attribute philosophy points at a new dynamical system — a generalized
+Lotka–Volterra community `dxᵢ/dt = xᵢ(αᵢ + Σⱼ βᵢⱼxⱼ + εᵢ·u(t))` — in an isolated module
+(`nudge.inference.lotka_volterra`) that touches **neither `fit.py` nor `core/circuit.py`**.
+The trajectory fit is re-instantiated in-module (a self-contained differentiable RK4 `lax.scan`
+integrator + `losses.energy_distance` over per-timepoint replicate ensembles); attribution
+BIC-selects which single knob — growth (α) / interaction (β) / susceptibility (ε) — moved,
+scored on the reference→perturbed **contrast** (which cancels the baseline fit's mean-bias so a
+null cannot be beaten by a spurious knob).
+
+**Measured (synthetic ground truth, 3-taxa communities, `tests/inference/test_lotka_volterra.py`;
+a 2-seed sweep per case):**
+- **ε (antibiotic susceptibility) is the identifiable positive** — recovered 2/2 with wide
+  margins (ΔBIC vs null ≈ 110–115, vs runner-up ≈ 70–95). The drug pulse is a time-localized
+  on/off contrast, distinct from a constant growth/interaction shift.
+- **A growth (α) change is recovered ONLY when the transient is densely sampled** — 2/2 with the
+  Laplace curvature on `(αₜ, βₜₜ)` well-conditioned (condition number ≈ 21–76 < the cond_max=100
+  abstain threshold, degenerate=False). Near equilibrium the same change ABSTAINS.
+- **The α⇄βᵢᵢ pair is degenerate near equilibrium** (`Kᵢ=−αᵢ/βᵢᵢ`): the confound decoy (a growth
+  change sampled near equilibrium) and a self-interaction (βₜₜ) change both ABSTAIN
+  (`unresolved`) — the BIC winner may even be the wrong knob, but the **measured** near-singular
+  Laplace curvature (condition number → ∞, `|corr| → 1`, reusing `uncertainty.laplace_posterior`)
+  fires the abstention. The abstention is EARNED by a measurement, not asserted (NUDGE-LIM-020).
+- **A no-perturbation null makes no positive call** (`no-change` / `unresolved`).
+- **0 confident-wrong** across the mixed battery (the headline fail-safe property).
+
+**Real coda (Stein et al. 2013, structured `needs_data`; `notebooks/Temporal_Ecology.ipynb`).**
+The clindamycin→*C. difficile* series (11 taxa, CC-BY). Stein's own fitted ε vector directly
+suppresses several taxa (strongly negative ε — the identifiable axis), but *C. difficile*'s
+ε ≈ −0.31 is near zero: **its bloom is interaction-mediated (β), not direct-kill** — exactly the
+α/β confound NUDGE abstains on. With 11 taxa from ~11 timepoints the full β matrix is
+underdetermined; the honest read is a direct-kill ε POSITIVE on the strongly-susceptible taxa and
+an ABSTENTION on *C. difficile*. Surfaced prominently, not buried behind the positive.
+
+**Wiring.** `nudge lotka` CLI verb + `service.lotka_demo` + a Mechanism Card (`NUDGE-METHOD-012`)
++ `NUDGE-LIM-020` + two gLV decoys (`generate_alpha_beta_confound_decoy`,
+`generate_no_perturbation_null`) + `notebooks/Temporal_Ecology.ipynb`. Additive / opt-in.

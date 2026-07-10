@@ -964,6 +964,71 @@ def constitutive(
     _echo(f"     {out['reason']}")
 
 
+@app.command("lotka")
+def lotka(
+    mechanism: str = typer.Option(
+        "susceptibility",
+        help="the KNOWN perturbation: growth | interaction | susceptibility | none",
+    ),
+    near_equilibrium: bool = typer.Option(
+        False, "--near-equilibrium/--dense-transient",
+        help="sample near equilibrium (the degenerate α⇄βᵢᵢ regime) vs the dense transient",
+    ),
+    n_species: int = typer.Option(3, help="number of taxa in the community"),
+    n_replicates: int = typer.Option(60, help="replicate communities per group"),
+    steps: int = typer.Option(250, help="optimizer steps per restricted-model fit"),
+    seed: int = typer.Option(0, help="fit / simulation RNG seed"),
+) -> None:
+    """Temporal / gLV attribution — which knob did a community perturbation move?
+
+    A synthetic, zero-setup demo of NUDGE pointed at a NEW dynamical-systems domain
+    (microbiome ecology; ``NUDGE-METHOD-012``). Simulates a reference vs perturbed
+    community under an antibiotic pulse with a KNOWN single-knob change, then attributes
+    it to **growth (α)** / **interaction (β)** / **susceptibility (ε)** — or abstains.
+    The **ε** axis is the identifiable positive; a near-equilibrium **growth** change is
+    the degenerate **α⇄βᵢᵢ** case NUDGE must abstain on, with the degeneracy MEASURED by
+    the Laplace curvature (``NUDGE-LIM-020``). Fail-safe: recover-or-abstain, never a
+    confident wrong knob.
+    """
+    from nudge.service import lotka_demo
+
+    out = lotka_demo(
+        mechanism=mechanism,
+        dense_transient=not near_equilibrium,
+        n_species=n_species,
+        n_replicates=n_replicates,
+        steps=steps,
+        seed=seed,
+    )
+    gt = out["ground_truth"]
+    ident = out["identifiability"]
+    _echo(
+        f"gLV attribution  (taxa={n_species}, replicates={out['n_replicates']}, "
+        f"timepoints={out['n_timepoints']})"
+    )
+    _echo(
+        f"  ground truth: moved '{gt['mechanism']}' on taxon {gt['target']} "
+        f"(Δ={gt['delta']:+.2f}); sampling="
+        f"{'dense-transient' if gt['dense_transient'] else 'near-equilibrium'}"
+    )
+    bic = out["bic"]
+    best = min(bic.values())
+    _echo("  ΔBIC vs best (lower = more parsimonious):")
+    for m in ("null", "growth", "interaction", "susceptibility"):
+        _echo(f"    {m:16} {bic[m] - best:+8.1f}")
+    _echo(
+        f"  α⇄βᵢᵢ identifiability: condition number {ident['cond_number']:.0f}, "
+        f"|corr|={ident['abs_corr_alpha_beta']:.3f}, degenerate={ident['degenerate']}"
+    )
+    _echo(f"\n  → CALL: {out['call'].upper()}")
+    _echo(f"     {out['reason']}")
+    _echo(
+        "\n  note: gLV inference is ill-posed — abstaining is on-thesis. The ε axis is the "
+        "\n  identifiable one; α vs βᵢᵢ (self-limitation) is degenerate near equilibrium "
+        "(NUDGE-LIM-020)."
+    )
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()

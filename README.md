@@ -36,7 +36,7 @@ Highlights so far:
   confidently wrong). See [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md).
 - **`nudge` CLI + Claude MCP server** — the tool is drivable from a terminal
   (`nudge attribute … / dose-response / synergy / cross-modality / robustness / design /
-  multi-reporter / diagnose-abstention / explain`) *and* by
+  multi-reporter / diagnose-abstention / differential / constitutive / lotka / explain`) *and* by
   Claude in plain language through a custom MCP server (Claude Code / Desktop / the
   Claude Science workbench). Connection recipes verified in
   [`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md).
@@ -114,6 +114,19 @@ Highlights so far:
   finding, now locked as a strict-xfail decoy). It also does **not** point-identify `n` (needs
   a second anchor; `NUDGE-LIM-018`) (`nudge constitutive --demo`) — see
   [`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
+- **Temporal / Lotka–Volterra attribution** (`NUDGE-METHOD-012`) — *same engine, new field
+  of biology*. The first **trajectory-fit** capability: it points the same
+  abstain-and-attribute philosophy at a **microbial community** (generalized Lotka–Volterra,
+  `dxᵢ/dt = xᵢ(αᵢ + Σⱼ βᵢⱼxⱼ + εᵢ·u(t))`) and attributes a perturbation to a change in
+  **growth (α) / interaction (β) / antibiotic-susceptibility (ε)** — from **trajectories**,
+  not a snapshot — in a module that touches **neither `fit.py` nor `core/`**. The **ε** axis
+  is the identifiable positive; **α⇄βᵢᵢ** (growth vs self-limitation, `Kᵢ=−αᵢ/βᵢᵢ`) is
+  **degenerate near equilibrium** and NUDGE **abstains**, with the degeneracy **MEASURED** by
+  a near-singular Laplace curvature (`NUDGE-LIM-020`), never asserted. **0 confident-wrong**
+  across the battery; real coda on the **Stein 2013** clindamycin→*C. difficile* series
+  surfaces the honest abstention (*C. difficile*'s bloom is interaction-mediated, ε≈−0.31)
+  (`nudge lotka`) — see
+  [`notebooks/Temporal_Ecology.ipynb`](notebooks/Temporal_Ecology.ipynb).
 
 **The fail-safe guarantee is adversarially red-teamed**
 ([`design/FAILSAFE_REDTEAM.md`](design/FAILSAFE_REDTEAM.md)): a dedicated pass tried to force

@@ -688,3 +688,50 @@ anomalies:
       switch surface, and the strict-xfail decoy that locks the confound. Reading a
       biological-switch verdict without confirming matched capture, or restoring the
       'structurally fail-safe / 0 confident-wrong' language, would resurrect the false positive.
+
+  - anomaly_id: NUDGE-LIM-020
+    title: gLV growth ⇄ self-limitation (α⇄βᵢᵢ) is degenerate near equilibrium
+    description: >-
+      The temporal / Lotka–Volterra attribution capability (NUDGE-METHOD-012) attributes a
+      microbial-community perturbation to a change in growth (α), interaction (β), or
+      antibiotic-susceptibility (ε). Two of these axes are fundamentally confounded: a
+      taxon's growth rate αᵢ and its self-limitation βᵢᵢ set the carrying capacity together
+      as Kᵢ = −αᵢ/βᵢᵢ, so at steady state a growth change and a carrying-capacity change
+      produce the SAME equilibrium — they are separable ONLY by the transient (the approach
+      to equilibrium). When the sampling does not resolve that transient (near-equilibrium
+      or short series), the free-α and free-βᵢᵢ restricted fits tie and the perturbation is
+      unidentifiable. NUDGE must NOT confidently name growth-vs-interaction there; it
+      ABSTAINS (unresolved). Crucially the abstention is EARNED BY A MEASUREMENT, not
+      asserted: the Laplace/Fisher curvature on the pair (αₜ, βₜₜ) is computed
+      (alpha_beta_identifiability, reusing inference/uncertainty.laplace_posterior) and is
+      near-singular in the degenerate regime — a high condition number (≫ the cond_max=100
+      abstain threshold, often numerically infinite) and a strong off-diagonal correlation
+      (|corr| → 1) — exactly reproducing how NUDGE measures the gain⇄threshold degeneracy on
+      the single-cell path. The identifiable axis is ε (antibiotic susceptibility): the drug
+      pulse is a time-localized on/off contrast, so a direct-kill signature is distinct from
+      a constant growth/interaction shift, and ε recovers as a positive. A growth change is
+      recovered ONLY when the transient is densely sampled (the Laplace curvature is then
+      better-conditioned); otherwise it abstains. The classifier is fail-safe: no-change when
+      nothing beats the null; unresolved on the measured α⇄βᵢᵢ degeneracy OR when the two
+      best knobs tie; a positive only when the winner earns its parameter over the null,
+      beats the runner-up, and (in the confounded pair) is identifiable. VERIFIED on
+      synthetic ground truth (tests/inference/test_lotka_volterra.py): ε recovers, a
+      dense-transient growth change recovers, a self-interaction change and a
+      near-equilibrium growth change ABSTAIN with a measured near-singular Hessian, a
+      no-perturbation null makes no positive call — 0 confident-wrong across the battery.
+      Exercised by generate_alpha_beta_confound_decoy (a growth change sampled near
+      equilibrium that LOOKS like an interaction change → must abstain) and
+      generate_no_perturbation_null. Related: NUDGE-METHOD-012.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      Handled correctly today (NUDGE abstains, 0 confident-wrong), but the guarantee rests on
+      the Laplace degeneracy gate's calibration (cond_max) and the BIC resolve margin. gLV
+      inference is famously ill-posed, so the honest default is to abstain OFTEN — a
+      mis-tuned gate that loosened toward a confident growth-vs-interaction call near
+      equilibrium would resurrect a confident-wrong hole. The ε axis is the only reliably
+      identifiable one at low species count; separating α from β for a diet-like shift, or
+      reconstructing a full β matrix from short/noisy series, is beyond what the data
+      supports and NUDGE must not pretend otherwise. The decoy + the measured-curvature
+      requirement are the regression tests that keep the abstention earned rather than
+      asserted.

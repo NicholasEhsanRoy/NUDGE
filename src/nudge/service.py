@@ -1250,3 +1250,50 @@ def constitutive_demo(
     out = constitutive_to_dict(res)
     out["ground_truth"] = {"circuit_n": circuit_n, "reporter_h": readout_h}
     return out
+
+
+def lotka_demo(
+    *,
+    mechanism: str = "susceptibility",
+    dense_transient: bool = True,
+    n_species: int = 3,
+    n_replicates: int = 60,
+    steps: int = 250,
+    n_sim: int = 30,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Synthesize a gLV community pair + attribute which knob moved (no data file).
+
+    The zero-setup demo of the temporal / Lotka–Volterra capability
+    (``NUDGE-METHOD-012``). ``mechanism`` ∈ ``{"growth", "interaction",
+    "susceptibility", "none"}`` sets the KNOWN single-knob perturbation; the antibiotic
+    susceptibility (``susceptibility``) axis is the identifiable positive, while a
+    near-equilibrium growth change (``dense_transient=False``) is the degenerate α⇄βᵢᵢ
+    case NUDGE must abstain on (``NUDGE-LIM-020``). Returns the verdict + per-model BIC +
+    the measured degeneracy.
+    """
+    from nudge.inference.lotka_volterra import attribute_glv, simulate_glv_perturbseq
+
+    ds = simulate_glv_perturbseq(
+        n_species=n_species, n_replicates=n_replicates, mechanism=mechanism,
+        dense_transient=dense_transient, seed=seed,
+    )
+    res = attribute_glv(ds, steps=steps, n_sim=n_sim, seed=seed)
+    f = res.fit
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "is_reliable": res.is_reliable,
+        "ground_truth": dict(ds.ground_truth),
+        "selected_knob": f.selected,
+        "bic": dict(f.bic),
+        "delta": dict(f.delta),
+        "identifiability": {
+            "cond_number": f.cond_number,
+            "abs_corr_alpha_beta": f.corr_alpha_beta,
+            "degenerate": f.degenerate,
+            "reason": f.identifiability_reason,
+        },
+        "n_replicates": f.n_replicates,
+        "n_timepoints": f.n_timepoints,
+    }

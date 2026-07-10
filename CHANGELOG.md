@@ -36,6 +36,36 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
     threshold-free, closing the knife-edge). Measured after the fix: the {0.05,0.30} control still
     resolves the true ceiling, and every near-fold 3rd point (proximity 0.119 / 0.146 / 0.231)
     honestly ABSTAINS — 0 confident-wrong. Regression-locked by the knife-edge + near-fold decoys.
+- **Temporal / Lotka–Volterra attribution — *same engine, new dynamical-systems domain*
+  (`nudge.inference.lotka_volterra`, `NUDGE-METHOD-012`, `NUDGE-LIM-020`):** the first
+  **temporal / trajectory-fit** capability, and the extensibility thesis made concrete.
+  Everything else in NUDGE observes a steady-state *snapshot*; this points the *same*
+  abstain-and-attribute philosophy at a **generalized Lotka–Volterra (gLV) microbial
+  community** — `dxᵢ/dt = xᵢ(αᵢ + Σⱼ βᵢⱼxⱼ + εᵢ·u(t))` — whose parameter information lives
+  in **trajectories**. Given a reference vs perturbed community under an antibiotic pulse,
+  it BIC-selects **which single knob moved** — **growth (α) / interaction (β) /
+  susceptibility (ε)** — or **abstains**. A self-contained differentiable RK4 `lax.scan`
+  integrator (no `diffrax`); the fit loop is **re-instantiated in the module** (reusing
+  `inference.losses.energy_distance` over per-timepoint replicate ensembles) so it touches
+  **neither `fit.py` nor `core/circuit.py`** — the frozen core stays frozen. **The
+  ε axis is the identifiable positive** (the drug pulse is a time-localized on/off
+  contrast). **The α⇄βᵢᵢ pair is degenerate near equilibrium** (`Kᵢ=−αᵢ/βᵢᵢ`) and NUDGE
+  **abstains** (`unresolved`), with the degeneracy **MEASURED** — a near-singular Laplace
+  curvature on `(αₜ, βₜₜ)` (reusing `inference.uncertainty.laplace_posterior`, condition
+  number ≫ 100, `|corr|→1`), exactly how NUDGE measures the gain⇄threshold degeneracy
+  elsewhere. Attribution scores the reference→perturbed **contrast**, which cancels the
+  baseline mean-bias so a null cannot be beaten by a spurious knob. **Fail-safe:
+  recover-or-abstain, 0 confident-wrong** across the synthetic battery (ε recovers, a
+  dense-transient growth change recovers, a self-interaction change + a near-equilibrium
+  growth change abstain, a null makes no positive call —
+  `tests/inference/test_lotka_volterra.py`). Two gLV decoys — the **α⇄βᵢᵢ confound**
+  (a growth change near equilibrium that looks like an interaction change → must abstain)
+  and a **no-perturbation null**. Real coda: **Stein et al. 2013** clindamycin→*C.
+  difficile* (structured `needs_data`), which surfaces the honest abstention — *C.
+  difficile*'s bloom is **interaction-mediated** (the paper's fitted ε≈−0.31 is near zero),
+  the very α/β confound. Wired into `nudge lotka` CLI + `service.lotka_demo` + a Mechanism
+  Card (`docs/mechanism_cards/lotka_volterra_attribution.md`) + `NUDGE-LIM-020` +
+  `notebooks/Temporal_Ecology.ipynb`. Additive / opt-in.
 
 - **Constitutive-reporter calibration control — the `NUDGE-LIM-006` mitigation
   (`nudge.inference.constitutive`, `NUDGE-METHOD-011`, `NUDGE-LIM-018`):** removes a known
