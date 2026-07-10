@@ -8,17 +8,16 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000001-orchestrator-round3-brief.md`. That immutable record is the source of truth;
+`runs/000000004-orchestrator-P3-merge.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: NOT LAUNCHED — awaiting user go.** The user asked to set up the machinery and the
-audit trail but **stop before running the fix loop** (limited network while traveling).
+**Status: RUNNING.** P3 is **CLOSED + merged** (audit PASS, independently re-verified).
 
-- **Next action when launched:** Fix loop `[ 3 → 4 → 1 ]` seeded from the problem queue.
-- **Next agent:** `nudge-uq-fixer` on **P3** (design/invert safety gate — highest harm),
-  then `nudge-audit` on its fix, then `nudge-red-team` to re-scan. Then P1, then P2.
-  (Order is P3 → P1 → P2 by harm; the orchestrator may re-order.)
-- **Do NOT dispatch any agent until the user says go.**
+- **Next agent:** `nudge-red-team` — re-scan (P3-fix regression check + a fresh
+  confident-wrong sweep). Then `nudge-uq-fixer` on **P1** (differential additive confound,
+  LIM-016), then `nudge-audit` → merge → red-team; then **P2** (multi_reporter batch
+  confound, LIM-014).
+- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine sweep.
 
 ---
 
@@ -30,7 +29,6 @@ claims, not yet main-loop-verified).
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-| **P3** | `design/invert` | LIM-013 | Safety gate flags risk only on a proximity *increase* > margin, never absolute `proximity_after ≥ NEAR_FOLD` — an intervention to proximity 0.589 is cleared as "safe" while `classify_robustness` calls it `near-fold`. **Highest harm (a confident-wrong safety flag on a proposed intervention).** | `scripts/redteam/design_safety_gate_absolute_proximity.py` | OPEN |
 | **P1** | `differential` | LIM-016 | Additive offset on ONE context's **perturbed** cells (control clean) fakes a confident `gain-diff` where truth is no-difference — invisible to the control-keyed depth guard, and lands on the `gain` channel the guard *exempts*. | `scripts/redteam/differential_additive_confound.py` | OPEN |
 | **P2** | `multi_reporter` | LIM-014 | Multiplicative batch factor on the **perturbed** panel aliases 1:1 to a ceiling change → confident `ceiling` where truth is no-effect — consistency guard checks only the control curves. | `scripts/redteam/multi_reporter_batch_confound.py` | OPEN |
 
@@ -63,11 +61,18 @@ last; never edit a past row):
 | # | run record | role | target | outcome |
 |---|-----------|------|--------|---------|
 | 000000001 | `runs/000000001-orchestrator-round3-brief.md` | orchestrator | round-3 seed | starting brief written; NEXT = uq-fixer on P3; **awaiting launch** |
+| 000000002 | `runs/000000002-uq-fixer-P3.md` | uq-fixer | P3 (LIM-013) | fix claim: two-alarm safety gate (`delta>margin` OR `proximity≥NEAR_FOLD`); CLOSED; commit `a263789` |
+| 000000003 | `runs/000000003-audit-P3.md` | audit | P3 fix | **AUDIT: PASS** — hole flags, no over-abstention, frozen core untouched, full gate green |
+| 000000004 | `runs/000000004-orchestrator-P3-merge.md` | orchestrator | P3 merge | independently re-verified + merged → `017bd58`; P3 CLOSED |
 
 ---
 
 ## Closed problems (no-delete: fixed problems move here, rows never deleted)
 
-*(none yet — P1/P2/P3 above are OPEN. When a problem passes audit, its row moves here with the
-fix commit + the audit run record, so the queue above only holds OPEN work while the full
-history is preserved.)*
+| id | capability | LIM | resolution | fix commit | audit |
+|----|-----------|-----|------------|-----------|-------|
+| **P3** | `design/invert` | LIM-013 | **CLOSED** — safety gate now fires on `delta > margin` OR absolute `proximity_after ≥ NEAR_FOLD` (reuses the shipped constant → agrees with `classify_robustness` on the identical circuit); one-sided caveat carried on the SAFE branch. Passing decoy + 3 regression tests. 0 confident-wrong; positive control still "OK". | `a263789` (merge `017bd58`) | `runs/000000003-audit-P3.md` (PASS) |
+
+*(P1/P2 remain OPEN in the queue above. When each passes audit its row moves here with the
+fix commit + the audit run record, so the queue only holds OPEN work while the full history
+is preserved.)*
