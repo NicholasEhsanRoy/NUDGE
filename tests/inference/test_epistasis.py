@@ -63,7 +63,11 @@ def _ambient_confound_adata(seed: int) -> object:
     }
     X = np.vstack(list(blocks.values()))
     cond = np.concatenate([[k] * n_cells for k in blocks])
-    obs = pd.DataFrame({"condition": cond})
+    # String obs/var indices so anndata does not emit ImplicitModificationWarning
+    # ("Transforming to str index") when it coerces a default integer index.
+    obs = pd.DataFrame(
+        {"condition": cond}, index=[f"cell{i}" for i in range(X.shape[0])]
+    )
     obs["total_counts"] = X.sum(axis=1)
     var = pd.DataFrame(index=[f"g{i}" for i in range(n_genes)])
     return ad.AnnData(X=X, obs=obs, var=var)
