@@ -8,17 +8,18 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000008-orchestrator-P1-merge.md`. That immutable record is the source of truth;
+`runs/000000009-redteam-P1rescan.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3 **CLOSED**; P1 **CLOSED (inflating) / BOUNDED (deflating) + merged**
-(audit PASS, independently re-verified). Now: P1-fix red-team re-scan, then P2.
+**Status: RUNNING.** P3 **CLOSED**; P1 **CLOSED (inflating) / BOUNDED (deflating) + merged**.
+P1-fix re-scan found a **NEW hole P4** (differential MULTIPLICATIVE perturbed-only scale →
+confident `ceiling-diff`, slips under gate 4b). Now fixing P4, then P2.
 
-- **Next agent:** `nudge-red-team` — re-scan (P1-fix regression check + fresh sweep). Then
-  `nudge-uq-fixer` on **P2** (multi_reporter per-condition batch-scale confound, LIM-014),
-  then `nudge-audit` → merge → `nudge-red-team`.
+- **Next agent:** `nudge-uq-fixer` on **P4** (differential multiplicative confound, sharpens
+  LIM-016), then `nudge-audit` → merge → `nudge-red-team` re-scan; then **P2**
+  (multi_reporter per-condition batch-scale confound, LIM-014 — same class as P4).
 - **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep with
-  P1 + P2 both fixed.
+  P4 + P2 both fixed.
 
 ---
 
@@ -30,6 +31,7 @@ claims, not yet main-loop-verified).
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
+| **P4** | `differential` | LIM-016 | **NEW (P1 re-scan, `runs/000000009`).** A constant MULTIPLICATIVE factor on ONE context's **perturbed** cells (control clean) fakes a confident `ceiling-diff` (truth no-difference) — evades gate 2 (`depth_ratio` from clean controls ≈1) AND the P1 gate 4b (`off_shift` measures the near-zero OFF baseline, which a multiplicative factor leaves ≈1). vmax aliases the perturbed-condition scale 1:1. The multiplicative sibling of the additive P1; same class as P2. | `scripts/redteam/differential_multiplicative_confound.py` | OPEN |
 | **P2** | `multi_reporter` | LIM-014 | Multiplicative batch factor on the **perturbed** panel aliases 1:1 to a ceiling change → confident `ceiling` where truth is no-effect — consistency guard checks only the control curves. | `scripts/redteam/multi_reporter_batch_confound.py` | OPEN |
 
 **Systemic pattern (the through-line for fixes):** every hole across rounds 1–3 is a confound
@@ -68,6 +70,7 @@ last; never edit a past row):
 | 000000006 | `runs/000000006-uq-fixer-P1.md` | uq-fixer | P1 (LIM-016) | fix claim: measured one-sided OFF-baseline-inflation gate 4b (>2.5); CLOSED-inflating/BOUNDED-deflating; commit `b562da9` |
 | 000000007 | `runs/000000007-audit-P1.md` | audit | P1 fix | **AUDIT: PASS** — hole abstains (seeds 0,1,2), genuine diffs still resolve, frozen core untouched, honesty accurate |
 | 000000008 | `runs/000000008-orchestrator-P1-merge.md` | orchestrator | P1 merge | independently re-verified + merged → `99d73b8` (2 additive doc conflicts resolved); P1 CLOSED/BOUNDED |
+| 000000009 | `runs/000000009-redteam-P1rescan.md` | redteam | P1-fix re-scan | **HOLES_FOUND: 1** — NEW hole **P4** (differential multiplicative confound); P1 additive fix held; commit `63516d4` |
 
 ---
 
