@@ -655,6 +655,18 @@ primitive (local, no global x64 flag). Locked by
 OCT4/NANOG regression. Wired into the `nudge dose-response` CLI verb and the `dose_response` MCP
 tool; carded as `NUDGE-METHOD-001`.
 
+**Visualized (the `nudge.viz` flagship — first figure slice).** The same two result objects now
+render, via a single `nudge.viz.render([...])` call, into the **flagship dual panel**: OCT4's
+resolved orange Hill switch (K=0.65 marked *inside* the dose range) beside NANOG's greyed/hatched
+`unresolved` panel carrying the `I CAN'T TELL — ONE-SIDED BOUND` banner and an **open-ended arrow**
+("K past max dose → gain unidentifiable"), because `spans_inflection=False`. The abstention overlay
+is applied by `render()` off each result's own verdict — not by the renderer — so the picture can
+never claim more than the fit did. Provenance is reproducible: the emitted `fig.py` replays the
+figure from `fig.data.json` (the fit's output, no re-fit) and the re-rendered PNG is **pixel-
+identical** to the original (`np.array_equal`), locked by `tests/viz/test_render.py`. This is the
+fail-safe thesis — attribute when you can, abstain loudly when you can't — made watchable in one
+frame (Demo criterion).
+
 # Phase 4c — multi-timepoint capstone (Gladstone Rest/8h/48h): the abstention is robust
 
 The 8h result teed up two follow-ups; we answered them across **all three** stimulation

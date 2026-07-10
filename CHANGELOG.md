@@ -66,6 +66,31 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   the very α/β confound. Wired into `nudge lotka` CLI + `service.lotka_demo` + a Mechanism
   Card (`docs/mechanism_cards/lotka_volterra_attribution.md`) + `NUDGE-LIM-020` +
   `notebooks/Temporal_Ecology.ipynb`. Additive / opt-in.
+- **Visualization module — `nudge.viz` (opt-in `[viz]` extra), first slice: the flagship
+  dose-response dual panel.** An additive, provenance-carrying figure layer that turns
+  NUDGE's honest *result dataclasses* into honest *pictures* from one `render(result,
+  out=…)` surface — keyed off the existing frozen results (and their `*_to_dict()` dicts;
+  dual-input). It only **reads** results (never re-attributes; never imports `fit`/`core`),
+  lazily imports matplotlib (`Agg`, headless-safe), and — the load-bearing part — applies
+  the **abstention overlay in `render()` itself, off the result's own verdict**, so a
+  renderer *cannot* draw an abstention as a confident call; one-sided bounds
+  (`spans_inflection = False`) draw as **open-ended arrows**, never closed error bars. The
+  flagship `plot_dose_response` renders the real ESC-screen **OCT4 → `switch`** (n≈6.7,
+  R²=0.99) beside the honest **NANOG → `unresolved`** abstention **in one frame** — the
+  fail-safe thesis, visualized. Every figure ships the **Claude Science provenance grain**:
+  `fig.png` + `fig.data.json` + a standalone, deterministic `fig.py` that regenerates the
+  *exact* figure from the fit's output (no re-fit; verified **pixel-identical**), with a
+  `self_contained=True` inline-data mode for Artifacts. Wired through a shared
+  `service.render_result()` seam + an opt-in `--fig-out/--fig-code/--fig-theme/
+  --fig-self-contained` flag on `nudge dose-response` (default text output **unchanged**).
+  Embedded in `notebooks/OCT4_NANOG_Flagship.ipynb` via the one-call API (re-executed
+  headless, 0 errors). matplotlib moved from `[dev]` into a `[viz]` extra (core stays
+  matplotlib-free); `[dev]` depends on `[viz]` so existing V&V figures + notebooks keep
+  working. Tests: `tests/viz/test_render.py` (PNG emitted; `fig.py` re-runs pixel-identical;
+  the **honesty test** — a known abstention yields `FigureResult.abstained == True` with the
+  overlay drawn; dual-input dataclass ⇄ dict; the real flagship marked `needs_data`). The
+  remaining ~11 renderers + the LIM-006 constitutive-flip animation + the MCP `render_figure`
+  tool are designed (`design/VISUALIZATION_DESIGN.md`) and land in later slices.
 
 - **Constitutive-reporter calibration control — the `NUDGE-LIM-006` mitigation
   (`nudge.inference.constitutive`, `NUDGE-METHOD-011`, `NUDGE-LIM-018`):** removes a known

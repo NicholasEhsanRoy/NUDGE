@@ -47,6 +47,10 @@ dependencies = [
 bio = ["scanpy>=1.10", "pertpy>=0.9", "scikit-misc"]
 # Claude Science MCP adapter (stretch/demo).
 mcp = ["mcp>=1.0"]
+# Opt-in figure layer (nudge.viz). matplotlib is the only backend; animated GIFs come
+# free via its bundled Pillow writer. Kept out of the core install so it stays
+# matplotlib-free (design/VISUALIZATION_DESIGN.md §1.3).
+viz = ["matplotlib>=3.8"]
 # AI-in-the-loop dev/test harnesses (creative-AI ideas 1-3, 5). Never in CI.
 ai = ["anthropic>=0.40"]
 # Independent single-cell simulators for the Tier-0.5 inverse-crime guard.
@@ -59,12 +63,11 @@ ci = ["pytest>=7.0", "pytest-xdist", "pyyaml>=6.0"]
 # pyright and ruff pinned exactly so local == CI (avoid "passes locally, fails CI"
 # when a fresh CI install picks up a stricter checker version).
 dev = [
-    "nudge-bio[ci,bio,mcp,ai]",
+    "nudge-bio[ci,bio,mcp,ai,viz]",  # viz pulls matplotlib (V&V figures + nudge.viz)
     "ruff==0.15.20",
     "pyright==1.1.411",
     "pre-commit",
     "build",
-    "matplotlib>=3.8",  # V&V sweep figures (scripts/vv/); analysis-only
     "jupyter",          # authoring + executing the demo notebooks (notebooks/)
     "nbconvert",        # headless execution of notebooks into embedded-output artifacts
 ]

@@ -14,6 +14,58 @@ from typing import Any
 TOPOLOGIES = ("1node", "2node", "toggle")
 
 
+def render_result(
+    kind: str,
+    result_or_dict: Any,
+    *,
+    out: str | None,
+    emit_code: bool = True,
+    theme: str = "auto",
+    self_contained: bool = False,
+    animate: bool = False,
+    inline_png: bool = False,
+    cli_call: str | None = None,
+    **ctx: Any,
+) -> dict[str, Any]:
+    """Render a NUDGE result to a figure — the one place CLI + MCP share the figure path.
+
+    Lazy-imports the opt-in :mod:`nudge.viz` (raising the friendly ``[viz]``-extra install
+    message if absent), dispatches on ``kind``, and returns the ``FigureResult`` as a
+    plain dict (paths + honest caption + ``abstained`` flag + optional size-capped inline
+    PNG). ``ctx`` carries any renderer inputs the serialized dict lacks — e.g. the raw
+    ``dose`` / ``response`` points for the dose-response scatter. The abstention overlay
+    is applied by :mod:`nudge.viz` off the result's own verdict; this seam never re-fits.
+    """
+    import nudge.viz as viz
+
+    fr = viz.render(
+        result_or_dict,
+        out,
+        kind=kind,
+        emit_code=emit_code,
+        theme=theme,
+        self_contained=self_contained,
+        animate=animate,
+        inline_png=inline_png,
+        cli_call=cli_call,
+        **ctx,
+    )
+    return {
+        "png_path": fr.path,
+        "code_path": fr.code_path,
+        "data_path": fr.data_path,
+        "png_base64": fr.png_base64,
+        "png_base64_omitted_reason": (
+            None
+            if (fr.png_base64 is not None or not inline_png)
+            else "exceeds inline cap; read png_path"
+        ),
+        "caption": fr.caption,
+        "abstained": fr.abstained,
+        "kind": fr.kind,
+    }
+
+
 def build_circuit(topology: str) -> Any:
     """Return a named circuit motif (``1node`` / ``2node`` / ``toggle``)."""
     if topology not in TOPOLOGIES:
@@ -191,12 +243,23 @@ def dose_response_file(
     min_cells: int = 15,
     n_boot: int = 500,
     seed: int = 0,
+    fig_out: str | None = None,
+    fig_code: bool = True,
+    fig_theme: str = "auto",
+    fig_self_contained: bool = False,
+    fig_label: str | None = None,
+    cli_call: str | None = None,
 ) -> dict[str, Any]:
     """Fit + classify a dose-response curve from a CSV/TSV or an ``.h5ad`` screen.
 
     Returns the verdict (``switch`` / ``graded`` / ``no-effect`` / ``unresolved``) with
     the apparent gain ``n`` + CI and the honest abstention reason — never a forced call.
     The reported ``n`` is an **apparent population gain**, not molecular cooperativity.
+
+    When ``fig_out`` is given, an opt-in figure of the fit is written (PNG + a
+    regenerating ``fig.py`` + data sidecar unless ``fig_code=False``) via the shared
+    :func:`render_result` seam, and the returned dict gains a ``"figure"`` key with the
+    written paths + honest caption. The default (no ``fig_out``) behaviour is unchanged.
     """
     from nudge.inference.dose_response import attribute_dose_response
 
@@ -214,7 +277,21 @@ def dose_response_file(
     res = attribute_dose_response(
         dose, response, direction=direction, n_boot=n_boot, seed=seed
     )
-    return dose_response_to_dict(res)
+    out = dose_response_to_dict(res)
+    if fig_out is not None:
+        out["figure"] = render_result(
+            "dose_response",
+            res,
+            out=fig_out,
+            emit_code=fig_code,
+            theme=fig_theme,
+            self_contained=fig_self_contained,
+            dose=dose,
+            response=response,
+            label=fig_label or (target or "dose-response"),
+            cli_call=cli_call,
+        )
+    return out
 
 
 # --------------------------------------------------------------------------- #

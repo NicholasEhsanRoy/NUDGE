@@ -127,6 +127,18 @@ Highlights so far:
   surfaces the honest abstention (*C. difficile*'s bloom is interaction-mediated, ε≈−0.31)
   (`nudge lotka`) — see
   [`notebooks/Temporal_Ecology.ipynb`](notebooks/Temporal_Ecology.ipynb).
+- **Honest figures — `nudge.viz`** (opt-in `[viz]` extra, first slice) — an additive,
+  provenance-carrying figure layer that renders NUDGE's frozen result objects from one
+  `render(result, out=…)` call. It only *reads* results (never re-fits; never touches
+  `fit`/`core`), and the honesty is **structural**: `render()` applies the abstention
+  overlay itself off each result's own verdict, so a figure can never draw an abstention as
+  a confident call, and one-sided bounds draw as **open-ended arrows**, never error bars.
+  The flagship **dose-response dual panel** shows the real ESC-screen **OCT4 → switch**
+  (n≈6.7) beside the honest **NANOG → unresolved** in one frame. Every figure also ships a
+  standalone `fig.py` that regenerates it from the fit's output (no re-fit; **pixel-
+  identical**) — the Claude Science provenance grain. Opt-in on the CLI
+  (`nudge dose-response … --fig-out fig.png`), embedded in
+  [`notebooks/OCT4_NANOG_Flagship.ipynb`](notebooks/OCT4_NANOG_Flagship.ipynb).
 
 **The fail-safe guarantee is adversarially red-teamed**
 ([`design/FAILSAFE_REDTEAM.md`](design/FAILSAFE_REDTEAM.md)): a dedicated pass tried to force

@@ -218,6 +218,20 @@ def dose_response(
     min_cells: int = typer.Option(15, help="h5ad: min cells/guide for a dose point"),
     n_boot: int = typer.Option(500, help="bootstrap resamples for the n/K CIs"),
     seed: int = typer.Option(0, help="bootstrap RNG seed"),
+    fig_out: str = typer.Option(
+        "", "--fig-out", help="opt-in: also write a PNG of the fit here (text unchanged)"
+    ),
+    fig_code: bool = typer.Option(
+        True, "--fig-code/--no-fig-code",
+        help="with --fig-out, also emit the regenerating fig.py + data sidecar",
+    ),
+    fig_theme: str = typer.Option(
+        "auto", "--fig-theme", help="figure theme: auto|light|dark"
+    ),
+    fig_self_contained: bool = typer.Option(
+        False, "--fig-self-contained",
+        help="inline the data inside fig.py (one portable file; for Artifacts)",
+    ),
 ) -> None:
     """Attribute a mechanism from a dose-response curve — switch vs graded, or abstain.
 
@@ -227,7 +241,8 @@ def dose_response(
     ``n`` as an **apparent population gain** with a CI, and abstains (``unresolved`` /
     ``no-effect``) rather than over-call an unidentifiable curve — e.g. when the doses
     do
-    not span the inflection.
+    not span the inflection. Pass ``--fig-out fig.png`` to also write an honest figure
+    of the fit (the abstention is drawn as an abstention); text output is unchanged.
     """
     from nudge.service import dose_response_file
 
@@ -245,6 +260,12 @@ def dose_response(
         min_cells=min_cells,
         n_boot=n_boot,
         seed=seed,
+        fig_out=fig_out or None,
+        fig_code=fig_code,
+        fig_theme=fig_theme,
+        fig_self_contained=fig_self_contained,
+        fig_label=target or None,
+        cli_call=f"nudge dose-response {path} --fig-out {fig_out}" if fig_out else None,
     )
     lo, hi = out["ci_n"]
     _echo(f"dose-response  ({out['n_points']} points, direction={out['direction']})")
@@ -262,6 +283,15 @@ def dose_response(
     _echo(
         "\n  note: n is an APPARENT population gain + CI, not molecular cooperativity."
     )
+    fig = out.get("figure")
+    if fig:
+        _echo(f"\n  wrote {fig['png_path']}")
+        if fig.get("code_path"):
+            _echo(f"  wrote {fig['code_path']}  (re-runs to regenerate the figure)")
+        if fig.get("data_path"):
+            _echo(f"  wrote {fig['data_path']}")
+        if fig.get("abstained"):
+            _echo("  (the figure draws the abstention AS an abstention)")
 
 
 # --------------------------------------------------------------------------- #

@@ -3695,6 +3695,9 @@ dev = [
 mcp = [
     { name = "mcp" },
 ]
+viz = [
+    { name = "matplotlib" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -3705,10 +3708,10 @@ requires-dist = [
     { name = "jaxlib", specifier = "==0.5.1" },
     { name = "jupyter", marker = "extra == 'dev'" },
     { name = "maddening", extras = ["ift"], specifier = ">=0.3.1,<0.4" },
-    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.8" },
+    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0" },
     { name = "nbconvert", marker = "extra == 'dev'" },
-    { name = "nudge-bio", extras = ["ci", "bio", "mcp", "ai"], marker = "extra == 'dev'" },
+    { name = "nudge-bio", extras = ["ci", "bio", "mcp", "ai", "viz"], marker = "extra == 'dev'" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "optax", specifier = ">=0.2" },
     { name = "pertpy", marker = "extra == 'bio'", specifier = ">=0.9" },
@@ -3724,7 +3727,7 @@ requires-dist = [
     { name = "scikit-misc", marker = "extra == 'bio'" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["bio", "mcp", "ai", "sim", "ci", "dev"]
+provides-extras = ["bio", "mcp", "viz", "ai", "sim", "ci", "dev"]
 
 [[package]]
 name = "numba"
