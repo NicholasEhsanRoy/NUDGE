@@ -335,11 +335,27 @@ anomalies:
       unreachable within the fit's identifiable region") rather than extrapolate a dose
       beyond the fitted saturating asymptotes or a kinetic change the model cannot reach.
       (3) Safety gate (circuit mode only): design() scores bifurcation_proximity
-      (NUDGE-METHOD-006) on the base vs the intervened circuit and flags an intervention
-      that pushes a bistable switch toward its saddle-node fold (high_risk_of_instability)
-      or that crosses it and destroys bistability (crosses_fold) — inheriting Cap 5's
-      ONE-SIDED LOWER BOUND near the fold (NUDGE-LIM-012), so the risk is reported as "at
-      least this close", never a point estimate. Curve mode carries NO safety gate (there
+      (NUDGE-METHOD-006) on the base vs the intervened circuit and flags an intervention on
+      TWO INDEPENDENT ALARMS — a RELATIVE proximity rise past margin
+      (high_risk_of_instability via delta > margin), OR an ABSOLUTE landing at/above the
+      shipped NEAR_FOLD cut (near_fold: proximity_after >= NEAR_FOLD, the SAME threshold
+      classify_robustness uses to call a circuit near-fold) — and separately flags a
+      fold-crossing that destroys bistability (crosses_fold). The absolute check closes a
+      former blind spot (below): before it, the gate fired ONLY on delta > margin, so an
+      intervention that pushed a robust switch ACROSS NEAR_FOLD by a SUB-MARGIN increment
+      was cleared "OK, stays away from the fold" while classify_robustness on the identical
+      circuit called it near-fold. All near-fold verdicts inherit Cap 5's ONE-SIDED LOWER
+      BOUND near the fold (NUDGE-LIM-012), so the risk is reported as "at least this close",
+      never a point estimate — and that caveat is now carried on the SAFE ("OK") reason
+      branch too whenever proximity_after is one-sided (the falsely-reassuring number must
+      not read as a point estimate; the true proximity may be higher). This blind spot was
+      found by an adversarial red-team (design/FAILSAFE_REDTEAM_3.md HOLE 3;
+      scripts/redteam/design_safety_gate_absolute_proximity.py — deterministic) and is now
+      regression-locked (tests/design/test_invert.py::
+      test_safety_gate_flags_sub_margin_push_across_near_fold plus a positive control that a
+      genuinely-robust intervention below NEAR_FOLD is still cleared "OK", so the absolute
+      gate does not over-abstain; FINDINGS "P3 — design safety gate absolute near-fold").
+      Curve mode carries NO safety gate (there
       is no circuit / fold to score), which is stated in the plan's reason rather than
       silently omitted. A further subtlety: gradient inversion sees only the basin it
       starts in — a knob whose effect on the starting fixed point is weak can leave the

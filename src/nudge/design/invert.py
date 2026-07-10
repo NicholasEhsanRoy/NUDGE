@@ -9,7 +9,10 @@ a target. It is the forward model run in reverse, behind two honesty gates:
   ``DoseResponseResult`` that abstained, a low-confidence fit); and
 - a **bifurcation safety gate** — it flags an intervention that pushes a bistable switch
   toward a tipping point, reusing the shipped Cap-5 :func:`bifurcation_proximity` dial
-  (:mod:`nudge.inference.bifurcation`).
+  (:mod:`nudge.inference.bifurcation`). It fires on **either** a *relative* proximity
+  rise past ``margin`` OR the intervened proximity landing at/above the shipped
+  ``NEAR_FOLD`` cut (an *absolute* check), so a sub-margin push ACROSS the near-fold line
+  can no longer be cleared "OK" against NUDGE's own ``classify_robustness`` verdict.
 
 Two modes, dispatched by what the attribution *carries* (structural, not a base class):
 
@@ -44,7 +47,11 @@ from jax import Array
 
 from nudge.core.circuit import Circuit, Params
 from nudge.core.vocabulary import MechanismClass
-from nudge.inference.bifurcation import BifurcationScore, bifurcation_proximity
+from nudge.inference.bifurcation import (
+    NEAR_FOLD,
+    BifurcationScore,
+    bifurcation_proximity,
+)
 from nudge.inference.fit import FreeParam
 from nudge.mechanisms.readout import Readout
 
@@ -113,9 +120,16 @@ class SafetyReport:
     Fail-safe reading of :func:`bifurcation_proximity` on the base vs the intervened
     circuit. ``None`` proximity means *not bistable* (base) or *fold crossed* (after).
     ``crosses_fold`` is the sharpest instability signal — the intervention destroys the
-    switch's bistability. ``one_sided`` inherits Cap 5's honesty: near the fold the risk
-    is a **lower bound** ("at least this close") — the linear-noise Gaussian breaks
-    down precisely there (``NUDGE-LIM-012`` / ``NUDGE-LIM-013``).
+    switch's bistability. ``high_risk_of_instability`` fires on **two independent
+    alarms**: a *relative* rise (``delta`` exceeds ``margin``) OR an *absolute* landing
+    (``near_fold`` — ``proximity_after >= NEAR_FOLD``, the same cut
+    :func:`~nudge.inference.bifurcation.classify_robustness` uses to call a circuit
+    ``near-fold``). ``near_fold`` records that absolute check on its own, so an
+    intervention that pushes a robust switch across the near-fold line by a **sub-margin**
+    increment is no longer silently cleared (``NUDGE-LIM-013``). ``one_sided`` inherits
+    Cap 5's honesty: near the fold the risk is a **lower bound** ("at least this close")
+    — the linear-noise Gaussian breaks down precisely there (``NUDGE-LIM-012`` /
+    ``NUDGE-LIM-013``), so the true proximity may be *higher* than reported.
     """
 
     proximity_before: float | None
@@ -124,6 +138,7 @@ class SafetyReport:
     one_sided: bool
     high_risk_of_instability: bool
     crosses_fold: bool
+    near_fold: bool = False
     channels_before: Mapping[str, Any] = field(default_factory=dict)
     channels_after: Mapping[str, Any] = field(default_factory=dict)
 
@@ -375,16 +390,28 @@ def _invert_circuit(
 def _safety_report(
     s0: BifurcationScore | None, s1: BifurcationScore | None, margin: float
 ) -> SafetyReport:
-    """Fail-safe Cap-5 verdict on base (``s0``) vs intervened (``s1``) proximity."""
+    """Fail-safe Cap-5 verdict on base (``s0``) vs intervened (``s1``) proximity.
+
+    ``high_risk_of_instability`` fires on **either** alarm — a *relative* rise past
+    ``margin`` OR the intervened proximity landing at/above the shipped near-fold cut
+    :data:`~nudge.inference.bifurcation.NEAR_FOLD` (an *absolute* check, recorded as
+    ``near_fold``). Without the absolute check an intervention could push a robust switch
+    ACROSS the near-fold line by a sub-margin increment and be cleared "OK", directly
+    contradicting :func:`~nudge.inference.bifurcation.classify_robustness` on the
+    identical circuit (which calls it ``near-fold``) — ``NUDGE-LIM-013``.
+    """
     if s0 is None:
-        # Base is not bistable — there is no switch to destabilize.
+        # Base is not bistable — but if the intervention CREATES a switch already sitting
+        # in the near-fold regime, that fragile new switch is still flagged (absolute).
+        near_fold = bool(s1 is not None and s1.proximity >= NEAR_FOLD)
         return SafetyReport(
             proximity_before=None,
             proximity_after=None if s1 is None else s1.proximity,
             delta=None,
             one_sided=bool(s1 is not None and s1.one_sided),
-            high_risk_of_instability=False,
+            high_risk_of_instability=near_fold,
             crosses_fold=False,
+            near_fold=near_fold,
             channels_before={},
             channels_after={} if s1 is None else dict(s1.channels),
         )
@@ -397,17 +424,22 @@ def _safety_report(
             one_sided=s0.one_sided,
             high_risk_of_instability=True,
             crosses_fold=True,
+            near_fold=False,
             channels_before=dict(s0.channels),
             channels_after={},
         )
     delta = s1.proximity - s0.proximity
+    # Absolute near-fold check: the SAME threshold classify_robustness uses, so the
+    # safety gate and the robustness verdict never disagree on the identical circuit.
+    near_fold = bool(s1.proximity >= NEAR_FOLD)
     return SafetyReport(
         proximity_before=s0.proximity,
         proximity_after=s1.proximity,
         delta=delta,
         one_sided=s1.one_sided,  # a LOWER BOUND — "at least this close" — near the fold
-        high_risk_of_instability=bool(delta > margin),
+        high_risk_of_instability=bool(delta > margin or near_fold),
         crosses_fold=False,
+        near_fold=near_fold,
         channels_before=dict(s0.channels),
         channels_after=dict(s1.channels),
     )
@@ -433,19 +465,41 @@ def _circuit_reason(
         )
     elif safety.high_risk_of_instability:
         bound = " (a one-sided LOWER bound)" if safety.one_sided else ""
-        before = cast(float, safety.proximity_before)
         after = cast(float, safety.proximity_after)
-        tail = (
-            f" — HIGH RISK OF INSTABILITY: pushes the switch toward its fold "
-            f"(proximity {before:.2f}->{after:.2f}{bound}; NUDGE-LIM-013)."
+        before = safety.proximity_before
+        move = (
+            f"{before:.2f}->{after:.2f}" if before is not None else f"{after:.2f}"
         )
+        if safety.near_fold:
+            # Absolute near-fold landing — worded to AGREE with classify_robustness,
+            # which calls this same circuit 'near-fold' at proximity >= NEAR_FOLD.
+            tail = (
+                f" — HIGH RISK OF INSTABILITY: the intervened switch is in the "
+                f"near-fold regime (proximity {move}{bound} >= NEAR_FOLD "
+                f"{NEAR_FOLD:g}) — close to a saddle-node fold; NUDGE's own "
+                f"classify_robustness calls this circuit 'near-fold' (NUDGE-LIM-013)."
+            )
+        else:
+            # Relative alarm only — a large proximity RISE below the near-fold cut.
+            tail = (
+                f" — HIGH RISK OF INSTABILITY: pushes the switch toward its fold "
+                f"(proximity {move}{bound}; NUDGE-LIM-013)."
+            )
     elif safety.proximity_before is None:
         tail = " — safety: base circuit is not bistable (no switch to destabilize)."
     else:
         after = cast(float, safety.proximity_after)
+        # The Cap-5 dial is a one-sided LOWER bound once the noise lobes overlap; carry
+        # that caveat on the SAFE branch too — the true proximity may be higher, so the
+        # "OK" number must not be presented as a point estimate (NUDGE-LIM-012).
+        bound = (
+            " (a one-sided LOWER bound — the true proximity may be higher)"
+            if safety.one_sided
+            else ""
+        )
         tail = (
             f" — safety: OK, stays away from the fold "
-            f"(proximity {safety.proximity_before:.2f}->{after:.2f})."
+            f"(proximity {safety.proximity_before:.2f}->{after:.2f}{bound})."
         )
     return head + tail
 

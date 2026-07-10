@@ -63,7 +63,9 @@ Highlights so far:
   Δ, or a dose), behind an **integrity gate** (never design off an unreliable fit), a
   **reachability abstention** (never extrapolate to an unreachable target, `NUDGE-LIM-013`),
   and a **bifurcation safety gate** (flag an intervention that pushes a switch toward its
-  tipping point — a one-sided lower bound near the fold). Recovers a known intervention to
+  tipping point — firing on a relative proximity rise **or** an absolute landing at/above
+  the near-fold cut, so it agrees with `classify_robustness` on the same circuit; a
+  one-sided lower bound near the fold). Recovers a known intervention to
   loss ≈ 0, flags a fold-crossing flip as HIGH RISK, and inverts the **real OCT4**
   dose-response fit to a knockdown dose — see
   [`notebooks/Inverse_Design.ipynb`](notebooks/Inverse_Design.ipynb).
@@ -140,14 +142,19 @@ Highlights so far:
   (`nudge dose-response … --fig-out fig.png`), embedded in
   [`notebooks/OCT4_NANOG_Flagship.ipynb`](notebooks/OCT4_NANOG_Flagship.ipynb).
 
-**The fail-safe guarantee is adversarially red-teamed**
-([`design/FAILSAFE_REDTEAM.md`](design/FAILSAFE_REDTEAM.md)): a dedicated pass tried to force
-*any* capability into a confident, specific, wrong call past its abstention gates. It surfaced
-**2 holes** (3 further attacks held), both now handled — one **closed** (a near-fold operating
-point corrupting the multi-point covariance fit → a well-buffered proximity gate,
-`NUDGE-LIM-017`) and one **locked + documented** (an additive ambient/batch offset faking
-synergy, where no safe runtime gate exists → a strict-`xfail` decoy + a sharpened
-`NUDGE-LIM-009`). A found hole is a *win*: closed or locked, never hidden.
+**The fail-safe guarantee is adversarially red-teamed** across multiple rounds
+([`design/FAILSAFE_REDTEAM.md`](design/FAILSAFE_REDTEAM.md),
+[`_2.md`](design/FAILSAFE_REDTEAM_2.md), [`_3.md`](design/FAILSAFE_REDTEAM_3.md)): dedicated
+passes tried to force *any* capability into a confident, specific, wrong call past its
+abstention gates. Round 1 surfaced **2 holes** (3 attacks held), both now handled — one
+**closed** (a near-fold operating point corrupting the multi-point covariance fit → a
+well-buffered proximity gate, `NUDGE-LIM-017`) and one **locked + documented** (an additive
+ambient/batch offset faking synergy, where no safe runtime gate exists → a strict-`xfail`
+decoy + a sharpened `NUDGE-LIM-009`). Later rounds closed more — including the **`design()`
+safety gate**, which cleared a sub-margin intervention pushed *across* the near-fold cut as
+"OK": now it fires on an **absolute** near-fold check too (reusing the same threshold
+`classify_robustness` uses), so the safety label and the robustness verdict never disagree
+(`NUDGE-LIM-013`; round 3). A found hole is a *win*: closed or locked, never hidden.
 
 Not yet: **time-resolved / temporal attribution** (data-gated); **real-data lock-ins for the
 newest capabilities** — constitutive-control (needs a constitutively-driven reporter
