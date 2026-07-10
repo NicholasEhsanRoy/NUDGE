@@ -8,18 +8,21 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000009-redteam-P1rescan.md`. That immutable record is the source of truth;
+`runs/000000012-orchestrator-P4-merge.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3 **CLOSED**; P1 **CLOSED (inflating) / BOUNDED (deflating) + merged**.
-P1-fix re-scan found a **NEW hole P4** (differential MULTIPLICATIVE perturbed-only scale →
-confident `ceiling-diff`, slips under gate 4b). Now fixing P4, then P2.
+**Status: RUNNING.** P3 **CLOSED**; P1 & P4 **CLOSED (inflating) / BOUNDED (deflating) +
+merged** (both differential confound channels hardened, audits PASS, re-verified). Now:
+P4-fix red-team re-scan, then P2.
 
-- **Next agent:** `nudge-uq-fixer` on **P4** (differential multiplicative confound, sharpens
-  LIM-016), then `nudge-audit` → merge → `nudge-red-team` re-scan; then **P2**
-  (multi_reporter per-condition batch-scale confound, LIM-014 — same class as P4).
-- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep with
-  P4 + P2 both fixed.
+- **Next agent:** `nudge-red-team` — re-scan (P4-fix regression check + fresh sweep). Then
+  `nudge-uq-fixer` on **P2** (multi_reporter per-condition batch-scale confound, LIM-014 —
+  the same class as P4), then `nudge-audit` → merge → `nudge-red-team`.
+- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep with P2
+  also fixed.
+- **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
+  *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
+  later red-team target, not yet a queued hole.
 
 ---
 
@@ -31,7 +34,6 @@ claims, not yet main-loop-verified).
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-| **P4** | `differential` | LIM-016 | **NEW (P1 re-scan, `runs/000000009`).** A constant MULTIPLICATIVE factor on ONE context's **perturbed** cells (control clean) fakes a confident `ceiling-diff` (truth no-difference) — evades gate 2 (`depth_ratio` from clean controls ≈1) AND the P1 gate 4b (`off_shift` measures the near-zero OFF baseline, which a multiplicative factor leaves ≈1). vmax aliases the perturbed-condition scale 1:1. The multiplicative sibling of the additive P1; same class as P2. | `scripts/redteam/differential_multiplicative_confound.py` | OPEN |
 | **P2** | `multi_reporter` | LIM-014 | Multiplicative batch factor on the **perturbed** panel aliases 1:1 to a ceiling change → confident `ceiling` where truth is no-effect — consistency guard checks only the control curves. | `scripts/redteam/multi_reporter_batch_confound.py` | OPEN |
 
 **Systemic pattern (the through-line for fixes):** every hole across rounds 1–3 is a confound
@@ -71,6 +73,9 @@ last; never edit a past row):
 | 000000007 | `runs/000000007-audit-P1.md` | audit | P1 fix | **AUDIT: PASS** — hole abstains (seeds 0,1,2), genuine diffs still resolve, frozen core untouched, honesty accurate |
 | 000000008 | `runs/000000008-orchestrator-P1-merge.md` | orchestrator | P1 merge | independently re-verified + merged → `99d73b8` (2 additive doc conflicts resolved); P1 CLOSED/BOUNDED |
 | 000000009 | `runs/000000009-redteam-P1rescan.md` | redteam | P1-fix re-scan | **HOLES_FOUND: 1** — NEW hole **P4** (differential multiplicative confound); P1 additive fix held; commit `63516d4` |
+| 000000010 | `runs/000000010-uq-fixer-P4.md` | uq-fixer | P4 (LIM-016) | fix claim: measured ceiling-scoped OFF-cluster-scale gate 4c band [0.80,1.30]; inflation CLOSED / deflation BOUNDED; commit `f5d0b87` |
+| 000000011 | `runs/000000011-audit-P4.md` | audit | P4 fix | **AUDIT: PASS** — hole gone both directions, genuine ceiling increases resolve, reduction-sacrifice narrow+honest, frozen core untouched |
+| 000000012 | `runs/000000012-orchestrator-P4-merge.md` | orchestrator | P4 merge | independently re-verified + merged → `ebda9c6` (3 conflicts resolved); P4 CLOSED/BOUNDED |
 
 ---
 
@@ -80,6 +85,7 @@ last; never edit a past row):
 |----|-----------|-----|------------|-----------|-------|
 | **P3** | `design/invert` | LIM-013 | **CLOSED** — safety gate now fires on `delta > margin` OR absolute `proximity_after ≥ NEAR_FOLD` (reuses the shipped constant → agrees with `classify_robustness` on the identical circuit); one-sided caveat carried on the SAFE branch. Passing decoy + 3 regression tests. 0 confident-wrong; positive control still "OK". | `a263789` (merge `017bd58`) | `runs/000000003-audit-P3.md` (PASS) |
 | **P1** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — measured one-sided gate 4b abstains when a context's perturbed OFF baseline is inflated >2.5× its own control (separator: confident-wrong `off_shift≥2.99` vs genuine `≤1.96`). Deflating perturbed-only offset aliases with a genuine reduction → documented residual, not guarded. Decoy + tests; genuine ceiling/gain still resolve (no over-abstention). | `b562da9` (merge `99d73b8`) | `runs/000000007-audit-P1.md` (PASS) |
+| **P4** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — the MULTIPLICATIVE sibling of P1: a per-context multiplicative perturbed-only scale fakes a confident `ceiling-diff`, slipping under gate 2 AND the P1 gate 4b (`off_shift`≈1 for a multiplicative factor). Measured ceiling-scoped gate 4c on the OFF-cluster SCALE (raw MAD, perturbed÷control), band [0.80,1.30] (genuine ceiling ×1.4–4 → ≤1.18; inflating confound c≥1.5 → ≥1.43). Deflating confound is degenerate with a genuine strong ceiling reduction → both abstain (a strict-xfail-locked honest bound; the narrow sacrifice verified by the audit). Genuine ceiling increases + gain/threshold still resolve. | `f5d0b87` (merge `ebda9c6`) | `runs/000000011-audit-P4.md` (PASS) |
 
 *(P1/P2 remain OPEN in the queue above. When each passes audit its row moves here with the
 fix commit + the audit run record, so the queue only holds OPEN work while the full history
