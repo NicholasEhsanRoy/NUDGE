@@ -56,6 +56,27 @@ the guard is one-sided — a *deflating* perturbed-only offset (dropout-like, ``
 aliases with a genuine knob *reduction* and is NOT separable, so it remains unguarded and
 documented (``NUDGE-LIM-016``); and NUDGE still requires each context's control to come from
 the same library as its perturbed cells.
+
+**Third confound channel: a MULTIPLICATIVE perturbed-condition scale (``NUDGE-LIM-016`` P4).**
+A constant *multiplicative* factor ``c`` on ONE context's **perturbed** cells only (its
+control clean) is the sharpest confound of all: it aliases a genuine **ceiling** (``v_max``)
+difference 1:1 (both multiply the ON mode), and it slips past BOTH earlier guards — the
+control-keyed ``depth_ratio`` stays ≈ 1 (gate 2 blind), and a factor scales the near-zero OFF
+*baseline* to near-zero so the additive ``off_shift`` stays ≈ 1 (gate 4b blind). It leaves ONE
+fingerprint: it multiplies the OFF-cluster **spread** by ``c`` too (``off_scale`` ≈ ``c``),
+whereas a genuine ``v_max`` difference leaves the OFF mode's spread anchored at basal
+(``off_scale`` ≈ 1). So before a ``ceiling-diff`` call NUDGE **abstains** when the perturbed
+OFF-cluster scale departs from its control beyond a MEASURED band (gate 4c). **INFLATION is
+CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 left ``off_scale`` ≤ 1.18; every
+inflating confound ``c`` ≥ 1.5 drove it ≥ 1.43; ``FINDINGS`` §P4). **DEFLATION is BOUNDED, not
+closed:** a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
+OFF cluster into the same band as a deflating scale (both ``off_scale`` ≈ 0.5–0.75) — they are
+INDISTINGUISHABLE, so the lower guard abstains on both, correctly killing the deflating confound
+at the cost of no longer resolving a strong genuine ceiling *reduction* (the honest price; a
+per-context multiplicative scale without an independent depth anchor is fundamentally degenerate
+with a ceiling change). The guard is **ceiling-scoped** (only a ``v_max`` winner) since a global
+scale is degenerate with ``v_max`` specifically — a genuine gain/threshold difference reshapes
+the distribution and is untouched.
 """
 
 from __future__ import annotations
@@ -162,6 +183,11 @@ class DifferentialFit:
     off_shift_a: float  # context A's OFF baseline in data vs its OWN control (≈1 = fixed)
     off_shift_b: float  # context B's OFF baseline in data vs its OWN control
     off_shift_ratio: float  # off_shift_b / off_shift_a — the differential OFF-mode move
+    # OFF-cluster SCALE (spread) of each context's perturbed data vs its own control (≈1 =
+    # fixed): a per-context MULTIPLICATIVE measurement scale c multiplies this by c while a
+    # genuine v_max difference leaves it ≈ 1. Drives the ceiling-channel gate 4c (P4).
+    off_scale_a: float = 1.0
+    off_scale_b: float = 1.0
     ci_log2: tuple[float, float] = (float("nan"), float("nan"))
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -407,6 +433,64 @@ def _off_baseline_shift(data: np.ndarray, control: np.ndarray) -> float:
     return float(np.quantile(d, _Q_OFF)) / cq if cq > 1e-9 else float("nan")
 
 
+#: OFF-cluster SCALE band for the ceiling channel (``NUDGE-LIM-016`` P4). A per-context
+#: MULTIPLICATIVE measurement scale ``c`` on ONE context's PERTURBED cells (its control clean)
+#: is degenerate with a genuine ceiling (``v_max``) difference — both multiply the ON mode — and
+#: slips past gate 2 (its control-keyed ``depth_ratio`` stays ≈ 1) AND gate 4b (a factor scales
+#: the near-zero OFF *baseline* to near-zero, so ``off_shift`` ≈ 1). Its ONE fingerprint: it
+#: multiplies the OFF-cluster **spread** by ``c`` too, while a genuine ``v_max`` difference leaves
+#: the OFF mode's spread anchored at basal. MEASURED separation (FINDINGS §P4, both the red-team
+#: and test regimes, 3 seeds): a genuine ceiling INFLATION (×1.4–×4) left the perturbed/control
+#: OFF-cluster scale ratio ≤ 1.18; every inflating multiplicative confound (``c`` ≥ 1.5) drove it
+#: ≥ 1.43 — a gap no genuine ceiling crosses. 1.30 is that gap's midpoint: a measured separator,
+#: NOT an arbitrary cut. INFLATION is therefore CLOSED.
+_OFF_SCALE_INFLATION_MAX = 1.30
+#: DEFLATION is BOUNDED, not closed. A genuine ceiling *reduction* collapses the switch toward
+#: monostable and shrinks the OFF cluster (ratio ≈ 0.64) into the same band as a DEFLATING scale
+#: (``c`` = 0.5–0.7 → ratio 0.48–0.75) — the two are INDISTINGUISHABLE without an independent depth
+#: anchor. So the lower guard is a *catch threshold*, not a clean separator: 0.80 abstains on every
+#: demonstrated deflating confound (``c`` ≤ 0.7 → ratio ≤ 0.75, with margin) at the honest cost of
+#: also abstaining on a strong genuine ceiling reduction (documented, ``NUDGE-LIM-016`` P4).
+_OFF_SCALE_DEFLATION_MIN = 0.80
+
+
+def _off_mode_scale_ratio(data: np.ndarray, control: np.ndarray) -> float:
+    """OFF-cluster SPREAD in a context's perturbed data vs its OWN control (≈ 1 = fixed).
+
+    **Load-bearing for the ceiling channel (``NUDGE-LIM-016`` P4).** A robust scale (median
+    absolute deviation) of the LOW-activity cells — those whose total activity (row-sum, clipped
+    ≥ 0) falls below the population median, i.e. the OFF cluster — measured in the perturbed data
+    and in the context's OWN control; the ratio cancels the context's depth. A per-context
+    **multiplicative** measurement scale ``c`` on the perturbed cells multiplies this OFF-cluster
+    spread by ``c`` (ratio ≈ ``c``), the fingerprint that neither the control-keyed depth ratio
+    (gate 2) nor the additive OFF-*baseline* shift (gate 4b, which a multiplicative factor leaves
+    ≈ 1 because it scales near-zero to near-zero) can see. A genuine ``v_max`` (ceiling)
+    difference leaves the OFF mode's spread anchored at basal (ratio ≈ 1 for inflation; measured
+    ≤ 1.18 even for a ×4 difference — FINDINGS §P4). The **inflation** side is a clean measured
+    separator; the **deflation** side is NOT (a genuine ceiling reduction shrinks the OFF cluster
+    into the same band as a deflating scale), so gate 4c is CLOSED above and BOUNDED below.
+    """
+    def _low_scale(x: np.ndarray) -> float:
+        # NOT clipped at 0: in activity space the near-zero OFF baseline has obs-noise
+        # excursions below 0, and a multiplicative measurement scale dilates those too — the
+        # very signal this estimator keys on. Clipping would collapse the OFF cluster to a
+        # zero-spike (MAD → 0) and destroy the statistic (measured; the scale must be the raw
+        # spread of the low-activity cells).
+        s = np.asarray(x, dtype=float).sum(axis=1)
+        if s.size == 0:
+            return float("nan")
+        low = s[s <= np.median(s)]
+        if low.size == 0:
+            return float("nan")
+        return float(np.median(np.abs(low - np.median(low))))
+
+    cs = _low_scale(control)
+    ds = _low_scale(data)
+    if np.isfinite(cs) and cs > 1e-9 and np.isfinite(ds):
+        return ds / cs
+    return float("nan")
+
+
 def fit_differential(
     context_a: Context,
     context_b: Context,
@@ -497,6 +581,8 @@ def fit_differential(
         off_shift_ratio = float(off_shift_b / off_shift_a)
     else:
         off_shift_ratio = float("nan")
+    off_scale_a = _off_mode_scale_ratio(context_a.data, context_a.control)
+    off_scale_b = _off_mode_scale_ratio(context_b.data, context_b.control)
 
     ci_log2 = (float("nan"), float("nan"))
     if n_boot > 0 and best_diff == selected != "shared":
@@ -530,6 +616,8 @@ def fit_differential(
         off_shift_a=off_shift_a,
         off_shift_b=off_shift_b,
         off_shift_ratio=off_shift_ratio,
+        off_scale_a=off_scale_a,
+        off_scale_b=off_scale_b,
         ci_log2=ci_log2,
     )
 
@@ -585,6 +673,8 @@ def classify_differential(
     min_cells: int = 300,
     depth_ratio_max: float = 1.5,
     off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
+    off_scale_inflation_max: float = _OFF_SCALE_INFLATION_MAX,
+    off_scale_deflation_min: float = _OFF_SCALE_DEFLATION_MIN,
 ) -> tuple[str, str]:
     """Turn a joint fit into a conservative verdict — the fail-safe classifier.
 
@@ -615,6 +705,15 @@ def classify_differential(
        ``depth_ratio`` (gate 2) is structurally blind to but which the joint BIC misreads as
        reduced cooperativity (a spurious ``gain-diff``). One-sided (inflation only): a
        genuine knob *reduction* deflates the OFF baseline and does not trip it.
+    4c. **unresolved — the MULTIPLICATIVE perturbed-scale confound (``NUDGE-LIM-016``, P4).**
+       Only on a **ceiling** (``v_max``) winner: a per-context multiplicative measurement scale
+       ``c`` on one context's perturbed cells aliases a genuine ceiling difference 1:1 and slips
+       past gates 2 and 4b, but multiplies that context's OFF-cluster **spread** by ``c`` too.
+       When the perturbed OFF-cluster scale departs from its own control beyond the measured
+       band ``[off_scale_deflation_min, off_scale_inflation_max]`` NUDGE abstains. INFLATION is
+       CLOSED (a clean measured gap); DEFLATION is BOUNDED — a genuine ceiling reduction and a
+       deflating scale both shrink the OFF cluster and are indistinguishable, so the lower guard
+       abstains on both (sacrificing a strong genuine ceiling reduction, the honest price).
     5. **threshold-diff / gain-diff / ceiling-diff.** The winning Δ model earns its
        parameter over the shared null AND beats the other Δ models. Returns
        ``(call, reason)``.
@@ -714,6 +813,56 @@ def classify_differential(
             "difference leaves the OFF mode anchored near basal (off_shift ≈ 1)"
         )
 
+    # 4c. the MULTIPLICATIVE perturbed-condition scale confound (NUDGE-LIM-016, P4). Scoped to
+    # the CEILING channel: a constant multiplicative factor c on ONE context's PERTURBED cells
+    # (its control clean) is exactly degenerate with a genuine v_max difference (both multiply
+    # the ON mode), and it slips past BOTH earlier guards — the control-keyed depth_ratio stays
+    # ≈ 1 (gate 2 blind), and a factor scales the near-zero OFF baseline to near-zero so
+    # off_shift ≈ 1 (gate 4b blind, which keys on TRANSLATION not scale). Its ONE fingerprint:
+    # it multiplies that context's OFF-cluster SPREAD by c too, while a genuine ceiling
+    # difference leaves the OFF mode's spread anchored at basal. So before a ceiling-diff call,
+    # if EITHER context's perturbed OFF-cluster scale departs from its own control beyond the
+    # MEASURED band [off_scale_deflation_min, off_scale_inflation_max], NUDGE ABSTAINS. Only the
+    # ceiling channel is gated (a global scale is degenerate with v_max specifically; a genuine
+    # gain/threshold difference reshapes the distribution and is untouched — no over-abstention
+    # there). INFLATION is CLOSED (genuine ceiling ×1.4–×4 ≤ 1.18, every inflating confound
+    # ≥ 1.43 — FINDINGS §P4). DEFLATION is BOUNDED: a genuine ceiling reduction shrinks the OFF
+    # cluster into the same band as a deflating scale (indistinguishable), so the lower guard
+    # abstains on both — killing the deflating confound at the cost of a strong genuine ceiling
+    # reduction (the honest residual, NUDGE-LIM-016 P4).
+    if fit.best_diff == "vmax":
+        cand = [
+            (v, ctx)
+            for v, ctx in ((fit.off_scale_a, "A"), (fit.off_scale_b, "B"))
+            if np.isfinite(v) and v > 0
+        ]
+        if cand:
+            # the context whose OFF-cluster scale deviates most from 1 (up OR down).
+            off_scale, which = max(cand, key=lambda t: abs(np.log(t[0])))
+            if off_scale > off_scale_inflation_max or off_scale < off_scale_deflation_min:
+                direction = "inflated" if off_scale > 1.0 else "deflated"
+                extra = (
+                    "this is the CLOSED (cleanly-separable) side: a genuine ceiling difference "
+                    "leaves the OFF-cluster spread ≈ 1 (measured ≤ 1.18 even ×4)"
+                    if direction == "inflated"
+                    else "this is the BOUNDED side: a genuine ceiling REDUCTION also shrinks the "
+                    "OFF cluster and is indistinguishable from a deflating scale, so NUDGE "
+                    "abstains on both rather than risk a spurious ceiling-diff"
+                )
+                return "unresolved", (
+                    f"context {which}'s perturbed OFF-cluster scale is {direction} "
+                    f"{off_scale:.2f}× vs its OWN control (outside the measured band "
+                    f"[{off_scale_deflation_min:g}, {off_scale_inflation_max:g}]) — the "
+                    "fingerprint of a per-context MULTIPLICATIVE measurement scale on that "
+                    "context's PERTURBED cells (a batch / library scale on the perturbed "
+                    f"condition only). Its control-derived depth ratio ({fit.depth_ratio:.2f}) "
+                    "stays ≈ 1 and its additive OFF-baseline shift is ≈ 1, so gates 2 and 4b are "
+                    "blind to it, but a multiplicative factor is EXACTLY degenerate with a "
+                    "ceiling (v_max) difference — both multiply the ON mode. NUDGE cannot certify "
+                    "the apparent ceiling difference is mechanistic rather than a masked "
+                    f"perturbed-condition scale, so it abstains (NUDGE-LIM-016 P4). ({extra}.)"
+                )
+
     # 5. a resolved mechanistic difference.
     lo, hi = fit.ci_log2
     ci_txt = (
@@ -753,6 +902,8 @@ def attribute_differential(
     min_cells: int = 300,
     depth_ratio_max: float = 1.5,
     off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
+    off_scale_inflation_max: float = _OFF_SCALE_INFLATION_MAX,
+    off_scale_deflation_min: float = _OFF_SCALE_DEFLATION_MIN,
 ) -> DifferentialResult:
     """Fit + classify a two-context differential in one call — the CLI / MCP entry point.
 
@@ -780,6 +931,8 @@ def attribute_differential(
         min_cells=min_cells,
         depth_ratio_max=depth_ratio_max,
         off_shift_max=off_shift_max,
+        off_scale_inflation_max=off_scale_inflation_max,
+        off_scale_deflation_min=off_scale_deflation_min,
     )
     return DifferentialResult(fit=fit, call=call, reason=reason)
 

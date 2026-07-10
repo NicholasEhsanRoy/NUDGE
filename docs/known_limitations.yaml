@@ -505,7 +505,35 @@ anomalies:
       reduction, is NOT separable by this diagnostic, and remains UNGUARDED and documented.
       The OFF-baseline diagnostic, previously reported for transparency only, is therefore
       load-bearing on its inflation side alone; the guard still requires each context's
-      control to come from the SAME library as its perturbed cells. NUDGE also abstains when
+      control to come from the SAME library as its perturbed cells. A THIRD confound channel
+      (P4, hardening loop re-scan) is the sharpest: a constant MULTIPLICATIVE factor c on ONE
+      context's PERTURBED cells only (its control clean) aliases a genuine ceiling (v_max)
+      difference 1:1 (both multiply the ON mode) and slips past BOTH earlier guards — the
+      control-keyed depth ratio stays about 1 (gate 2 blind) AND a factor scales the near-zero
+      OFF BASELINE to near-zero so off_shift stays about 1 (gate 4b blind, since it keys on
+      additive TRANSLATION not scale). Verified confident-wrong (spurious ceiling-diff) both
+      INFLATING and DEFLATING (scripts/redteam/differential_multiplicative_confound.py, 9
+      confident-wrong across 2 seeds, truth = no-difference). NUDGE now guards this with a
+      MEASURED OFF-cluster SCALE diagnostic (gate 4c, off_scale = the median-absolute-deviation
+      of the below-median-activity OFF cluster in the perturbed cells vs its OWN control): a
+      multiplicative factor dilates that OFF-cluster spread by c (off_scale about c) while a
+      genuine v_max difference leaves it anchored at basal (off_scale about 1). The guard is
+      CEILING-SCOPED (only a v_max winner — a global scale is degenerate with v_max
+      specifically, so a genuine gain/threshold difference reshapes the distribution and is
+      untouched, no over-abstention there) and abstains when off_scale leaves the measured band
+      [0.80, 1.30]. RESIDUAL BOUND (honest — the INFLATING scale is CLOSED, the DEFLATING scale
+      is BOUNDED): measured separation (FINDINGS P4, both the red-team basal=0.05 and test
+      basal=0.2 regimes, 3 seeds) puts every inflating confound (c at least 1.5) at off_scale at
+      least 1.43 and the strongest genuine ceiling (up to times 4) at most 1.18, a clean gap
+      whose midpoint 1.30 is the upper guard. But on the DEFLATION side a genuine ceiling
+      REDUCTION collapses the switch toward monostable and shrinks the OFF cluster (off_scale
+      0.61-0.69) into the SAME band as a deflating scale (c 0.5-0.7 gives 0.48-0.75) — they are
+      FUNDAMENTALLY DEGENERATE without an independent depth anchor, so the lower guard (0.80)
+      abstains on BOTH, correctly killing the deflating confound at the honest cost of no longer
+      resolving a strong genuine ceiling reduction. In short: a per-context multiplicative
+      perturbed-only scale (either direction) can never be certified as mechanistic against a
+      ceiling change from a single steady-state snapshot; NUDGE abstains rather than emit a
+      confident ceiling-diff. NUDGE also abstains when
       either context is underpowered (too few cells)
       or its linear-noise Gaussian is untrustworthy (lna_reliable — low depth / near a
       bifurcation / monostable). VERIFIED on

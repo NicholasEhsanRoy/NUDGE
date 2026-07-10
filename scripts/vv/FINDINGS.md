@@ -1259,6 +1259,82 @@ context's control to come from the same library as its perturbed cells. Decoy:
 `test_decoy_additive_perturbed_offset_abstains` (+ the offset-0 positive control + the one-sided
 `test_classify_off_shift_guard_is_one_sided_reduction_still_resolves`).
 
+### P4 — the MULTIPLICATIVE perturbed-condition scale confound (hardening loop, `NUDGE-LIM-016` sharpened)
+
+**The hole (independently reproduced, `scripts/redteam/differential_multiplicative_confound.py`, 2
+seeds × {1.5, 2.0, 2.4, 0.7, 0.5} multiplicative factor, default `ras_switch_1node`, N=3000).** The
+P1 fix (gate 4b) keys on the *additive* OFF-baseline TRANSLATION (`off_shift`). A constant
+**multiplicative** factor `c` on ONE context's **perturbed** cells only (its control clean) is the
+sharpest confound of all: it aliases a genuine ceiling (`v_max`) difference 1:1 (both multiply the
+ON mode), and it slips past **both** earlier guards — the control-keyed `depth_ratio` stays ≈ 1.01
+(gate 2 blind), and a factor scales the near-zero OFF *baseline* to near-zero so `off_shift` stays
+≈ 1 (gate 4b blind). Depth is pinned from the CLEAN control, so the joint fit must explain the
+scaled ON mode via kinetics → a confident spurious **`ceiling-diff`** where the truth is
+**no-difference**. Verified **9 confident-wrong across 2 seeds** before the fix (both inflating and
+deflating; the one escape at seed 1 × 2.4 only because it happened to trip gate 4b at `off_shift`
+2.58):
+
+```
+seed=0 c=1.5  ceiling-diff  vmax 2.01->3.24  dBIC vs shared=319   off_shift=0.99 (gate 4b silent)
+seed=0 c=2.0  ceiling-diff  vmax 2.06->4.62  dBIC vs shared=1019  off_shift=1.29
+seed=0 c=0.5  ceiling-diff  vmax 1.96->0.77  dBIC vs shared=780   off_shift=0.99  (DEFLATING)
+seed=1 c=1.5  ceiling-diff  vmax 1.99->3.31  dBIC vs shared=328   off_shift=1.61
+```
+
+**The measured separator (the crux — a separation sweep on the OFF-cluster SCALE, not the OFF
+baseline).** A multiplicative factor `c` dilates the WHOLE perturbed distribution about zero,
+including the **spread** of the OFF cluster (`off_scale` = the MAD of the below-median-activity
+cells in the perturbed data ÷ the same in its OWN control ≈ `c`); a genuine `v_max` difference moves
+only the ON mode and leaves the OFF cluster's spread at basal (`off_scale` ≈ 1). Measured across
+**both** the red-team (`basal=0.05`) and test (`basal=0.2`) regimes, 3 seeds each:
+
+| Condition | `off_scale` (OFF-cluster spread ratio) | resolved call |
+|---|---|---|
+| multiplicative confound, **inflating** `c` = 1.5 / 2.0 / 2.4 | **1.43 – 2.59** | (spurious) ceiling-diff |
+| genuine ceiling ×1.4 / ×1.6 / ×2 / ×3 / **×4** | **0.98 – 1.18** | ceiling-diff |
+| multiplicative confound, **deflating** `c` = 0.7 / 0.5 | **0.48 – 0.75** | (spurious) ceiling-diff |
+| genuine ceiling **reduction** ×0.5 | 0.61 – 0.69 | (overlaps the deflating confound) |
+| genuine gain / threshold (any factor) | ≈ 1 (and NOT the ceiling channel) | resolve or abstain |
+
+The **INFLATION** side separates cleanly — every inflating confound ≥ **1.43**, the strongest
+genuine ceiling ≤ **1.18** — a gap no genuine ceiling crosses. The **DEFLATION** side does NOT: a
+genuine ceiling *reduction* collapses the switch toward monostable and shrinks the OFF cluster
+(0.61–0.69) into the same band as a deflating scale (0.48–0.75) — they are **indistinguishable**.
+
+**The fix (measured; `classify_differential` gate 4c, ceiling-scoped, band `[0.80, 1.30]`).** Before
+emitting a `ceiling-diff`, abstain (`unresolved`) when either context's perturbed OFF-cluster scale
+departs from its own control outside `[0.80, 1.30]`. `1.30` is the midpoint of the measured
+inflation gap `[1.18, 1.43]` — a measured separator. `0.80` is a *catch threshold* (not a clean
+separator): it abstains on every demonstrated deflating confound (`c` ≤ 0.7 → ratio ≤ 0.75, margin
+0.05) at the honest cost of also abstaining on a strong genuine ceiling reduction. The guard is
+**ceiling-scoped** (only a `v_max` winner) — a global scale is degenerate with `v_max` specifically,
+so a genuine gain/threshold difference reshapes the distribution and is **untouched** (no
+over-abstention there). Engineering note (verified root cause): the OFF-cluster scale must be the
+**raw** spread of the low-activity cells — an earlier draft clipped the row-sum at 0 (copied from the
+additive `off_shift`, which uses quantiles), which collapsed the near-zero OFF cluster to a
+zero-spike and drove the MAD to 0/nan; removing the clip made the module match the validated sweep.
+
+**Re-validation (through the shipped path).**
+- **The 9 confident-wrong cases → `unresolved`** (0 confident-wrong across 2 seeds, inflating AND
+  deflating; the factor-1.0 control → `no-difference`). Re-run:
+  `uv run python scripts/redteam/differential_multiplicative_confound.py 2`.
+- **No over-abstention — every positive control still resolves:** genuine `ceiling-diff` (×1.4
+  `test_recovers_ceiling_difference`, ×2.0 `test_genuine_ceiling_inflation_still_resolves_past_gate_4c`,
+  `off_scale ≤ 1.18`), `gain-diff` (ceiling-scoped guard never gates it), `no-difference` (factor 1),
+  the additive P1 confound (still caught by gate 4b), the depth-confound and underpowered/LNA gates —
+  all unchanged (`tests/inference/test_differential.py`, slow suite green).
+
+**Verdict: CLOSED for the inflating multiplicative scale; BOUNDED for the deflating one.** Honest
+residual (locked in `NUDGE-LIM-016`): on the deflation side a genuine ceiling reduction and a
+deflating measurement scale are fundamentally degenerate (both shrink the OFF cluster), so NUDGE
+abstains on both — killing the deflating confound at the cost of no longer resolving a strong genuine
+ceiling reduction; a per-context multiplicative scale without an independent depth anchor cannot be
+separated from a ceiling change. NUDGE still requires each context's control to come from the same
+library as its perturbed cells. Decoy: `test_decoy_multiplicative_perturbed_scale_abstains` (8 cases,
+inflating + deflating) + the factor-1 positive control + the genuine-ceiling positive control
+`test_genuine_ceiling_inflation_still_resolves_past_gate_4c` + the strict-xfail bound lock
+`test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound`.
+
 ## Temporal / Lotka–Volterra attribution (NUDGE-METHOD-012) — the extensibility thesis
 
 **The reframe.** NUDGE observes steady-state *snapshots*; the deferred Capability 4 (temporal)

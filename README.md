@@ -94,10 +94,14 @@ Highlights so far:
   Fits the two contexts **jointly** and **BIC-selects** which single knob differs, or
   abstains. The honesty crux (`NUDGE-LIM-016`): a depth/batch shift aligned with the context
   axis mimics a ceiling difference, so depth is pinned **per context** from each control and
-  NUDGE **abstains** when the two contexts' depths differ beyond a ratio; and a red-team-found
+  NUDGE **abstains** when the two contexts' depths differ beyond a ratio; a red-team-found
   **additive offset on one context's *perturbed* cells** (invisible to the control-keyed depth
-  ratio, faking a `gain-diff`) is caught by a measured one-sided OFF-baseline-inflation guard —
-  never a spurious mechanism from an artifact (`nudge differential`) — see
+  ratio, faking a `gain-diff`) is caught by a measured one-sided OFF-baseline-inflation guard; and
+  a **multiplicative scale on one context's *perturbed* cells** (which aliases a `ceiling-diff` 1:1
+  and slips past *both* the depth ratio and the additive guard) is caught by a measured
+  ceiling-scoped OFF-cluster-scale guard — the inflating scale **closed**, the deflating one an
+  honest **bound** (it is degenerate with a genuine ceiling reduction). Never a spurious mechanism
+  from an artifact (`nudge differential`) — see
   [`notebooks/Differential.ipynb`](notebooks/Differential.ipynb).
 - **Constitutive-reporter calibration control** (`NUDGE-METHOD-011`) — removes a known
   **confident-wrong** failure mode (`NUDGE-LIM-006`: a **nonlinear measurement readout**
