@@ -8,16 +8,17 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000004-orchestrator-P3-merge.md`. That immutable record is the source of truth;
+`runs/000000005-redteam-P3rescan.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3 is **CLOSED + merged** (audit PASS, independently re-verified).
+**Status: RUNNING.** P3 **CLOSED + merged**; P3-fix regression re-scan **HOLES_FOUND: 0**
+(the fix held). Now moving to P1.
 
-- **Next agent:** `nudge-red-team` — re-scan (P3-fix regression check + a fresh
-  confident-wrong sweep). Then `nudge-uq-fixer` on **P1** (differential additive confound,
-  LIM-016), then `nudge-audit` → merge → red-team; then **P2** (multi_reporter batch
-  confound, LIM-014).
-- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine sweep.
+- **Next agent:** `nudge-uq-fixer` on **P1** (differential additive-perturbed-offset
+  confound, LIM-016), then `nudge-audit` → merge → `nudge-red-team` re-scan; then **P2**
+  (multi_reporter batch confound, LIM-014).
+- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep with
+  P1 + P2 both fixed.
 
 ---
 
@@ -64,6 +65,7 @@ last; never edit a past row):
 | 000000002 | `runs/000000002-uq-fixer-P3.md` | uq-fixer | P3 (LIM-013) | fix claim: two-alarm safety gate (`delta>margin` OR `proximity≥NEAR_FOLD`); CLOSED; commit `a263789` |
 | 000000003 | `runs/000000003-audit-P3.md` | audit | P3 fix | **AUDIT: PASS** — hole flags, no over-abstention, frozen core untouched, full gate green |
 | 000000004 | `runs/000000004-orchestrator-P3-merge.md` | orchestrator | P3 merge | independently re-verified + merged → `017bd58`; P3 CLOSED |
+| 000000005 | `runs/000000005-redteam-P3rescan.md` | redteam | P3-fix re-scan | **HOLES_FOUND: 0** — P3 fix held (5 probes); report `FAILSAFE_REDTEAM_4.md`; commit `a561bdd` |
 
 ---
 
