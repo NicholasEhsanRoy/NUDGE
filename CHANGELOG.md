@@ -9,6 +9,29 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Multi-reporter joint attribution — the identifiability force-multiplier
+  (`nudge.inference.multi_reporter`, `NUDGE-METHOD-008`):** breaks NUDGE's dominant reason
+  to abstain — the measured **K⇄v_max / gain⇄threshold degeneracy** (FINDINGS §2) — by
+  fitting **several downstream reporters of ONE latent switch jointly**. Each reporter is
+  an affine readout `y_j = base_j + gain_j·A·f(dose; K, n)` of the *same* latent
+  (genuinely a `Readout` of a shared Hill activity); pinning the reporter gains from the
+  control and sharing one latent over-determines the fit, so a **threshold** shift (moves
+  the inflection identically across reporters) and a **ceiling** change (scales every
+  reporter's ON amplitude by the same fraction) project **differently** onto a panel of
+  heterogeneous gains — the multi-*reporter* analogue of the second-operating-*point* ×16
+  degeneracy-break. **Headline (synthetic ground truth, FINDINGS "Phase 4h"):** a known
+  threshold-only / gain-only / ceiling-only perturbation on one latent, seen through 4
+  heterogeneous-gain reporters — the **JOINT** panel recovers the mechanism **24/24 (100%)**
+  where a **SINGLE** reporter resolves **0/24** (`unresolved`, the degeneracy), with **0
+  confident-wrong calls**. **Fail-safe, strengthened:** the **consistency guard**
+  (`NUDGE-LIM-014`) abstains **off-model** when the panel cannot be explained by one shared
+  latent (a reporter reads a *different* latent — a hidden node / wrong panel), never
+  averaging it into a call; a single reporter honestly returns `unresolved`. Wired into the
+  `nudge multi-reporter` CLI verb + the `multi_reporter` MCP tool +
+  `service.multi_reporter_file` + a Mechanism Card + `notebooks/Multi_Reporter.ipynb`.
+  Additive/opt-in — touches neither the energy-distance `fit()` default nor the decoy
+  battery.
+
 - **Inverse / intervention design — the flagship `design()` (`nudge.design.invert`,
   `NUDGE-METHOD-007`):** delivers the brief's headline thesis — NUDGE *inverts the fit to
   propose untested interventions*. Given a **reliable** attribution it runs the same

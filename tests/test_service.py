@@ -212,3 +212,35 @@ def test_design_file_curve_wiring_and_reachability(tmp_path) -> None:
     bad = design_file(str(csv), target_response=floor - 0.1)
     assert bad["kind"] == "abstention"
     assert bad["verdict"] in {"unresolved", "no-effect", "off-model"}
+
+
+def test_multi_reporter_file_csv_wiring(tmp_path) -> None:
+    """The tidy-CSV path the CLI/MCP share: a joint panel round-trips to a knob call.
+
+    A synthetic threshold-only perturbation observed through 4 heterogeneous reporters
+    of ONE latent switch is written as a long table and round-tripped through the shared
+    ``multi_reporter_file`` — the joint panel resolves ``threshold`` where a single
+    reporter would abstain (the K⇄v_max degeneracy break).
+    """
+    import pandas as pd
+
+    from nudge.inference.multi_reporter import simulate_reporter_panel
+    from nudge.service import multi_reporter_file
+
+    panel = simulate_reporter_panel(mechanism="threshold", n_reporters=4, seed=0)
+    rows = []
+    for r in panel:
+        for d, c, p in zip(r.dose, r.control, r.perturbed, strict=True):
+            rows.append({"reporter": r.name, "dose": d, "control": c, "perturbed": p})
+    csv = tmp_path / "panel.csv"
+    pd.DataFrame(rows).to_csv(csv, index=False)
+
+    out = multi_reporter_file(str(csv), direction="activate", n_boot=80)
+    assert out["call"] == "threshold", out["reason"]
+    assert out["n_reporters"] == 4
+    assert out["winner"] == "threshold"
+    assert out["knob_margin"] > 1.5
+    assert len(out["reporters"]) == 4
+    assert set(out) >= {
+        "call", "reason", "winner", "panel_r2", "ci_log2_k", "consistency_ratio"
+    }

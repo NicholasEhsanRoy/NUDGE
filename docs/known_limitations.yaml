@@ -329,3 +329,48 @@ anomalies:
       deliberate honesty choice, stated with every dose proposal, not a silent gap. Every
       proposal is a model-bound hypothesis to be tested experimentally, never a
       guaranteed outcome.
+
+  - anomaly_id: NUDGE-LIM-014
+    title: Multi-reporter attribution presumes the panel reports ONE latent switch
+    description: >-
+      In multi-reporter joint attribution (nudge.inference.multi_reporter,
+      NUDGE-METHOD-008), NUDGE breaks the K⇄v_max / gain⇄threshold degeneracy (FINDINGS §2)
+      by fitting several downstream reporters of ONE latent switch JOINTLY — each an affine
+      readout y_j = base_j + gain_j·A·f(dose; K, n) of the same latent, with the reporter
+      affine pinned from the control. The entire identifiability gain rests on the premise
+      that the panel genuinely reports a SINGLE shared latent. Two honest failure modes
+      follow. (1) INCONSISTENT PANEL: if a reporter secretly reads a DIFFERENT latent (a
+      hidden co-regulated node, a distinct switch, or a mislabeled panel), no shared (K, n)
+      + per-reporter affine can fit all curves — the joint residual is large. NUDGE must
+      NOT average this into a confident call: the consistency guard abstains OFF-MODEL when
+      the shared-latent panel R² is poor, when a reporter fits its OWN Hill cleanly yet the
+      shared latent explains it badly (it reads a different latent), or when the
+      shared-vs-independent residual ratio is large. Reporter inconsistency is FLAGGED, not
+      silently averaged away. (2) SINGLE-REPORTER DEGENERACY: with one reporter (M=1) the
+      reporter gain cannot be pinned or checked for stability, so a latent CEILING change
+      is degenerate with the reporter's own gain drifting — NUDGE returns UNRESOLVED (the
+      very abstention the panel is built to break), never a forced mechanism. The pinned-
+      affine assumption (a reporter is a fixed measurement device, same in control and
+      perturbed) is what makes the ceiling identifiable, and it is CHECKABLE only with >=2
+      reporters. VERIFIED on synthetic ground truth: a known threshold-only / gain-only /
+      ceiling-only perturbation on ONE latent seen through 4 heterogeneous-gain reporters —
+      JOINT recovery 24/24 (100%) vs SINGLE-reporter 0/24, with 0 confident-wrong calls;
+      and every inconsistent panel (one reporter with a shifted latent) is refused
+      off-model. Reported n / K / A are APPARENT population parameters (with bootstrap CIs),
+      not molecular constants, and a mechanism call holds only under an approximately-affine
+      reporter (NUDGE-LIM-006) whose doses span the inflection (NUDGE-LIM-007). Guarded by
+      the consistency guard + the M=1 abstention + the fail-safe sweep
+      (tests/inference/test_multi_reporter.py).
+    severity: major
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      The identifiability force-multiplier is only trustworthy if the panel really is one
+      latent switch; averaging an inconsistent panel (a reporter reading a hidden, different
+      latent) into a confident threshold/gain/ceiling call would be exactly the
+      confident-wrong failure the project exists to avoid — and it is tempting precisely
+      because a joint fit LOOKS more authoritative than a single curve. The guarantee rests
+      on the consistency guard (abstain off-model when the panel is not one shared latent)
+      and the single-reporter abstention (never pretend a lone reporter breaks the
+      degeneracy); a loosened consistency threshold, an unmodelled nonlinear reporter
+      (NUDGE-LIM-006), or a truncated dose series (NUDGE-LIM-007) would each resurrect a
+      false positive.

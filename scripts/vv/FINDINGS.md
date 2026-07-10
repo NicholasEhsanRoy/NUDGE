@@ -945,3 +945,61 @@ degeneracies / near bifurcations, so the layer is engineered to **widen and abst
 than trust a bad Gaussian. Tests: `tests/inference/test_uncertainty.py` (analytic-Hessian CI;
 singular / partial / non-PSD guards; the degeneracy reproduction + two-operating-point break; the
 coverage calibration).
+
+# Phase 4h — multi-reporter joint attribution: the K⇄v_max degeneracy, broken by a panel
+
+Capability 6 (`nudge.inference.multi_reporter`, `NUDGE-METHOD-008`) attacks NUDGE's
+*dominant* reason to abstain head-on: the measured **K⇄v_max / gain⇄threshold degeneracy**
+(§2). The insight §2 already named as the fix — *a richer (multi-reporter) readout* — is
+built: fit **several downstream reporters of ONE latent switch jointly**. Each reporter is
+an affine readout `y_j = base_j + gain_j·A·f(dose; K, n)` of the *same* latent (genuinely a
+`Readout` of a shared Hill activity). Pinning the reporter gains from the CONTROL panel and
+sharing one latent makes the perturbed fit **over-determined**: a **threshold** shift moves
+the inflection **identically** across reporters, while a **ceiling** change scales **every**
+reporter's ON amplitude by the *same fraction* — so the two project DIFFERENTLY onto a panel
+of heterogeneous gains, and the joint fit separates them. This is the multi-*reporter*
+analogue of the second-operating-*point* ×16 break (the "Covariance attribution" M3 result):
+more observers of one latent, instead of more conditions.
+
+## The headline: JOINT resolves where a SINGLE reporter abstains (0 confident-wrong)
+
+Synthetic ground truth — ONE latent switch carrying a KNOWN **threshold-only** /
+**gain-only** / **ceiling-only** perturbation (`factor=3`), observed through **4 reporters
+of heterogeneous gain** — run two ways with the *same* `attribute_multi_reporter`: the full
+panel vs a single reporter.
+
+| condition | JOINT (4 reporters) | SINGLE (1 reporter) |
+|---|---|---|
+| threshold (K×3) | **threshold** ✓ (8/8 seeds) | unresolved (0/8) |
+| gain (n÷3) | **gain** ✓ (8/8 seeds) | unresolved (0/8) |
+| ceiling (A÷3) | **ceiling** ✓ (8/8 seeds) | unresolved (0/8) |
+
+**JOINT mechanism recovery: 24/24 (100%). SINGLE-reporter: 0/24. Confident-wrong calls: 0**
+(on either path). The single reporter cannot separate a latent ceiling change from its own
+gain drifting (the affine cannot be pinned or checked with one reporter), so it honestly
+returns `unresolved` — the very abstention the panel is built to break. The joint winner
+beats the runner-up knob by a large loss margin (threshold ×140–177, gain ×23–29, ceiling
+×265–323) at panel R² ≈ 1.00. A wider sweep (mechanism × factor∈{2.5,3,4} × noise∈{.03,.06}
+× seeds) holds the 0-wrong property (`test_fail_safe_never_a_confident_wrong_call`).
+
+## The consistency guard — an inconsistent panel abstains off-model (`NUDGE-LIM-014`)
+
+The identifiability gain rests entirely on the panel genuinely reporting ONE latent. When a
+reporter secretly reads a **different** latent (a shifted `K` — a hidden co-regulated node
+or a mislabeled panel), no shared `(K, n)` + per-reporter affine can fit all curves. NUDGE
+must **not** average this into a call: the consistency guard abstains **off-model** — the
+odd reporter fits its OWN Hill cleanly (R² ≈ 1.0) yet the shared latent explains it badly
+(R² ≈ 0.5), and the shared-vs-independent residual ratio blows up (66–268×). Verified across
+which reporter is the odd one out and across the ground-truth mechanism
+(`test_inconsistent_panel_is_off_model`). Reporter inconsistency is **flagged, not silently
+averaged away** — the honest new gate this capability adds.
+
+> Takeaway: NUDGE's dominant abstention (threshold-vs-ceiling from one reporter) becomes a
+> **resolved** call with a multi-reporter panel — a concrete experimental recipe — and the
+> fail-safe is *extended*, not traded: a panel that isn't one latent switch abstains
+> off-model. **JOINT 100% / SINGLE 0% recovery, 0 confident-wrong**, measured on synthetic
+> ground truth. Wired into `nudge multi-reporter` CLI + the `multi_reporter` MCP tool +
+> `nudge.service.multi_reporter_file`; Mechanism Card `NUDGE-METHOD-008` (`multi_reporter`);
+> `notebooks/Multi_Reporter.ipynb`. A real-panel demonstration (e.g. OCT4/NANOG self-renewal
+> reporters of the pluripotency latent) is a deferred follow-up — the synthetic
+> degeneracy-break is the load-bearing validation (we do NOT force a real-data claim).

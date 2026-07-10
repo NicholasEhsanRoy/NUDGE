@@ -712,3 +712,137 @@ def design_file(
     out["attribution_call"] = res.call
     out["target_response"] = target_response
     return out
+
+
+# --------------------------------------------------------------------------- #
+# multi-reporter joint attribution (several downstream reporters of ONE latent
+# switch, fit jointly to break the K⇄v_max degeneracy — see
+# inference.multi_reporter). The panel over-determines the latent, so the joint
+# fit RESOLVES threshold/gain/ceiling where a single reporter ABSTAINS; a panel
+# that cannot be explained by one shared latent abstains off-model (NUDGE-LIM-014).
+# --------------------------------------------------------------------------- #
+def multi_reporter_to_dict(res: Any) -> dict[str, Any]:
+    """Serialise a ``MultiReporterResult`` to a plain JSON-able dict (CLI / MCP)."""
+    f = res.fit
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "direction": f.direction,
+        "n_reporters": f.n_reporters,
+        "pinned_affine": f.pinned_affine,
+        "winner": f.winner,
+        "knob_margin": f.knob_margin,
+        "effect_margin": f.effect_margin,
+        "k_wt": f.k_wt,
+        "n_wt": f.n_wt,
+        "k_ratio": f.k_ratio,
+        "n_ratio": f.n_ratio,
+        "ceiling_ratio": f.ceiling_ratio,
+        "ci_log2_k": list(f.ci_log2_k),
+        "ci_log2_n": list(f.ci_log2_n),
+        "ci_log2_ceiling": list(f.ci_log2_ceiling),
+        "losses": {
+            "no_effect": f.loss_no_effect,
+            "threshold": f.loss_threshold,
+            "gain": f.loss_gain,
+            "ceiling": f.loss_ceiling,
+            "full": f.loss_full,
+        },
+        "panel_r2": f.panel_r2,
+        "worst_reporter_r2": f.worst_reporter_r2,
+        "consistency_ratio": f.consistency_ratio,
+        "n_points_total": f.n_points_total,
+        "reporters": [
+            {
+                "name": r.name,
+                "floor": r.floor,
+                "gain": r.gain,
+                "r2_shared": r.r2_shared,
+                "r2_independent": r.r2_independent,
+            }
+            for r in f.reporters
+        ],
+    }
+
+
+def _read_reporter_panel(
+    path: str,
+    *,
+    dose_col: str,
+    reporter_col: str,
+    control_col: str,
+    perturbed_col: str,
+) -> list[Any]:
+    """Read a tidy long CSV/TSV into a list of ``ReporterObservation``.
+
+    Expected columns: a reporter label, a dose, and the reporter's control and
+    perturbed responses (one row per reporter × dose). Rows are grouped by reporter and
+    dose-sorted.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from nudge.inference.multi_reporter import ReporterObservation
+
+    sep = "\t" if path.endswith((".tsv", ".txt")) else ","
+    df = pd.read_csv(path, sep=sep, comment="#")
+    for col in (dose_col, reporter_col, control_col, perturbed_col):
+        if col not in df.columns:
+            raise KeyError(f"column {col!r} not in {list(df.columns)}")
+    out: list[Any] = []
+    for name, rows in df.groupby(reporter_col):
+        rows = rows.sort_values(dose_col)
+        out.append(
+            ReporterObservation(
+                name=str(name),
+                dose=rows[dose_col].to_numpy(dtype=float),
+                control=rows[control_col].to_numpy(dtype=float),
+                perturbed=np.asarray(rows[perturbed_col], dtype=float),
+            )
+        )
+    return out
+
+
+def multi_reporter_file(
+    path: str,
+    *,
+    dose_col: str = "dose",
+    reporter_col: str = "reporter",
+    control_col: str = "control",
+    perturbed_col: str = "perturbed",
+    direction: str = "activate",
+    n_boot: int = 200,
+    seed: int = 0,
+    knob_margin: float = 1.5,
+    effect_margin: float = 1.4,
+    min_panel_r2: float = 0.5,
+) -> dict[str, Any]:
+    """Jointly attribute a multi-reporter panel from a tidy CSV/TSV — the CLI/MCP entry.
+
+    Reads a long table (one row per reporter × dose, with control and perturbed response
+    columns) of several reporters of ONE latent switch, fits them jointly, and localizes
+    the perturbation to a single shared knob — **threshold** / **gain** / **ceiling** —
+    or abstains (**no-effect** / **unresolved** / **off-model**). The joint panel
+    resolves the mechanism where a single reporter is degenerate (the K⇄v_max
+    degeneracy); a panel that cannot be explained by one shared latent abstains
+    ``off-model`` (NUDGE-LIM-014) rather than average it into a call.
+    """
+    from nudge.inference.multi_reporter import attribute_multi_reporter
+
+    reporters = _read_reporter_panel(
+        path,
+        dose_col=dose_col,
+        reporter_col=reporter_col,
+        control_col=control_col,
+        perturbed_col=perturbed_col,
+    )
+    res = attribute_multi_reporter(
+        reporters,
+        direction=direction,
+        n_boot=n_boot,
+        seed=seed,
+        knob_margin=knob_margin,
+        effect_margin=effect_margin,
+        min_panel_r2=min_panel_r2,
+    )
+    return multi_reporter_to_dict(res)

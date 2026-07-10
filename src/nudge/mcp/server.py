@@ -341,6 +341,51 @@ def build_server() -> Any:
             signature=sig or None,
         )
 
+    @mcp.tool()
+    def multi_reporter(
+        path: str,
+        dose_col: str = "dose",
+        reporter_col: str = "reporter",
+        control_col: str = "control",
+        perturbed_col: str = "perturbed",
+        direction: str = "activate",
+        n_boot: int = 200,
+    ) -> dict[str, Any]:
+        """Jointly attribute a panel of reporters of ONE latent switch — break K⇄v_max.
+
+        NUDGE's dominant reason to abstain is the **K⇄v_max / gain⇄threshold
+        degeneracy**: a *single* reporter of one latent switch under-determines the
+        mechanism (``FINDINGS`` §2). The fix is to fit **several downstream reporters of
+        the SAME latent switch jointly** — each an affine readout ``y_j = base_j +
+        gain_j·activity`` with its own heterogeneous gain. Because a threshold shift
+        (moves the inflection identically across reporters) and a ceiling change (scales
+        every reporter's ON amplitude by the same fraction) project DIFFERENTLY onto a
+        panel of heterogeneous gains, the joint fit is over-determined and **resolves**
+        threshold / gain / ceiling where a single reporter abstains.
+
+        ``path`` is a tidy long CSV/TSV — one row per reporter × dose — with
+        ``reporter_col`` / ``dose_col`` / ``control_col`` (WT response) /
+        ``perturbed_col`` (perturbed response). ``direction`` is ``activate`` when the
+        readout rises with dose. Returns the verdict (``threshold`` / ``gain`` /
+        ``ceiling`` / ``no-effect`` / ``unresolved`` / ``off-model``) with the shared
+        latent's WT ``K`` / ``n``, the shared perturbation ratios + bootstrap CIs, the
+        per-reporter fits, and the honest reason. **Fail-safe:** a spurious mechanism
+        must be consistent across ALL reporters; a panel that cannot be explained by one
+        shared latent (a reporter reads a *different* latent) abstains ``off-model``
+        (NUDGE-LIM-014) rather than being averaged into a confident call.
+        """
+        from nudge.service import multi_reporter_file
+
+        return multi_reporter_file(
+            path,
+            dose_col=dose_col,
+            reporter_col=reporter_col,
+            control_col=control_col,
+            perturbed_col=perturbed_col,
+            direction=direction,
+            n_boot=n_boot,
+        )
+
     return mcp
 
 

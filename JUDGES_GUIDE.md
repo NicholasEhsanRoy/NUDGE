@@ -161,6 +161,19 @@ abstains on gain, with 0 confident-wrong calls** — the fail-safe holding on ge
 independent stochastic data (`FINDINGS.md`, "independent-SSA validation";
 `tests/inference/test_lyapunov_toggle_ssa.py`).
 
+And we shipped a **second, complementary** degeneracy-breaker for the *same* K⇄v_max
+confound — `nudge.inference.multi_reporter` (`NUDGE-METHOD-008`): instead of a second
+operating *point*, use several **reporters** of one latent switch. Because a threshold
+shift moves the shared inflection identically across reporters while a ceiling change
+scales every reporter's ON amplitude by the same fraction, a joint fit over a
+heterogeneous-gain panel is over-determined and **resolves** threshold/gain/ceiling where a
+single reporter abstains — **JOINT 100% / SINGLE 0% recovery, 0 confident-wrong** on
+synthetic ground truth (`FINDINGS.md`, "Phase 4h"; `notebooks/Multi_Reporter.ipynb`). The
+fail-safe is *extended*: a **consistency guard** abstains `off-model` when the panel is not
+one shared latent (a reporter reads a *different* latent, `NUDGE-LIM-014`), rather than
+average an inconsistent panel into a call. Two independent, guarded routes to the same
+identifiability win — more conditions, or more reporters — is the depth the confound earned.
+
 ## 4. Demo (30%) — reproducible science you can run
 
 The demo today is **reproducible, trustworthy findings** rather than a polished UI —

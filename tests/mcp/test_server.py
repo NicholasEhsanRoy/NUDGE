@@ -30,6 +30,7 @@ def test_server_registers_the_expected_tools() -> None:
         "cross_modality",
         "robustness",
         "design",
+        "multi_reporter",
         "explain_abstention",
         "list_mechanisms",
         "get_mechanism_card",

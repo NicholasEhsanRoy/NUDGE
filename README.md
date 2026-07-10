@@ -35,7 +35,8 @@ Highlights so far:
   genuinely bistable stochastic data (recovers *gain* where a naive fit is
   confidently wrong). See [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md).
 - **`nudge` CLI + Claude MCP server** — the tool is drivable from a terminal
-  (`nudge attribute … / dose-response / synergy / cross-modality / explain`) *and* by
+  (`nudge attribute … / dose-response / synergy / cross-modality / robustness / design /
+  multi-reporter / explain`) *and* by
   Claude in plain language through a custom MCP server (Claude Code / Desktop / the
   Claude Science workbench). Connection recipes verified in
   [`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md).
@@ -66,6 +67,15 @@ Highlights so far:
   loss ≈ 0, flags a fold-crossing flip as HIGH RISK, and inverts the **real OCT4**
   dose-response fit to a knockdown dose — see
   [`notebooks/Inverse_Design.ipynb`](notebooks/Inverse_Design.ipynb).
+- **Multi-reporter joint attribution** (`NUDGE-METHOD-008`) — the identifiability
+  force-multiplier: fits **several downstream reporters of ONE latent switch jointly** to
+  break the **K⇄v_max degeneracy** that is NUDGE's dominant reason to abstain. Because a
+  **threshold** shift and a **ceiling** change project differently onto a panel of
+  heterogeneous gains, the JOINT panel **resolves** threshold / gain / ceiling (**100%** on
+  synthetic ground truth) where a SINGLE reporter **abstains** (`unresolved`, **0%**), with
+  **0 confident-wrong calls**. Fail-safe strengthened: the **consistency guard** abstains
+  **off-model** when a reporter reads a *different* latent (`NUDGE-LIM-014`) — see
+  [`notebooks/Multi_Reporter.ipynb`](notebooks/Multi_Reporter.ipynb).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap

@@ -681,6 +681,82 @@ def explain(
         raise typer.Exit(code=1)
 
 
+# --------------------------------------------------------------------------- #
+# multi-reporter (several reporters of ONE latent switch, fit jointly)
+# --------------------------------------------------------------------------- #
+@app.command("multi-reporter")
+def multi_reporter(
+    path: str = typer.Argument(
+        ..., help="a tidy long CSV/TSV: reporter, dose, control, perturbed columns"
+    ),
+    dose_col: str = typer.Option("dose", "--dose-col", help="dose column"),
+    reporter_col: str = typer.Option(
+        "reporter", "--reporter-col", help="reporter-label column"
+    ),
+    control_col: str = typer.Option(
+        "control", "--control-col", help="control/WT response column"
+    ),
+    perturbed_col: str = typer.Option(
+        "perturbed", "--perturbed-col", help="perturbed response column"
+    ),
+    direction: str = typer.Option(
+        "activate", help="'activate' (readout rises with dose) or 'repress'"
+    ),
+    n_boot: int = typer.Option(200, help="bootstrap resamples for the shared-knob CIs"),
+    seed: int = typer.Option(0, help="bootstrap RNG seed"),
+) -> None:
+    """Jointly attribute a panel of reporters of ONE latent switch — break K⇄v_max.
+
+    Several downstream reporters of the *same* latent switch, each with its own gain /
+    offset, are fit **jointly**: the panel over-determines the latent, so it resolves
+    **threshold** (K) vs **gain** (n) vs **ceiling** (v_max) where a single reporter is
+    degenerate and abstains (the measured K⇄v_max degeneracy, FINDINGS §2). Abstains
+    **off-model** when the reporters cannot be explained by one shared latent (a
+    reporter reads a different latent — NUDGE-LIM-014), not average it into a call.
+    """
+    from nudge.service import multi_reporter_file
+
+    out = multi_reporter_file(
+        path,
+        dose_col=dose_col,
+        reporter_col=reporter_col,
+        control_col=control_col,
+        perturbed_col=perturbed_col,
+        direction=direction,
+        n_boot=n_boot,
+        seed=seed,
+    )
+    klo, khi = out["ci_log2_k"]
+    _echo(
+        f"multi-reporter  ({out['n_reporters']} reporters, dir={out['direction']}, "
+        f"panel R²={out['panel_r2']:.2f})"
+    )
+    _echo(f"  shared latent (WT):  K = {out['k_wt']:.3g}   n = {out['n_wt']:.2f}")
+    _echo(
+        f"  restricted losses:  threshold={out['losses']['threshold']:.3g}  "
+        f"gain={out['losses']['gain']:.3g}  ceiling={out['losses']['ceiling']:.3g}  "
+        f"(no-effect={out['losses']['no_effect']:.3g})"
+    )
+    _echo(
+        f"  winner={out['winner']}  knob margin ×{out['knob_margin']:.2f}  "
+        f"effect margin ×{out['effect_margin']:.2f}  "
+        f"consistency ratio {out['consistency_ratio']:.1f}"
+    )
+    _echo("  per-reporter (gain, shared-R², own-R²):")
+    for r in out["reporters"]:
+        _echo(
+            f"    {r['name']:6} gain={r['gain']:6.2f}  shared R²={r['r2_shared']:.2f}  "
+            f"own R²={r['r2_independent']:.2f}"
+        )
+    _echo(f"\n  → CALL: {out['call'].upper()}")
+    _echo(f"     {out['reason']}")
+    _echo(
+        "\n  note: a single reporter of one latent is degenerate (K⇄v_max); the JOINT "
+        "\n  panel resolves it, and abstains OFF-MODEL on an inconsistent panel "
+        "(NUDGE-LIM-014)."
+    )
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()
