@@ -1165,11 +1165,11 @@ no-clear difference is not a masked depth artifact. The **one exception** is a *
 threshold or gain* difference, which reshapes the distribution (orthogonal to a global scale) and
 survives a depth difference (measured: a Δn pair with the contexts sequenced 1.6× apart still
 recovers `gain-diff`). An **OFF-baseline diagnostic** (the differential low-activity-quantile shift
-in each context's data vs its own control) was prototyped and **measured too noisy to be
-load-bearing** — on the 1-node switch the OFF mode's linear-noise CV is ≈ 1/√basal ≈ 2, so the
-genuine-ceiling OFF shift (≈ 1.0–1.56 across seeds) *overlaps* the on-samples-batch shift
-(≈ 1.46–2.25); it is reported for transparency only, and the guard turns on the **stable
-per-context depth ratio** instead.
+in each context's data vs its own control) was originally reported for transparency only and
+believed too noisy to gate — but **P1 (below) measured that its *inflation* direction is a clean,
+one-sided separator** and promoted it to a load-bearing gate (gate 4b) for the additive
+perturbed-condition offset; only the *deflation* direction remains noisy (genuine reductions and
+dropout-like offsets both push it below 1 and overlap), so the guard is deliberately one-sided.
 
 **Results (synthetic ground truth; `tests/inference/test_differential.py`, 7 slow tests green in
 ~234 s).** A KNOWN single-knob difference between two contexts, drawn from the LNA Gaussian mixture:
@@ -1203,6 +1203,61 @@ NaN can never poison the argmin. The classifier's fast gate logic is locked by 8
 `data_a`/`control_a`/`data_b`/`control_b`) + a Mechanism Card (`NUDGE-METHOD-010`) +
 `notebooks/Differential.ipynb`. A real-data touch (sci-Plex A549 vs MCF7; Gladstone donors) is a
 deferred best-effort follow-up; the synthetic ground truth is the load-bearing validation.
+
+### P1 — the additive perturbed-condition offset confound (hardening loop, `NUDGE-LIM-016` sharpened)
+
+**The hole (independently reproduced, `scripts/redteam/differential_additive_confound.py`, 2 seeds ×
+{0,1,2,3,5} additive offset, default `ras_switch_1node`, N=3000).** The depth guard (gate 2) keys
+`depth_ratio` on the two **controls**. A constant **additive** offset added to ONE context's
+**perturbed** cells only (its control left clean) leaves `depth_ratio ≈ 1.01`, so gate 2 never
+engages — yet the offset shifts context B's perturbed modes and *compresses* their separation, which
+the joint LNA-BIC reads as reduced cooperativity. Result: a confident spurious **`gain-diff`** where
+the truth is **no-difference**. Verified **3 confident-wrong across 2 seeds** before the fix:
+
+```
+seed=0 offset=3.0  gain-diff  dBIC vs shared=21.2   off_shift_b=2.99   (n_A=5.09 vs n_B=2.83)
+seed=0 offset=5.0  gain-diff  dBIC vs shared=201.4  off_shift_b=4.55
+seed=1 offset=5.0  gain-diff  dBIC vs shared=231.0  off_shift_b=5.33
+```
+
+**The measured separator (the crux — a corruption-onset / separation sweep, `off_shift` = the
+low-activity-quantile ratio of perturbed vs its own control).** An additive offset TRANSLATES the
+perturbed OFF baseline up (`off_shift ≫ 1` and monotone in the offset); a GENUINE `K`/`n`/`v_max`
+difference leaves the OFF mode anchored near basal (`off_shift ≈ 1`). Measured, default regime:
+
+| Condition | `off_shift` (max of the two contexts) | resolved call |
+|---|---|---|
+| additive offset, **confident-wrong** cases (offset 3–5) | **2.99 – 5.33** | (spurious) gain-diff |
+| genuine ceiling ×1.4 / ×2.0 / ×3.0 / **×4.0** | 1.54 / 1.84 / 1.89 / **1.96** | ceiling-diff |
+| genuine gain / threshold (up to ×2, both directions) | ≤ 1.19 (inflation side) | resolve or abstain |
+| genuine **reduction** (gain ÷1.8, ceiling ×0.6) | 0.00 – 0.48 (**deflates < 1**) | resolve or abstain |
+
+The **inflation** direction cleanly separates — every confident-wrong offset ≥ **2.99**, the
+strongest genuine difference ≤ **1.96** — with a gap no genuine mechanism crosses. The **deflation**
+direction does NOT separate (a genuine reduction and a dropout-like offset both push `off_shift`
+below 1 and overlap), so a *symmetric* guard would over-abstain on a genuine gain/ceiling reduction.
+
+**The fix (measured, one-sided; `classify_differential` gate 4b, `_OFF_SHIFT_INFLATION_MAX = 2.5`,
+the midpoint of 1.96 and 2.99).** Before emitting any positive `*-diff`, abstain (`unresolved`) when
+`max(off_shift_a, off_shift_b) > 2.5` — either context's perturbed OFF baseline inflated above its
+own control, the additive/ambient-offset fingerprint the control-keyed depth ratio is blind to.
+
+**Re-validation (through the shipped path).**
+- **The 3 confident-wrong cases → `unresolved`** (0 confident-wrong across 2 seeds; the guard fires
+  on `off_shift ≥ 2.99`). Re-run: `uv run python scripts/redteam/differential_additive_confound.py 2`.
+- **No over-abstention — every positive control still resolves:** genuine `ceiling-diff` (×1.4–×4.0,
+  `off_shift ≤ 1.96`), `gain-diff` (test regime, `off_shift ≈ 1.03`), `no-difference` (offset 0), the
+  existing depth-confound (`scale_b≠scale_a` → still `unresolved`), underpowered/LNA gates — all
+  unchanged (`tests/inference/test_differential.py`, slow suite green).
+
+**Verdict: CLOSED for the demonstrated (inflating) additive offset; BOUNDED in general.** Honest
+residual (locked in `NUDGE-LIM-016`): the guard is one-sided, so a **deflating** perturbed-only
+offset (dropout-like, `off_shift < 1`) aliases with a genuine knob reduction and is NOT separable —
+unguarded by design. (In the partial sweep a deflating offset produced `no-difference`, not a
+confident-wrong, but the guard structurally cannot certify against one.) NUDGE still requires each
+context's control to come from the same library as its perturbed cells. Decoy:
+`test_decoy_additive_perturbed_offset_abstains` (+ the offset-0 positive control + the one-sided
+`test_classify_off_shift_guard_is_one_sided_reduction_still_resolves`).
 
 ## Temporal / Lotka–Volterra attribution (NUDGE-METHOD-012) — the extensibility thesis
 

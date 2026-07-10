@@ -480,12 +480,33 @@ anomalies:
       ceiling / no-clear difference is not a masked depth artifact. The one exception is a
       CLEANLY-RESOLVED threshold or gain difference, which RESHAPES the distribution
       (orthogonal to a global scale) and so survives a depth difference and stays callable;
-      only the ceiling channel is confounded with depth. (An OFF-baseline diagnostic —
-      the differential shift of the low-activity quantile in each context's data vs its own
-      control — is reported for transparency but is NOT load-bearing: the OFF mode's
-      linear-noise spread is too large to reliably separate a genuine ceiling from an
-      on-samples batch, which is exactly why the guard turns on the stable per-context
-      depth ratio.) NUDGE also abstains when either context is underpowered (too few cells)
+      only the ceiling channel is confounded with depth. A SECOND confound channel (P1,
+      hardening loop): because the depth guard keys on the CONTROLS, it is structurally
+      blind to a constant ADDITIVE / ambient offset applied to ONE context's PERTURBED cells
+      only (its control left clean) — the per-context depth ratio stays about 1 and the depth
+      gate never engages, yet the offset shifts that context's perturbed modes and compresses
+      their separation, which the joint BIC misreads as reduced cooperativity and emits a
+      confident spurious gain-diff (verified,
+      scripts/redteam/differential_additive_confound.py, 3 confident-wrong across 2 seeds,
+      truth = no-difference). NUDGE now guards this with a MEASURED, ONE-SIDED OFF-baseline
+      diagnostic (the differential shift of the low-activity quantile of each context's
+      PERTURBED cells vs its OWN control): an additive offset TRANSLATES that context's OFF
+      baseline UP (off_shift much greater than 1) while a genuine K/n/v_max difference leaves
+      the OFF mode anchored near basal (off_shift about 1). Measured separation (FINDINGS P1,
+      default regime): every confident-wrong offset had off_shift at least 2.99, the strongest
+      genuine gain/ceiling/threshold difference (up to times 3-4) only up to 1.96, so
+      classify_differential gate 4b ABSTAINS (unresolved) before any positive call when either
+      context's perturbed OFF baseline is inflated above its own control beyond
+      off_shift_max = 2.5 (the measured midpoint of that gap, NOT an arbitrary cut). RESIDUAL
+      BOUND (honest — CLOSED for the demonstrated inflating offset, BOUNDED in general): the
+      guard is deliberately ONE-SIDED (inflation only) because a genuine knob REDUCTION
+      deflates the OFF baseline below 1 and a symmetric guard would over-abstain on it; so a
+      DEFLATING perturbed-only offset (dropout-like, off_shift below 1) aliases with a genuine
+      reduction, is NOT separable by this diagnostic, and remains UNGUARDED and documented.
+      The OFF-baseline diagnostic, previously reported for transparency only, is therefore
+      load-bearing on its inflation side alone; the guard still requires each context's
+      control to come from the SAME library as its perturbed cells. NUDGE also abstains when
+      either context is underpowered (too few cells)
       or its linear-noise Gaussian is untrustworthy (lna_reliable — low depth / near a
       bifurcation / monostable). VERIFIED on
       synthetic ground truth: a ΔK / Δn / Δv_max pair recovers WHICH knob differs (or
@@ -513,6 +534,12 @@ anomalies:
       unless the winner is a cleanly-resolved threshold/gain difference, which — being
       orthogonal to a global scale — remains trustworthy. Removing the per-context
       calibration or the depth-ratio abstention, or loosening it, would resurrect the false
+      positive. The P1 additive-perturbed-offset channel is the same class one step sharper:
+      a batch/ambient artifact that lands on the PERTURBED cells of one context only (not its
+      control) is invisible to the control-keyed depth ratio and manufactures a confident
+      gain-diff — so the one-sided OFF-baseline-inflation abstention (gate 4b,
+      off_shift_max = 2.5, a measured separator) is now part of the same guarantee; removing
+      or raising it above the measured genuine ceiling (about 1.96) resurrects that false
       positive.
 
   - anomaly_id: NUDGE-LIM-017

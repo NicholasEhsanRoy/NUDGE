@@ -129,6 +129,39 @@ def test_classify_lna_untrustworthy_abstains() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# gate 4b: the additive perturbed-condition offset confound (NUDGE-LIM-016, P1)
+# --------------------------------------------------------------------------- #
+def test_classify_additive_offset_inflation_abstains() -> None:
+    # A cleanly-resolved gain winner (would be gain-diff) BUT one context's perturbed OFF
+    # baseline is inflated above its own control beyond off_shift_max — the fingerprint of a
+    # constant additive/ambient offset on that context's PERTURBED cells (invisible to the
+    # control-keyed depth_ratio). NUDGE must ABSTAIN rather than emit a spurious gain-diff.
+    fit = _fit({"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}, off_shift_ratio=3.5)
+    call, reason = classify_differential(fit)
+    assert call == "unresolved"
+    assert "OFF baseline" in reason and "NUDGE-LIM-016" in reason
+
+
+def test_classify_off_shift_guard_is_one_sided_reduction_still_resolves() -> None:
+    # ONE-SIDED by construction: a genuine knob REDUCTION deflates the OFF baseline
+    # (off_shift < 1). The guard keys on INFLATION only, so a deflated OFF baseline must NOT
+    # trip it — a genuine reduction still resolves (a symmetric guard would over-abstain).
+    fit = _fit({"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}, off_shift_ratio=0.25)
+    call, _ = classify_differential(fit)
+    assert call == "gain-diff"
+
+
+def test_classify_off_shift_below_threshold_resolves() -> None:
+    # A genuine ceiling INCREASE inflates the OFF baseline only modestly (measured ≤ ~1.96
+    # even for a ×3–4 difference), below off_shift_max — the guard must not fire, so a
+    # genuine positive still resolves. Guards against an over-tight threshold.
+    bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
+    fit = _fit(bic, best_diff="vmax", off_shift_ratio=1.9)
+    call, _ = classify_differential(fit)
+    assert call == "ceiling-diff"
+
+
+# --------------------------------------------------------------------------- #
 # slow: BIC recovery on synthetic ground truth
 # --------------------------------------------------------------------------- #
 def _pair(mechanism: str, factor: float, *, scale_b: float = SCALE, seed: int = 1):
@@ -215,3 +248,52 @@ def test_fail_safe_never_confident_wrong() -> None:
             if res.call in POSITIVE and res.call != correct:
                 wrong += 1
     assert wrong == 0, f"{wrong} confident-wrong mechanism-difference calls"
+
+
+# --------------------------------------------------------------------------- #
+# DECOY (NUDGE-LIM-016, P1): an ADDITIVE offset on ONE context's PERTURBED cells (its
+# control clean) manufactured a confident gain-diff past the control-keyed depth guard
+# (red-team scripts/redteam/differential_additive_confound.py, 3 confident-wrong / 2 seeds).
+# The gate-4b OFF-baseline-inflation guard must convert every one to an abstention while the
+# paired positive controls (offset 0 → no-difference; genuine gain/ceiling above → resolve)
+# are preserved. Regime matches the red-team generator (default switch, N=3000).
+# --------------------------------------------------------------------------- #
+RT_CIRC = ras_switch_1node()
+RT_SCALE, RT_NCELLS = 20.0, 3000
+
+
+def _additive_confound_pair(offset: float, *, seed: int):
+    """A no-difference pair, then a constant additive offset on B's PERTURBED cells only."""
+    import numpy as np
+
+    from nudge.inference.differential import Context
+
+    a, b = simulate_context_pair(
+        RT_CIRC, mechanism="none", n_cells=RT_NCELLS,
+        scale_a=RT_SCALE, scale_b=RT_SCALE, obs_sd=OBS_SD, seed=seed,
+    )
+    b_data = np.asarray(b.data, dtype=float) + offset
+    return a, Context(name="B", data=b_data, control=b.control)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(("offset", "seed"), [(3.0, 0), (5.0, 0), (5.0, 1)])
+def test_decoy_additive_perturbed_offset_abstains(offset: float, seed: int) -> None:
+    # The three verified confident-wrong (gain-diff) cases from the red-team must now abstain
+    # (never a *-diff). Truth = no-difference; the OFF-baseline inflation guard fires.
+    a, b = _additive_confound_pair(offset, seed=seed)
+    res = attribute_differential(a, b, RT_CIRC, target_edge=0, steps=200, seed=seed)
+    assert res.call not in POSITIVE, (
+        f"offset={offset} seed={seed}: spurious {res.call} on an additive perturbed offset"
+    )
+    assert res.call == "unresolved", f"offset={offset} seed={seed}: expected the guard to fire"
+    assert res.fit.off_shift_ratio > 2.0  # the inflation fingerprint the guard keys on
+
+
+@pytest.mark.slow
+def test_decoy_additive_offset_zero_is_no_difference() -> None:
+    # The paired positive control: offset 0 (no confound) → no-difference, isolating the
+    # additive offset as the culprit and proving the guard does not fire without inflation.
+    a, b = _additive_confound_pair(0.0, seed=0)
+    res = attribute_differential(a, b, RT_CIRC, target_edge=0, steps=200, seed=0)
+    assert res.call == "no-difference"

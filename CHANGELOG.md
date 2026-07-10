@@ -9,6 +9,27 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team ROUND 3 hardening — P1: the additive perturbed-condition offset
+  confound in `differential` FIXED (`NUDGE-LIM-016` sharpened; `design/FAILSAFE_REDTEAM_3.md`
+  HOLE 1).** The differential depth guard keys `depth_ratio` on the two **controls**, so it was
+  structurally blind to a constant **additive / ambient offset on ONE context's PERTURBED cells
+  only** (its control left clean): `depth_ratio` stays ≈ 1 and the depth gate never engages, yet
+  the offset shifts that context's perturbed modes and *compresses* their separation, which the
+  joint LNA-BIC misreads as reduced cooperativity — a confident spurious **`gain-diff`** where the
+  truth is `no-difference` (verified, `scripts/redteam/differential_additive_confound.py`, **3
+  confident-wrong across 2 seeds**). **Fix (measured, one-sided):** a new classifier gate (4b)
+  abstains (`unresolved`) before any positive call when either context's perturbed OFF baseline is
+  inflated above its own control beyond `off_shift_max = 2.5` — the fingerprint of an additive
+  offset (it TRANSLATES the OFF baseline up), a **measured separator** (every confident-wrong offset
+  had `off_shift ≥ 2.99`, the strongest genuine gain/ceiling/threshold difference only `≤ 1.96`;
+  `FINDINGS` §P1). This promotes the previously non-load-bearing `off_shift` diagnostic to
+  **one-sided load-bearing** on its inflation side. **CLOSED for the demonstrated (inflating) offset,
+  BOUNDED in general** — a *deflating* perturbed-only offset (dropout-like) aliases with a genuine
+  knob reduction and stays an unguarded, documented residual. Regression-locked by a decoy
+  (`tests/inference/test_differential.py::test_decoy_additive_perturbed_offset_abstains` + the
+  offset-0 positive control + 3 one-sided-guard unit tests); the module docstring, the Mechanism
+  Card, and `NUDGE-LIM-016` are corrected (the OFF-baseline is no longer described as
+  non-load-bearing). Frozen core untouched (`fit.py` / `core/` unchanged).
 - **Fail-safe red-team ROUND 2 (core engine) + two fixes (`design/FAILSAFE_REDTEAM_2.md`).**
   A second adversarial pass targeting the core engine found **2 more verified confident-wrong
   holes** — both in work shipped the same day — and both are now fixed:
