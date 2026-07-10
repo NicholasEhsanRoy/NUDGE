@@ -8,24 +8,28 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000016-orchestrator-P2-merge.md`. That immutable record is the source of truth;
+`runs/000000017-redteam-finalsweep.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING — all four round-3 holes CLOSED/BOUNDED + merged; running the FINAL sweep.**
-P3 CLOSED; P1 & P4 CLOSED (inflating) / BOUNDED (deflating); P2 CLOSED (measurable floors) /
-BOUNDED (near-zero floors). The problem queue is **EMPTY** (all OPEN work fixed + audited +
-merged).
+**Status: RUNNING.** P3/P1/P4/P2 CLOSED/BOUNDED + merged. The FINAL full sweep
+(`runs/000000017`) returned **HOLES_FOUND: 1** → NOT a STOP: a NEW hole **P5** (differential
+SMALL multiplicative confound, `c≈1.15–1.25`, slips the P4 gate 4c's ceiling-scoping +
+`(1.18,1.30]` blind gap). The fix loop resumes on P5.
 
-- **Next agent:** `nudge-red-team` — the FINAL FULL sweep across the hardened capabilities.
-- **STOP** when it reports `HOLES_FOUND: 0` after a genuine sweep. If it finds a NEW hole,
-  that hole is queued and the fix loop resumes (`[3 → 4 → 1]`).
+- **Next agent:** `nudge-uq-fixer` on **P5** (completes the P4 gate; must also correct the
+  now-falsified P4 "INFLATION CLOSED" claim), then `nudge-audit` → merge → `nudge-red-team`.
+- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
 
 ---
 
-## Problem queue (found, not yet fixed) — **EMPTY** (all four round-3 holes closed; see "Closed problems")
+## Problem queue (found, not yet fixed)
+
+| id | capability | LIM | summary | repro | status |
+|----|-----------|-----|---------|-------|--------|
+| **P5** | `differential` | LIM-016 | **NEW (final sweep, `runs/000000017`).** A SMALL uniform multiplicative perturbed-only scale (`c≈1.15–1.25`, control clean) fakes a confident `gain-diff` / `ceiling-diff` (truth no-difference). Slips the P4 gate 4c two ways: (1) at small `c` the BIC winner is often **gain (n)**, and gate 4c is ceiling-scoped (never checks `off_scale` for a gain winner); (2) on the ceiling channel `off_scale` lands in the **(1.18, 1.30] blind gap** — above the measured genuine-ceiling max (1.18) yet below gate 4c's upper cut (1.30). The P4 fix was calibrated only on `c≥1.5`; the interior was unprobed. Verified 8 confident-wrong / 4 seeds. | `scripts/redteam/differential_small_mult_gain_hole.py` | OPEN |
 
 Reported by red-team round 3 (`design/FAILSAFE_REDTEAM_3.md`); **pending independent UQ
 validation** (role 3 re-reproduces before fixing — status reflects that they are red-team
@@ -79,6 +83,7 @@ last; never edit a past row):
 | 000000014 | `runs/000000014-uq-fixer-P2.md` | uq-fixer | P2 (LIM-014) | fix claim: ceiling-scoped floor/OFF-consistency gate (`off_on_coupling` ≈0 genuine vs ≈1 batch); CLOSED measurable / BOUNDED near-zero floor; commit `b870354` |
 | 000000015 | `runs/000000015-audit-P2.md` | audit | P2 fix | **AUDIT: PASS** — hole gone (seeds 0,1,2), genuine ceiling resolves 4/4, near-zero-floor bound narrow+honest, frozen core untouched |
 | 000000016 | `runs/000000016-orchestrator-P2-merge.md` | orchestrator | P2 merge | independently re-verified + merged → `1d091c1` (2 additive doc conflicts resolved); P2 CLOSED/BOUNDED; queue now EMPTY |
+| 000000017 | `runs/000000017-redteam-finalsweep.md` | redteam | FINAL full sweep | **HOLES_FOUND: 1** — NOT a STOP: NEW hole **P5** (differential small mult confound slips P4 gate 4c); 4 fixes held jointly; report `FAILSAFE_REDTEAM_5.md`; commit `6a1c774` |
 
 ---
 
