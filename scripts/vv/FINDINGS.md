@@ -368,6 +368,24 @@ channel; absent one, abstain on the circuit-vs-readout axis rather than mis-attr
 reporter titration when trustworthy mechanism attribution is needed. The limitation
 (LIM-006) and its validated mitigation are, together, a publishable methodological result.
 
+**SHIPPED (2026-07 — `nudge.inference.constitutive`, `NUDGE-METHOD-011`, `NUDGE-LIM-018`).**
+The validated mitigation is now a shipped, additive/opt-in feature (reusing the shipped Hill
+primitive + energy distance; never touches `fit()`/decoys/lyapunov). The module reproduces the
+headline as a profile likelihood over circuit `n`, with vs without the control anchoring the
+readout. Measured on the shipped path (`scripts/vv/constitutive_control.py`, seeds 0–2, a
+reduced 6-point grid / 400-cell / 3-restart budget): a TRUE switch (circuit `n=3`, reporter
+`h=6`) → WITHOUT control span ≈ **0.0007–0.0014** (FLAT), WITH control **n=1 rejection ≈
+0.026–0.032** (argmin off `n=1`) → verdict `biological-switch`; the LIM-006 hazard (a LINEAR
+circuit `n=1`) → **n=1 rejection ≈ 0.000** → verdict `unresolved` (the confident false positive
+becomes an honest abstention); **0 confident-wrong across seeds**. The gate is a fail-safe
+conjunction (absolute margin AND ≥5× the flat no-control span AND profile min off `n=1`), the
+verdict is NEVER a bare threshold/gain/ceiling (`is_confident_wrong` structurally False), and
+the `biological-switch` reason states loudly that it does NOT point-identify `n` (`NUDGE-LIM-018`
+— needs a second anchor). The no-circuit-leak property is enforced structurally and checked:
+`control_loss_circuit_gradient` returns exactly 0 for every circuit parameter. Tests:
+`tests/inference/test_constitutive.py`; card: `docs/mechanism_cards/constitutive_control.md`;
+demo: `notebooks/Constitutive_Control.ipynb`.
+
 ---
 
 # N-D saddle: the finder + representation generalize; the gain gate is 1-D-specific

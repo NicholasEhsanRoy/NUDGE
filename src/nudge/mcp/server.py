@@ -15,6 +15,8 @@ Tools:
   explains a verdict (``off-model`` / ``unresolved`` / a decoy or limitation id).
 - ``diagnose_abstention(off_model, ...)`` — turn a bare off-model verdict into a legible
   DIFFERENTIAL of candidate causes (never a positive hidden-node claim; NUDGE-LIM-015).
+- ``constitutive(...)`` — separate CIRCUIT ultrasensitivity from a NONLINEAR READOUT with a
+  constitutive-reporter control (the NUDGE-LIM-006 mitigation); reject "no switch" or abstain.
 - ``list_mechanisms()`` — the registered mechanism library.
 - ``get_mechanism_card(name)`` — the full Markdown card for a mechanism.
 
@@ -477,6 +479,55 @@ def build_server() -> Any:
             target_edge=target_edge,
             steps=steps,
             n_boot=n_boot,
+        )
+
+    @mcp.tool()
+    def constitutive(
+        path: str = "",
+        demo: bool = False,
+        circuit_n: float = 3.0,
+        readout_h: float = 6.0,
+        steps: int = 600,
+        restarts: int = 3,
+    ) -> dict[str, Any]:
+        """Separate CIRCUIT ultrasensitivity from a NONLINEAR READOUT — the NUDGE-LIM-006 fix.
+
+        NUDGE assumes an AFFINE reporter. A *nonlinear* reporter (saturating / sigmoidal Hill)
+        over a *linear* circuit produces a pseudo-bimodal count distribution the affine-readout
+        switch model can only explain by bending the circuit — a CONFIDENT FALSE POSITIVE
+        (``NUDGE-LIM-006``, the sharpest bound on the fail-safe guarantee). Only the composition
+        readout∘circuit is observed, so from one population you cannot factor it.
+
+        The fix is a **constitutive-reporter control**: a calibration population whose reporter
+        is driven at KNOWN activity doses, BYPASSING the circuit — it measures the reporter's
+        own transfer function directly and anchors the readout parameters ONLY (no circuit
+        leak). NUDGE then runs a **profile likelihood over the circuit Hill n**: WITHOUT the
+        control the profile is FLAT (a graded n=1 fits as well as a real switch — you cannot
+        even tell a switch exists); WITH the control, "no switch" (n=1) is REJECTED for a
+        genuine circuit switch (Δloss ≫ the flat span) → the ultrasensitivity is BIOLOGICAL.
+
+        ``path`` is a ``.npz`` with ``population`` (1-D circuit-population counts) +
+        ``control_activity`` / ``control_response`` (the calibration's known doses + measured
+        reporter). Set ``demo=True`` (or omit ``path``) to synthesize a matched case: a
+        nonlinear (``readout_h``) reporter over a circuit of true Hill ``circuit_n`` — use
+        ``circuit_n=1`` for the LIM-006 false-positive HAZARD (→ NUDGE ABSTAINS) or
+        ``circuit_n>1`` for a real switch (→ NUDGE rejects "no switch").
+
+        Returns the verdict (``biological-switch`` / ``unresolved`` / ``no-confound``) with the
+        calibrated reporter Hill h (+ CI), both n-profiles, and the n=1-rejection metric.
+        **Fail-safe (``NUDGE-LIM-018``):** it NEVER emits a bare threshold/gain/ceiling — it
+        turns the LIM-006 confident false positive into a correct BIOLOGICAL call or an honest
+        abstention — and it does NOT point-identify the exact n (that needs a second anchor: an
+        input titration / circuit dose-response).
+        """
+        from nudge.service import constitutive_demo, constitutive_file
+
+        if demo or not path:
+            return constitutive_demo(
+                circuit_n=circuit_n, readout_h=readout_h, steps=steps, restarts=restarts
+            )
+        return constitutive_file(
+            path, circuit_n=circuit_n, h=readout_h, steps=steps, restarts=restarts
         )
 
     return mcp

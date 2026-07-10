@@ -9,6 +9,34 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Constitutive-reporter calibration control — the `NUDGE-LIM-006` mitigation
+  (`nudge.inference.constitutive`, `NUDGE-METHOD-011`, `NUDGE-LIM-018`):** removes a known
+  **confident-wrong** failure mode. NUDGE assumes an *affine* reporter; a **nonlinear**
+  (saturating / sigmoidal Hill) reporter over a *linear* circuit produces a pseudo-bimodal
+  count distribution the affine-readout switch model can only explain by bending the circuit
+  — a **confident false positive** (`NUDGE-LIM-006`, the sharpest bound on the fail-safe
+  guarantee). Only the composition readout∘circuit is observed, so from one population the
+  circuit Hill `n` and the reporter Hill `h` are unidentifiable — the profile over circuit
+  `n` is **FLAT** (a graded `n=1` fits as well as a real switch). A **constitutive-reporter
+  control** — the reporter driven at KNOWN activity doses, *bypassing the circuit* — anchors
+  the readout using **readout parameters ONLY** (the load-bearing no-leak property:
+  ∂(control loss)/∂(circuit params) ≡ 0, proven by `control_loss_circuit_gradient`). A
+  profile likelihood over circuit `n` WITHOUT vs WITH the control then breaks the degeneracy:
+  WITH the control, "no switch" (`n=1`) is **REJECTED** for a genuine switch (Δloss ≫ the
+  flat span) → the ultrasensitivity is **biological**. **Fail-safe:** it NEVER emits a bare
+  threshold/gain/ceiling — it turns the confident false positive into a correct
+  `biological-switch` call **or** an honest `unresolved` abstention — and it does NOT
+  point-identify the exact `n` (that needs a second anchor: an input titration / circuit
+  dose-response; `NUDGE-LIM-018`). Validated on synthetic ground truth
+  (`scripts/vv/constitutive_control.py`; FINDINGS "NUDGE-LIM-006 mitigation"): a true switch
+  (`n=3`) through a nonlinear reporter (`h=6`) → `biological-switch` (n=1 rejection ≈0.026 vs
+  a flat no-control span ≈0.001), a linear circuit (`n=1`, the LIM-006 hazard) → `unresolved`
+  (n=1 rejection ≈0), 0 confident-wrong across seeds. Additive / opt-in (never touches
+  `fit()`'s default, the decoy battery, or the Lyapunov / epistasis paths); reuses the
+  shipped Hill primitive + energy distance. Wired into `nudge constitutive` CLI + the
+  `constitutive` MCP tool + `service.constitutive_file` + a Mechanism Card +
+  `notebooks/Constitutive_Control.ipynb`.
+
 - **Fail-safe red-team + two hardenings (`design/FAILSAFE_REDTEAM.md`).** An adversarial
   pass tried to make each capability emit a *confident, specific, WRONG* call past its
   abstention gates. It found **2 verified holes** (3 attacks HELD); both are now closed or

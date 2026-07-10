@@ -900,6 +900,70 @@ def differential(
     )
 
 
+@app.command()
+def constitutive(
+    path: str = typer.Argument(
+        "",
+        help="a .npz with population/control_activity/control_response arrays "
+        "(omit with --demo to synthesize)",
+    ),
+    demo: bool = typer.Option(
+        False, "--demo", help="synthesize a matched population + control (no data file)"
+    ),
+    circuit_n: float = typer.Option(
+        3.0, "--circuit-n", help="demo/seed ground-truth circuit Hill n (1 = LIM-006 hazard)"
+    ),
+    readout_h: float = typer.Option(6.0, "--readout-h", help="demo reporter Hill h"),
+    steps: int = typer.Option(600, help="optimizer steps per profile point"),
+    restarts: int = typer.Option(3, help="restarts per profile point"),
+    seed: int = typer.Option(0, help="fit RNG seed"),
+) -> None:
+    """Separate CIRCUIT ultrasensitivity from a NONLINEAR READOUT (the NUDGE-LIM-006 fix).
+
+    A nonlinear reporter over a linear circuit fools the affine-readout fit into a
+    CONFIDENT false switch (NUDGE-LIM-006). A **constitutive-reporter control** — the
+    reporter driven at KNOWN activity doses, bypassing the circuit — anchors the readout
+    (using READOUT parameters ONLY, no circuit leak). NUDGE then profiles the circuit
+    Hill ``n``: WITHOUT the control the profile is FLAT (you cannot tell a switch exists);
+    WITH it, "no switch" (n=1) is REJECTED for a genuine switch → **biological-switch**, or
+    the profile stays flat for a linear circuit → **unresolved** (honest abstention).
+    **Fail-safe:** it NEVER emits a bare threshold/gain/ceiling, and it does NOT
+    point-identify n (needs a second anchor; NUDGE-LIM-018). Use ``--demo`` for a
+    zero-setup run.
+    """
+    from nudge.service import constitutive_demo, constitutive_file
+
+    if demo or not path:
+        out = constitutive_demo(
+            circuit_n=circuit_n, readout_h=readout_h, steps=steps, restarts=restarts, seed=seed
+        )
+        gt = out["ground_truth"]
+        _echo(
+            f"constitutive (DEMO: true circuit n={gt['circuit_n']:g}, "
+            f"reporter h={gt['reporter_h']:g})"
+        )
+    else:
+        out = constitutive_file(
+            path, circuit_n=circuit_n, h=readout_h, steps=steps, restarts=restarts, seed=seed
+        )
+        _echo("constitutive")
+    cal = out["calibration"]
+    _echo(
+        f"  calibrated reporter Hill h = {cal['reporter_hill_h']:.2f} "
+        f"(95% CI {cal['ci_h'][0]:.2f}-{cal['ci_h'][1]:.2f}, "
+        f"nonlinear={cal['is_nonlinear']})"
+    )
+    _echo(
+        f"  WITHOUT control: n-profile span = {out['span_no_control']:.5f}  (flat => degenerate)"
+    )
+    _echo(
+        f"  WITH    control: n=1 rejection  = {out['n1_rejection']:.5f}  "
+        f"(argmin n≈{out['argmin_n_with_control']:g})"
+    )
+    _echo(f"\n  → CALL: {out['call'].upper()}   (confident-wrong={out['confident_wrong']})")
+    _echo(f"     {out['reason']}")
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()

@@ -1070,3 +1070,179 @@ def differential_file(
         circuit=circuit, n=n, vmax=vmax, k=k, basal=basal,
         target_edge=target_edge, steps=steps, n_boot=n_boot, seed=seed,
     )
+
+
+# --------------------------------------------------------------------------- #
+# constitutive-reporter calibration control — the NUDGE-LIM-006 mitigation
+# (nudge.inference.constitutive, NUDGE-METHOD-011). A constitutive control drives
+# the reporter at KNOWN activity doses, bypassing the circuit, so it anchors the
+# readout (READOUT params only — no circuit leak); a profile over circuit n then
+# tests whether the observed ultrasensitivity is BIOLOGICAL (reject "no switch") or
+# lives in the measurement. Fail-safe: never a bare mechanism (NUDGE-LIM-018).
+# --------------------------------------------------------------------------- #
+def constitutive_to_dict(res: Any) -> dict[str, Any]:
+    """Serialise a ``ConstitutiveResult`` to a plain JSON-able dict (CLI / MCP)."""
+    c = res.calibration
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "confident_wrong": res.is_confident_wrong,
+        "calibration": {
+            "reporter_hill_h": c.h,
+            "ci_h": list(c.ci_h),
+            "km": c.km,
+            "vmax": c.vmax,
+            "base": c.base,
+            "r2": c.r2,
+            "is_nonlinear": c.is_nonlinear,
+        },
+        "n_grid": list(res.n_grid),
+        "loss_no_control": list(res.loss_no_control),
+        "loss_with_control": list(res.loss_with_control),
+        "span_no_control": res.span_no_control,
+        "span_with_control": res.span_with_control,
+        "n1_rejection": res.n1_rejection,
+        "argmin_n_with_control": res.argmin_n_with_control,
+        "floor_mean": res.floor_mean,
+        "floor_std": res.floor_std,
+    }
+
+
+def constitutive_arrays(
+    population: Any,
+    control_activity: Any,
+    control_response: Any,
+    *,
+    circuit_n: float = 3.0,
+    k: float = 1.0,
+    vmax: float = 1.0,
+    basal: float = 0.05,
+    km: float = 0.5,
+    h: float = 6.0,
+    readout_vmax: float = 20.0,
+    readout_base: float = 0.1,
+    dispersion: float = 0.1,
+    mu_log: float = 0.0,
+    sd_log: float = 0.6,
+    steps: int = 600,
+    restarts: int = 3,
+    n_model_cells: int = 400,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Run the constitutive-control analysis from arrays — the programmatic entry point.
+
+    ``population`` is the observed circuit-population counts (1-D; the reporter read of the
+    circuit). ``control_activity`` / ``control_response`` are the constitutive control's KNOWN
+    driven activity doses + measured reporter output (paired 1-D, ≥4 distinct doses). The
+    remaining kinetics supply the KNOWN floors + count model + latent-input assumption
+    (``basal`` / ``readout_base`` / ``dispersion`` / ``mu_log`` / ``sd_log``); the circuit
+    ``n`` is what NUDGE profiles (``circuit_n`` only seeds the ground-truth container). Returns
+    the verdict (``biological-switch`` / ``unresolved`` / ``no-confound``) with both
+    ``n``-profiles — never a bare mechanism (NUDGE-LIM-018).
+    """
+    import numpy as np
+
+    from nudge.inference.constitutive import (
+        ConstitutiveControl,
+        ReadoutCircuitParams,
+        profile_circuit_n,
+    )
+
+    control = ConstitutiveControl(
+        activity=np.asarray(control_activity, dtype=float),
+        response=np.asarray(control_response, dtype=float),
+    )
+    params = ReadoutCircuitParams(
+        k=k, n=circuit_n, vmax=vmax, basal=basal, km=km, h=h,
+        readout_vmax=readout_vmax, readout_base=readout_base,
+    )
+    res = profile_circuit_n(
+        np.asarray(population, dtype=float), control, params,
+        dispersion=dispersion, mu_log=mu_log, sd_log=sd_log,
+        steps=steps, restarts=restarts, n_model_cells=n_model_cells, seed=seed,
+    )
+    return constitutive_to_dict(res)
+
+
+def constitutive_file(
+    path: str,
+    *,
+    circuit_n: float = 3.0,
+    k: float = 1.0,
+    vmax: float = 1.0,
+    basal: float = 0.05,
+    km: float = 0.5,
+    h: float = 6.0,
+    readout_vmax: float = 20.0,
+    readout_base: float = 0.1,
+    dispersion: float = 0.1,
+    steps: int = 600,
+    restarts: int = 3,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Run the constitutive-control analysis from a ``.npz`` — the CLI / MCP entry point.
+
+    The ``.npz`` holds ``population`` (1-D circuit-population counts), ``control_activity`` and
+    ``control_response`` (the constitutive calibration's KNOWN doses + measured reporter). See
+    :func:`constitutive_arrays` for the kinetics / count-model knobs. Returns the fail-safe
+    verdict (``biological-switch`` = reject the readout-only explanation / ``unresolved`` =
+    honest abstention / ``no-confound``) — never a bare threshold/gain/ceiling.
+    """
+    import numpy as np
+
+    with np.load(path) as npz:
+        missing = [key for key in ("population", "control_activity", "control_response")
+                   if key not in npz]
+        if missing:
+            raise KeyError(
+                f"{path} is missing array(s) {missing}; need population/control_activity"
+                "/control_response"
+            )
+        pop = np.asarray(npz["population"], dtype=float)
+        act = np.asarray(npz["control_activity"], dtype=float)
+        resp = np.asarray(npz["control_response"], dtype=float)
+    return constitutive_arrays(
+        pop, act, resp, circuit_n=circuit_n, k=k, vmax=vmax, basal=basal, km=km, h=h,
+        readout_vmax=readout_vmax, readout_base=readout_base, dispersion=dispersion,
+        steps=steps, restarts=restarts, seed=seed,
+    )
+
+
+def constitutive_demo(
+    *,
+    circuit_n: float = 3.0,
+    readout_h: float = 6.0,
+    n_cells: int = 600,
+    n_ctrl_doses: int = 10,
+    n_ctrl_reps: int = 200,
+    steps: int = 600,
+    restarts: int = 3,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Synthesize a matched population + constitutive control and run the analysis (no data).
+
+    The zero-setup demo of the NUDGE-LIM-006 mitigation: a nonlinear (``readout_h``) reporter
+    over a circuit of true Hill ``circuit_n``. Set ``circuit_n=1`` for the LIM-006
+    false-positive HAZARD (a linear circuit whose apparent ultrasensitivity lives in the
+    reporter → NUDGE abstains) or ``circuit_n>1`` for a genuine biological switch (→ NUDGE
+    rejects "no switch"). Returns the verdict + both ``n``-profiles.
+    """
+    from nudge.inference.constitutive import (
+        ReadoutCircuitParams,
+        generate_constitutive_dataset,
+        profile_circuit_n,
+    )
+
+    params = ReadoutCircuitParams(
+        k=1.0, n=circuit_n, vmax=1.0, basal=0.05, km=0.5, h=readout_h,
+        readout_vmax=20.0, readout_base=0.1,
+    )
+    pop, control, _ = generate_constitutive_dataset(
+        params, n_cells=n_cells, n_ctrl_doses=n_ctrl_doses, n_ctrl_reps=n_ctrl_reps, seed=seed
+    )
+    res = profile_circuit_n(
+        pop, control, params, steps=steps, restarts=restarts, seed=seed
+    )
+    out = constitutive_to_dict(res)
+    out["ground_truth"] = {"circuit_n": circuit_n, "reporter_h": readout_h}
+    return out

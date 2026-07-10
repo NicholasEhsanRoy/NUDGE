@@ -569,3 +569,51 @@ anomalies:
       false positive; the margin is deliberately far below the near-fold threshold
       (NEAR_FOLD 0.55) because a corrupting point bites well before the switch is "near-fold"
       in its own right.
+
+  - anomaly_id: NUDGE-LIM-018
+    title: The constitutive control rejects "no switch" but does NOT point-identify the knob
+    description: >-
+      In the constitutive-reporter calibration control (nudge.inference.constitutive,
+      NUDGE-METHOD-011 — the VALIDATED mitigation for NUDGE-LIM-006), a calibration
+      population drives the reporter at KNOWN activity doses (bypassing the circuit) and
+      anchors the readout using READOUT parameters ONLY (the no-circuit-leak property:
+      ∂(control loss)/∂(circuit params) is identically zero, checked by
+      control_loss_circuit_gradient). A profile likelihood over the circuit Hill n then
+      breaks the readout/circuit degeneracy that makes NUDGE-LIM-006 a confident false
+      positive: WITHOUT the control the n-profile is FLAT (a graded n=1 fits as well as a
+      real switch — you cannot even tell a switch exists); WITH the control, "no switch"
+      (n=1) is REJECTED for a genuine circuit switch (Δloss ≫ the flat no-control span). The
+      residual limitation is that this identifies WHETHER a circuit switch EXISTS, not the
+      exact knob: the control REJECTS the readout-only explanation but does NOT
+      point-identify the circuit n (recovered ≈5 vs true 3 in validation — the profile
+      argmin is NOT a reliable point estimate because the circuit's internal K/n/vmax
+      trade-off persists). Full point-identification would need a SECOND anchor — an input
+      titration / circuit dose-response that pins the circuit's input axis. Consequently the
+      method NEVER emits a bare threshold/gain/ceiling call (is_confident_wrong is
+      structurally always False); its strongest verdict is 'biological-switch' (a real
+      switch exists) and otherwise it ABSTAINS ('unresolved') or reports 'no-confound' when
+      the calibrated reporter is ~affine. The calibration is only as good as its
+      constitutive dose range/quality (≥4 distinct doses spanning the reporter's dynamic
+      range) and the assumed count model / floors / latent-input spread; a narrow, weak, or
+      noisy control fails to reject "no switch" and NUDGE abstains rather than guess.
+      VERIFIED on synthetic ground truth (tests/inference/test_constitutive.py;
+      scripts/vv/constitutive_control.py): a TRUE switch (n=3) through a nonlinear reporter
+      (h=6) flips to 'biological-switch' (n=1 rejection ≈0.026 vs a flat no-control span
+      ≈0.001), a LINEAR circuit (n=1, the LIM-006 hazard) ABSTAINS 'unresolved' (n=1
+      rejection ≈0), 0 confident-wrong across seeds. Inherits nothing that re-opens
+      NUDGE-LIM-006. Related: NUDGE-METHOD-011, NUDGE-LIM-006.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      This is a fail-safe RESIDUAL of a mitigation, not a confident-wrong hole: the
+      capability's whole purpose is to REMOVE a confident false positive (NUDGE-LIM-006), and
+      it does so by turning it into either a correct 'biological-switch' call or an honest
+      'unresolved' abstention — never a bare mechanism. The safety-relevant risk is a HUMAN
+      over-reading the result as more than it is: reading 'biological-switch' as if it
+      point-identified the knob, or reading the profile argmin n as a trustworthy gain
+      estimate. Both are guarded — the verdict is never a threshold/gain/ceiling and the
+      'biological-switch' reason states explicitly that it does NOT point-identify n and
+      needs a second anchor — but the guarantee rests on that honest framing being preserved.
+      Loosening the rejection gate (the absolute margin, the structure-ratio vs the flat
+      no-control span, or the argmin-off-n=1 requirement) toward a claim of the exact knob
+      would resurrect over-interpretation; the conjunction is deliberately conservative.

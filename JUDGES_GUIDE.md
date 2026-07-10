@@ -119,7 +119,15 @@ readout/circuit confound is a fundamental degeneracy (a single population cannot
 a circuit switch exists), and that a **constitutive-reporter control** breaks it — letting
 the fit reject "no switch." That is both a candidate NUDGE capability and a concrete
 experimental-design suggestion to the field for making mechanism attribution survive a
-nonlinear readout (`FINDINGS.md`, NUDGE-LIM-006 + mitigation).
+nonlinear readout (`FINDINGS.md`, NUDGE-LIM-006 + mitigation). **That mitigation is now
+SHIPPED** (`nudge.inference.constitutive`, `NUDGE-METHOD-011`): a control drives the reporter
+at KNOWN doses (bypassing the circuit) and anchors the readout using **readout parameters
+ONLY** (gradient-proven no leak), then a profile over circuit `n` **rejects "no switch"** for
+a real switch → `biological-switch`, while the LIM-006 hazard (a linear circuit) **abstains**
+`unresolved` — turning a confident false positive into a correct call *or* an honest
+abstention, **0 confident-wrong**, and never point-identifying `n` (the honest caveat,
+`NUDGE-LIM-018`). Run it: `nudge constitutive --demo` /
+[`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
 
 **Generalizing beyond one gene — and knowing when to stop.** We took the saddle gain gate
 toward multi-species switches (the canonical 2-node toggle) in bite-size milestones, each

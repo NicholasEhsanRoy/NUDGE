@@ -97,6 +97,20 @@ Highlights so far:
   NUDGE **abstains** when the two contexts' depths differ beyond a ratio — never a spurious
   mechanism from an artifact (`nudge differential`) — see
   [`notebooks/Differential.ipynb`](notebooks/Differential.ipynb).
+- **Constitutive-reporter calibration control** (`NUDGE-METHOD-011`) — removes a known
+  **confident-wrong** failure mode (`NUDGE-LIM-006`: a **nonlinear measurement readout**
+  misattributed as a **circuit switch**). Only the composition readout∘circuit is observed,
+  so from one population the circuit gain and the reporter nonlinearity are unidentifiable —
+  the profile over circuit `n` is **FLAT** (you cannot even tell a switch exists). A
+  **constitutive-reporter control** — the reporter driven at **known** activity doses,
+  *bypassing the circuit* — anchors the readout (using **readout parameters only**, no
+  circuit leak), and a profile over circuit `n` then **rejects "no switch"** for a genuine
+  switch → **biological**, or **abstains** for a linear circuit whose apparent
+  ultrasensitivity lives in the reporter. **Fail-safe:** it turns the confident false
+  positive into a correct call **or** an honest abstention, never a bare knob, and it does
+  **not** point-identify `n` (that needs a second anchor; `NUDGE-LIM-018`) (`nudge
+  constitutive --demo`) — see
+  [`notebooks/Constitutive_Control.ipynb`](notebooks/Constitutive_Control.ipynb).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap
