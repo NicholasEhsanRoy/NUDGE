@@ -6,6 +6,29 @@ on:
   pull_request:
 
 jobs:
+  # The hardening audit trail (design/hardening/) is append-only and never deleted — a run
+  # record is written once and never edited. This runs on EVERY change (not paths-filtered),
+  # so a deletion anywhere in the trail always fails CI.
+  hardening-append-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Resolve base ref
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Hardening trail is append-only (no deletes, records immutable)
+        run: python scripts/check_hardening_append_only.py "${{ steps.base.outputs.ref }}"
+
   changes:
     runs-on: ubuntu-latest
     outputs:
