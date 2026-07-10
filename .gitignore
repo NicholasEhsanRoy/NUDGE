@@ -34,3 +34,5 @@ venv/
 
 # Claude Code local
 .claude/scheduled_tasks.lock
+# Transient agent worktrees (hardening-loop subagents run isolated here)
+.claude/worktrees/
