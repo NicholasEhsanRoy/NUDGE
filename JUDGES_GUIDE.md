@@ -235,7 +235,8 @@ claude mcp add --scope project nudge -- uv run nudge-mcp
 ```
 
 The MCP server exposes `attribute`, `dose_response`, `synergy`, `cross_modality`,
-`robustness`, `design`, `explain_abstention`, `list_mechanisms`, and `get_mechanism_card`
+`robustness`, `design`, `multi_reporter`, `diagnose_abstention`, `explain_abstention`,
+`list_mechanisms`, and `get_mechanism_card`
 — so a scientist asks
 for a mechanism map *in one sentence*
 and gets back the same honest, abstaining answer a human gets, with the decoy +

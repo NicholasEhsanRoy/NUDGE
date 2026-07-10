@@ -36,7 +36,7 @@ Highlights so far:
   confidently wrong). See [`scripts/vv/FINDINGS.md`](scripts/vv/FINDINGS.md).
 - **`nudge` CLI + Claude MCP server** — the tool is drivable from a terminal
   (`nudge attribute … / dose-response / synergy / cross-modality / robustness / design /
-  multi-reporter / explain`) *and* by
+  multi-reporter / diagnose-abstention / explain`) *and* by
   Claude in plain language through a custom MCP server (Claude Code / Desktop / the
   Claude Science workbench). Connection recipes verified in
   [`design/INTEGRATION_FEASIBILITY.md`](design/INTEGRATION_FEASIBILITY.md).
@@ -76,6 +76,16 @@ Highlights so far:
   **0 confident-wrong calls**. Fail-safe strengthened: the **consistency guard** abstains
   **off-model** when a reporter reads a *different* latent (`NUDGE-LIM-014`) — see
   [`notebooks/Multi_Reporter.ipynb`](notebooks/Multi_Reporter.ipynb).
+- **Hidden-node abstention** (`NUDGE-METHOD-009`) — the **abstention half only**: turns a
+  bare **`off-model`** verdict into a legible **six-cause differential** (genuinely
+  not-a-switch / nonlinear readout / off-target / wrong topology / batch-depth confound /
+  hidden node), each with its documented limitation and the experiment that would
+  distinguish it. The honesty crux (`NUDGE-LIM-015`): positive hidden-node identification is
+  *not identifiable* from an off-model verdict (the causes are observationally overlapping),
+  so NUDGE **never** asserts a hidden node — the strongest it says is that an off-axis
+  residual is *consistent with, does not prove* an unmeasured regulator (`nudge
+  diagnose-abstention`) — see
+  [`notebooks/Hidden_Node_Abstention.ipynb`](notebooks/Hidden_Node_Abstention.ipynb).
 
 Not yet: the full decoy battery, Laplace uncertainty, real-data (T-cell) validation,
 and `design()` inversion. See [`design/STATE.md`](design/STATE.md) for the live roadmap

@@ -9,6 +9,28 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Hidden-node abstention — the honest differential (`nudge.inference.hidden_node`,
+  `NUDGE-METHOD-009`, `NUDGE-LIM-015`):** turns a bare **`off-model`** verdict (or a fired
+  diagnostic residual) into a legible **differential diagnosis** — it **enumerates** the
+  candidate causes of an inadequate switch model, each with its evidence, the documented
+  limitation / decoy it maps to, and the experiment that would distinguish it: **(1)**
+  genuinely not-a-switch (the parsimony gate working, `NUDGE-LIM-005`), **(2)** a nonlinear
+  measurement readout (`NUDGE-LIM-006`), **(3)** an off-target perturbation, **(4)** a
+  wrong / misspecified topology (T0.5-2), **(5)** a batch / depth confound (`NUDGE-LIM-003`
+  / `NUDGE-LIM-009`), and **(6)** a hidden node / unmeasured regulator (the off-axis /
+  neomorphic residual, `NUDGE-LIM-009`). **The abstention half ONLY (the crux,
+  `NUDGE-LIM-015`):** positive hidden-node identification is **not identifiable** from an
+  off-model verdict — the six causes are observationally overlapping — so NUDGE **never**
+  asserts a hidden node; the strongest it says is that an off-axis residual is *consistent
+  with — but does not prove —* an unmeasured regulator, and the hidden-node hypothesis's
+  rank is capped so it is never the lone leading answer. It is a pure **packaging /
+  knowledge** layer built on `knowledge.explain` with **zero import of `fit`** — it
+  consumes verdicts, never re-attributes, and never touches the decoy battery. Wired into
+  the `nudge diagnose-abstention` CLI verb + the `diagnose_abstention` MCP tool +
+  `service.diagnose_abstention` + a Mechanism Card + `notebooks/Hidden_Node_Abstention.ipynb`.
+  The honesty guarantee (the report NEVER emits a bare positive hidden-node claim) is
+  enforced in CI (`tests/inference/test_hidden_node.py`).
+
 - **Multi-reporter joint attribution — the identifiability force-multiplier
   (`nudge.inference.multi_reporter`, `NUDGE-METHOD-008`):** breaks NUDGE's dominant reason
   to abstain — the measured **K⇄v_max / gain⇄threshold degeneracy** (FINDINGS §2) — by

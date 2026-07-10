@@ -189,8 +189,10 @@ _ABSTENTION_GUIDANCE: dict[MechanismClass, tuple[str, tuple[str, ...]]] = {
         "The mechanistic switch model did not beat a linear baseline beyond the loss "
         "noise floor (the circuit-level parsimony gate). Either the data holds no "
         "switch, or a nonlinear *readout* is manufacturing apparent ultrasensitivity "
-        "the affine-reporter model cannot separate from a circuit switch.",
-        ("hill_activation", "readout", "self_activation_switch"),
+        "the affine-reporter model cannot separate from a circuit switch. Run "
+        "`nudge diagnose-abstention` for the full differential of candidate causes "
+        "(NUDGE-METHOD-009) — including, honestly hedged, a possible hidden node.",
+        ("hill_activation", "readout", "self_activation_switch", "hidden_node_abstention"),
     ),
     MechanismClass.NO_EFFECT: (
         "The perturbed distribution is within the effect margin of WT (a multiple of "

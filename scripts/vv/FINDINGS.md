@@ -1045,3 +1045,37 @@ each operating point by its `lna_reliable` margin, or require a minimum buffer, 
 point cannot dominate. (This does not affect the gain verdict — gain abstains at 1/2/3 points.) The
 shipped production toggle path still abstains (`tests/verification/test_toggle_nd_safety.py`); this is
 a probe-surfaced caveat on the opt-in multi-point breaker, not a shipped fail-safe break.
+
+# Phase 4i — hidden-node ABSTENTION: a legible differential, never a positive claim
+
+**What shipped.** `inference/hidden_node.py` (`NUDGE-METHOD-009`, `NUDGE-LIM-015`) — the
+**abstention half ONLY** of the hidden-node problem. When NUDGE's switch model is inadequate
+(the parsimony gate returns `off-model`, or the off-axis / neomorphic residual fires), it
+packages the evidence into a rank-ordered **differential diagnosis** of six candidate causes
+— genuinely not-a-switch (`NUDGE-LIM-005`/`DECOY-005`), a nonlinear readout (`NUDGE-LIM-006`),
+an off-target perturbation (`NUDGE-LIM-004`/`DECOY-004`), a wrong/misspecified topology
+(T0.5-2), a batch/depth confound (`NUDGE-LIM-003`/`DECOY-003`), and a hidden node / unmeasured
+regulator (the off-axis residual, `NUDGE-LIM-009`) — each with its evidence, documented
+limitation, and the experiment that would distinguish it.
+
+**Why abstention-only (the measured design decision).** Positive hidden-node identification is
+**not identifiable** from an off-model verdict: the six causes are *observationally
+overlapping* (they all present as "the affine switch model does not fit"), and there is
+essentially no real Perturb-seq data with a *known* hidden node to calibrate a detector
+against. This is the same wall the abstention analysis (`design/ABSTENTION_ANALYSIS.md`, rows
+#1/#3/#18) and `NUDGE-LIM-009` already documented. So NUDGE ships **only** the differential and
+**never** asserts a hidden node.
+
+**The honesty guarantee (enforced in CI).** `tests/inference/test_hidden_node.py` includes the
+load-bearing test: even in the most tempting regime (off-axis ratio 12), the report emits **no
+bare positive hidden-node claim** — every emitted string is scanned against a forbidden-phrase
+battery — and the hidden-node cause is explicitly hedged (*consistent with … does NOT prove*),
+with its rank **capped** so it is never the lone leading answer (on an `off-model` verdict the
+"genuinely not-a-switch" reading — the gate working — leads). An **adequate** model yields
+`is_adequate=True` with **no** causes (it does not manufacture a differential either).
+
+**Wiring.** `nudge diagnose-abstention` CLI + the `diagnose_abstention` MCP tool +
+`service.diagnose_abstention` (which enriches each cause with its limitation title via the
+read-only `knowledge.explain` backbone) + a Mechanism Card + `notebooks/Hidden_Node_Abstention.ipynb`.
+Pure packaging/knowledge layer with **zero import of `fit`** — it consumes verdicts, never
+re-attributes, and never touches the decoy battery. Additive/opt-in.

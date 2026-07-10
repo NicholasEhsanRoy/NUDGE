@@ -846,3 +846,85 @@ def multi_reporter_file(
         min_panel_r2=min_panel_r2,
     )
     return multi_reporter_to_dict(res)
+
+
+# --------------------------------------------------------------------------- #
+# hidden-node ABSTENTION — turn a bare off-model verdict into a legible
+# differential of candidate causes (nudge.inference.hidden_node,
+# NUDGE-METHOD-009). The abstention half ONLY: it NEVER asserts a hidden node
+# (NUDGE-LIM-015); it consumes verdicts, never touches the fit.
+# --------------------------------------------------------------------------- #
+def inadequacy_to_dict(report: Any) -> dict[str, Any]:
+    """Serialise an ``InadequacyReport`` + its differential to a JSON-able dict.
+
+    Enriches each candidate cause with the *title* of its documented limitation via the
+    read-only :func:`nudge.knowledge.explain` backbone, so a caller (CLI / MCP / Claude)
+    can render the legible differential without re-reading the YAML. Purely additive — the
+    underlying :class:`~nudge.inference.hidden_node.InadequacyReport` is unchanged.
+    """
+    from nudge.knowledge import explain as _explain
+
+    def _lim_title(ref: str) -> str:
+        if not ref:
+            return ""
+        info = _explain(ref)
+        return str(info.get("title", "")) if info.get("kind") == "limitation" else ""
+
+    causes = [
+        {
+            "name": c.name,
+            "qualitative_rank": c.qualitative_rank,
+            "evidence": c.evidence,
+            "distinguishing_experiment": c.distinguishing_experiment,
+            "limitation_ref": c.limitation_ref,
+            "limitation_title": _lim_title(c.limitation_ref),
+            "decoy_ref": c.decoy_ref,
+        }
+        for c in report.ranked_causes()
+    ]
+    return {
+        "is_adequate": report.is_adequate,
+        "verdict": report.verdict,
+        "reason": report.reason,
+        "causes": causes,
+        # A loud, machine-readable restatement of the abstention-half-only guarantee.
+        "hidden_node_claim": False,
+        "honesty_note": (
+            "This is a DIFFERENTIAL of candidate causes, not a verdict. NUDGE never "
+            "positively asserts a hidden node from an off-model result — the causes are "
+            "observationally overlapping (NUDGE-LIM-015)."
+        ),
+    }
+
+
+def diagnose_abstention(
+    *,
+    off_model: bool,
+    neomorphic_ratio: float | None = None,
+    readout_flag: bool = False,
+    perturbation_residual: float | None = None,
+    topology_uncertain: bool = False,
+    depth_confounded: bool = False,
+    neomorphic_ratio_threshold: float = 1.0,
+) -> dict[str, Any]:
+    """Diagnose *why* a NUDGE attribution is inadequate — the CLI / MCP entry point.
+
+    Consumes the evidence an attribution already produced (the ``off_model`` parsimony
+    verdict + optional diagnostic signals) and returns the rank-ordered differential of
+    candidate causes (:func:`nudge.inference.hidden_node.diagnose_inadequacy`). When the
+    model is adequate it returns ``is_adequate=True`` with no causes. It **never** emits a
+    positive hidden-node claim — the strongest it says is that an off-axis residual is
+    *consistent with, does not prove* an unmeasured regulator (NUDGE-LIM-015).
+    """
+    from nudge.inference.hidden_node import diagnose_inadequacy
+
+    report = diagnose_inadequacy(
+        off_model=off_model,
+        neomorphic_ratio=neomorphic_ratio,
+        readout_flag=readout_flag or None,
+        perturbation_residual=perturbation_residual,
+        topology_uncertain=topology_uncertain or None,
+        depth_confounded=depth_confounded or None,
+        neomorphic_ratio_threshold=neomorphic_ratio_threshold,
+    )
+    return inadequacy_to_dict(report)

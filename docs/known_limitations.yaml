@@ -374,3 +374,48 @@ anomalies:
       degeneracy); a loosened consistency threshold, an unmodelled nonlinear reporter
       (NUDGE-LIM-006), or a truncated dose series (NUDGE-LIM-007) would each resurrect a
       false positive.
+
+  - anomaly_id: NUDGE-LIM-015
+    title: A hidden node cannot be positively identified from an off-model verdict — NUDGE ships only the abstention
+    description: >-
+      In hidden-node abstention (nudge.inference.hidden_node, NUDGE-METHOD-009), when
+      NUDGE's switch model is INADEQUATE — the circuit-level parsimony gate returns
+      off-model (nudge.inference.classify.switch_detected), or a diagnostic residual fires
+      (the off-axis / neomorphic ratio, nudge.inference.epistasis.ComboGeometry) — it is
+      tempting to read the residual as a discovered hidden node / unmeasured regulator. It
+      is NOT identifiable. The candidate causes of an off-model verdict are OBSERVATIONALLY
+      OVERLAPPING: (1) a hidden node / unmeasured regulator (the neomorphic off-axis
+      residual, NUDGE-LIM-009), (2) an off-target perturbation effect (a large restricted-
+      fit residual), (3) a nonlinear measurement readout (NUDGE-LIM-006), (4) a wrong /
+      misspecified topology (the Tier-0.5 T0.5-2 boundary), (5) a batch / depth confound
+      (NUDGE-LIM-003, NUDGE-LIM-009), and (6) a genuinely not-a-switch (linear) circuit
+      (the parsimony gate working, NUDGE-LIM-005 / NUDGE-DECOY-005) all present as "the
+      affine switch model does not fit." No off-model result, and no off-axis residual, can
+      separate them — and there is essentially no real Perturb-seq data with a KNOWN hidden
+      node to calibrate a positive detector against. NUDGE therefore ships ONLY the honest
+      abstention half: diagnose_inadequacy enumerates the six causes as a DIFFERENTIAL
+      (each with its evidence, documented limitation, and the experiment that would
+      distinguish it) and NEVER asserts a hidden node exists. The strongest statement it
+      makes about a hidden node is that an off-axis residual is CONSISTENT WITH — but does
+      NOT prove — an unmeasured regulator; the hidden-node cause's rank is capped so it is
+      never the lone leading answer. Only a positive MEASUREMENT (adding the candidate
+      regulator to the panel / a multiome or multi-reporter readout, turning the off-axis
+      dimension into an on-axis measured one), not a residual, can establish a hidden node.
+      The differential is a hypothesis-ranking aid, not a discovery. Guarded by the honesty
+      test (tests/inference/test_hidden_node.py — the report NEVER emits a bare positive
+      hidden-node claim) and the module/card/CLI/MCP wording. Inherits NUDGE-LIM-009 (the
+      off-axis under-count) and NUDGE-LIM-006 (the readout confound).
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is the sharpest honesty boundary of the hidden-node capability: positively
+      claiming "there is a hidden node here" from an off-model verdict would send a
+      follow-up chasing an unmeasured regulator the data cannot support — the confident-
+      wrong failure the project exists to avoid — and it is exactly the direction a
+      screen-analysis user is most tempted to over-read (a neomorphic residual LOOKS like a
+      discovery). The guarantee rests on shipping ONLY the abstention + differential: every
+      surface (module docstring, Mechanism Card, CLI, MCP tool) states, and the honesty
+      test enforces, that NUDGE never asserts a hidden node — it enumerates the
+      observationally-overlapping causes and names the experiment that would distinguish
+      each. Reading the differential as a verdict, or loosening the hedged wording, would
+      resurrect the false positive.

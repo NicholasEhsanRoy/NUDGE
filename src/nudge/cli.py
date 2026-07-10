@@ -757,6 +757,76 @@ def multi_reporter(
     )
 
 
+# --------------------------------------------------------------------------- #
+# diagnose-abstention (hidden-node ABSTENTION — why is the model inadequate?)
+# --------------------------------------------------------------------------- #
+@app.command("diagnose-abstention")
+def diagnose_abstention(
+    off_model: bool = typer.Option(
+        True, "--off-model/--adequate",
+        help="the parsimony gate returned off-model (default) vs the model is adequate",
+    ),
+    neomorphic_ratio: float = typer.Option(
+        float("nan"), "--neomorphic-ratio",
+        help="the off-axis / on-axis residual ratio (ComboGeometry); omit if unmeasured",
+    ),
+    readout_flag: bool = typer.Option(
+        False, "--readout-flag", help="the reporter may be nonlinear (NUDGE-LIM-006)"
+    ),
+    perturbation_residual: float = typer.Option(
+        float("nan"), "--perturbation-residual",
+        help="the best restricted-fit absolute residual (off-target evidence)",
+    ),
+    topology_uncertain: bool = typer.Option(
+        False, "--topology-uncertain", help="the fitted topology may be wrong (T0.5-2)"
+    ),
+    depth_confounded: bool = typer.Option(
+        False, "--depth-confounded", help="a depth/batch difference aligns with the condition"
+    ),
+) -> None:
+    """Diagnose *why* an attribution is inadequate — the honest hidden-node abstention.
+
+    Turns a bare **off-model** verdict (or a fired diagnostic residual) into a legible
+    **differential diagnosis**: it ENUMERATES the candidate causes — not-a-switch,
+    nonlinear readout, off-target, wrong topology, batch/depth confound, and a hidden
+    node — each with its evidence, documented limitation, and the experiment that would
+    distinguish it. **It never asserts a hidden node** (the causes are observationally
+    overlapping): the strongest it says is that an off-axis residual is *consistent with,
+    does not prove* an unmeasured regulator (NUDGE-LIM-015). Abstention half ONLY.
+    """
+    import math
+
+    from nudge.service import diagnose_abstention as _diagnose
+
+    out = _diagnose(
+        off_model=off_model,
+        neomorphic_ratio=None if math.isnan(neomorphic_ratio) else neomorphic_ratio,
+        readout_flag=readout_flag,
+        perturbation_residual=(
+            None if math.isnan(perturbation_residual) else perturbation_residual
+        ),
+        topology_uncertain=topology_uncertain,
+        depth_confounded=depth_confounded,
+    )
+    if out["is_adequate"]:
+        _echo("model adequate — no inadequacy to explain, no differential emitted.")
+        _echo(f"  {out['reason']}")
+        return
+    _echo(f"model INADEQUATE  (verdict: {out['verdict']})\n")
+    _echo(out["reason"])
+    _echo(f"\ndifferential — {len(out['causes'])} candidate causes (ranked hypotheses):")
+    for i, c in enumerate(out["causes"], 1):
+        refs = "  ".join(x for x in (c["limitation_ref"], c["decoy_ref"]) if x) or "—"
+        _echo(f"\n  {i}. [{c['qualitative_rank']}] {c['name']}   ({refs})")
+        _echo(f"     evidence:   {c['evidence']}")
+        _echo(f"     distinguish: {c['distinguishing_experiment']}")
+    _echo(
+        "\n  note: this is a DIFFERENTIAL, not a verdict. NUDGE ships only the abstention "
+        "\n  half — it NEVER positively asserts a hidden node (NUDGE-LIM-015). Resolve any "
+        "\n  NUDGE-LIM-* / NUDGE-DECOY-* above with:  nudge explain <id>"
+    )
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()

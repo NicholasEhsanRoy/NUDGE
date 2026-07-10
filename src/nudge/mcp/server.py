@@ -13,6 +13,8 @@ Tools:
   or a kinetic Δ) reaching a target, behind an integrity + a bifurcation safety gate.
 - ``explain_abstention(context)`` — pull the Mechanism Card + decoy/limitation that
   explains a verdict (``off-model`` / ``unresolved`` / a decoy or limitation id).
+- ``diagnose_abstention(off_model, ...)`` — turn a bare off-model verdict into a legible
+  DIFFERENTIAL of candidate causes (never a positive hidden-node claim; NUDGE-LIM-015).
 - ``list_mechanisms()`` — the registered mechanism library.
 - ``get_mechanism_card(name)`` — the full Markdown card for a mechanism.
 
@@ -384,6 +386,49 @@ def build_server() -> Any:
             perturbed_col=perturbed_col,
             direction=direction,
             n_boot=n_boot,
+        )
+
+    @mcp.tool()
+    def diagnose_abstention(
+        off_model: bool = True,
+        neomorphic_ratio: float = float("nan"),
+        readout_flag: bool = False,
+        perturbation_residual: float = float("nan"),
+        topology_uncertain: bool = False,
+        depth_confounded: bool = False,
+    ) -> dict[str, Any]:
+        """Diagnose WHY a NUDGE attribution is inadequate — the honest hidden-node abstention.
+
+        Turns a bare ``off-model`` verdict (or a fired diagnostic residual) into a legible
+        **differential diagnosis** that ENUMERATES the candidate causes — genuinely
+        not-a-switch, a nonlinear readout (``NUDGE-LIM-006``), an off-target perturbation,
+        a wrong/misspecified topology, a batch/depth confound (``NUDGE-LIM-003``), and a
+        hidden node / unmeasured regulator (``NUDGE-LIM-009``) — each with its evidence,
+        the documented limitation it maps to, and the experiment that would distinguish it.
+
+        **Abstention half ONLY (load-bearing honesty, ``NUDGE-LIM-015``).** It NEVER
+        positively asserts a hidden node: the causes are observationally overlapping, so
+        the strongest it says is that an off-axis residual is *consistent with — but does
+        not prove —* an unmeasured regulator. It consumes verdicts/evidence and never
+        touches the fit. Pass the evidence you have: ``off_model`` (the parsimony gate),
+        the ``neomorphic_ratio`` (off-axis residual, omit as NaN if unmeasured), a
+        ``readout_flag``, a ``perturbation_residual``, ``topology_uncertain`` /
+        ``depth_confounded``. With ``off_model=False`` and no residual it reports the model
+        adequate and emits no differential.
+        """
+        import math
+
+        from nudge.service import diagnose_abstention as _diagnose
+
+        return _diagnose(
+            off_model=off_model,
+            neomorphic_ratio=None if math.isnan(neomorphic_ratio) else neomorphic_ratio,
+            readout_flag=readout_flag,
+            perturbation_residual=(
+                None if math.isnan(perturbation_residual) else perturbation_residual
+            ),
+            topology_uncertain=topology_uncertain,
+            depth_confounded=depth_confounded,
         )
 
     return mcp
