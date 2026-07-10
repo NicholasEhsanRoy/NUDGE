@@ -76,6 +76,16 @@ against the WT-latent null (`loss_no_effect`) and a fully-free reference (`loss_
    did not move the shared latent above noise.
 4. **threshold / gain / ceiling.** The winning knob beats the runner-up by `knob_margin`
    **and** the WT null by `effect_margin` **and** its bootstrap CI excludes 0.
+4c. **the ceiling-scoped floor-consistency gate (`NUDGE-LIM-014`, P2).** A `ceiling` win is
+   *additionally* checked against a **per-condition batch/depth scale**, which aliases 1:1
+   onto a shared ceiling change (§ "Known failure modes"). The discriminator is the **OFF
+   baseline / floor**: a genuine ceiling scales only the ON term `gain·A·f` and leaves each
+   reporter's floor **fixed**, whereas a uniform batch scale `c` rescales every reporter's
+   floor by `c`. NUDGE measures `off_on_coupling = log(perturbed/control OFF baseline)/log(A)`
+   (≈ 0 for a genuine ceiling, ≈ 1 for a batch) and **abstains `unresolved`** when the floor
+   moved with the ON scale (`off_on_coupling > 0.5`) **or** when the floors are unmeasurable
+   (`floor_measurability < 0.6` — a (near-)zero-floor panel with no depth anchor, the
+   documented residual BOUND).
 
 ## Assumptions & simplifications
 
@@ -87,6 +97,13 @@ against the WT-latent null (`loss_no_effect`) and a fully-free reference (`loss_
   in the control and perturbed conditions. This is what makes the latent ceiling `A`
   identifiable; it is *checkable* only with ≥ 2 reporters (the consistency guard), which is
   why a single reporter honestly abstains.
+- **The perturbed condition is on the same measurement scale as the control** (no
+  per-condition batch/depth/instrument-gain scale), *or* the panel has a measurable OFF
+  baseline (floor) so a scale can be detected (`NUDGE-LIM-014`, P2). A uniform multiplicative
+  scale on the whole perturbed panel aliases onto a `ceiling`; the floor-consistency gate
+  catches it where the floors are measurable and **abstains** where they are not (a
+  (near-)zero-floor panel is genuinely indistinguishable without an independent depth
+  anchor — a spike-in, a housekeeping reporter, or a designated no-response reporter).
 - The reporters are (approximately) **affine** readouts of the latent; a nonlinear
   reporter can manufacture apparent ultrasensitivity (`NUDGE-LIM-006`), so a mechanism
   call holds only under an approximately-affine panel.
@@ -100,13 +117,17 @@ against the WT-latent null (`loss_no_effect`) and a fully-free reference (`loss_
 |---|---|---|
 | A reporter secretly reads a DIFFERENT latent (hidden node / wrong panel) | the consistency guard → `off-model` (`tests/inference/test_multi_reporter.py::test_inconsistent_panel_is_off_model`) | `NUDGE-LIM-014` |
 | A single reporter forced to a mechanism (ceiling ⇄ gain degeneracy) | the `M = 1` → `unresolved` gate (`test_joint_resolves_where_single_abstains`) | `NUDGE-LIM-014` |
+| A **per-condition batch/depth scale** on the perturbed panel faking a `ceiling` (P2) | the floor-consistency gate → `unresolved` (`test_batch_scale_is_not_confidently_a_ceiling`, `test_batch_scale_at_realistic_floors_is_not_a_ceiling`) | `NUDGE-LIM-014` |
+| A (near-)zero-floor panel where a batch and a genuine ceiling are inseparable (P2, BOUND) | the measurability gate → `unresolved` on BOTH (`test_floorless_ceiling_abstains_the_documented_bound`; strict-xfail `test_floorless_genuine_ceiling_cannot_be_resolved_bound`) | `NUDGE-LIM-014` |
 | A nonlinear reporter faking ultrasensitivity | the affine-readout bound shared with all attribution | `NUDGE-LIM-006` |
 | A dose series that does not span the inflection | inherits the dose-response identifiability regime | `NUDGE-LIM-007` |
 
-There is **no dedicated multi-reporter decoy battery yet** (`vulnerable_to_decoys: []`) —
-the failure modes above are guarded by the consistency guard, the single-reporter
-abstention, and the synthetic degeneracy-break lock-in; a synthetic-panel decoy battery
-is future work.
+The failure modes above are guarded by the consistency guard, the single-reporter
+abstention, the **floor-consistency gate** (the P2 batch-scale decoy + its genuine-ceiling
+positive control), and the synthetic degeneracy-break lock-in. A per-condition multiplicative
+scale on a **(near-)zero-floor** panel is an honest residual **BOUND** — indistinguishable
+from a genuine ceiling without an independent depth anchor, so NUDGE abstains there (locked by
+a strict-xfail). A broader synthetic-panel decoy battery is future work.
 
 ## Identifiability regime
 
@@ -149,6 +170,15 @@ reference must resolve to a real attribute.)*
   0 confident-wrong mechanism calls across a mechanism / factor / noise / seed sweep.
 - `tests/inference/test_multi_reporter.py::test_no_effect_reads_no_effect` — an unchanged
   latent reads `no-effect`, never a mechanism.
+- `tests/inference/test_multi_reporter.py::test_batch_scale_is_not_confidently_a_ceiling`
+  and `::test_batch_scale_at_realistic_floors_is_not_a_ceiling` — the P2 floor-consistency
+  gate: a per-condition batch/depth scale on the perturbed panel abstains `unresolved`, never
+  a confident `ceiling` (`NUDGE-LIM-014`), at tiny AND realistic floors.
+- `tests/inference/test_multi_reporter.py::test_genuine_ceiling_resolves_with_off_baseline_fixed`
+  — no over-abstention: a genuine ceiling (floor fixed, `off_on_coupling` ≈ 0) still resolves.
+- `tests/inference/test_multi_reporter.py::test_floorless_ceiling_abstains_the_documented_bound`
+  and the strict-xfail `::test_floorless_genuine_ceiling_cannot_be_resolved_bound` — lock the
+  near-zero-floor residual BOUND (inseparable without an independent depth anchor).
 - `tests/test_service.py::test_multi_reporter_file_csv_wiring` — the tidy-CSV service
   round-trip the CLI / MCP share.
 

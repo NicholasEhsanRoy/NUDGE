@@ -76,7 +76,10 @@ Highlights so far:
   heterogeneous gains, the JOINT panel **resolves** threshold / gain / ceiling (**100%** on
   synthetic ground truth) where a SINGLE reporter **abstains** (`unresolved`, **0%**), with
   **0 confident-wrong calls**. Fail-safe strengthened: the **consistency guard** abstains
-  **off-model** when a reporter reads a *different* latent (`NUDGE-LIM-014`) — see
+  **off-model** when a reporter reads a *different* latent, and a **floor-consistency gate**
+  abstains **`unresolved`** when a per-condition batch/depth scale on the perturbed panel
+  aliases onto a `ceiling` — a genuine ceiling leaves each reporter's OFF baseline fixed, a
+  batch rescales it (`NUDGE-LIM-014`; near-zero-floor panels are a documented bound) — see
   [`notebooks/Multi_Reporter.ipynb`](notebooks/Multi_Reporter.ipynb).
 - **Hidden-node abstention** (`NUDGE-METHOD-009`) — the **abstention half only**: turns a
   bare **`off-model`** verdict into a legible **six-cause differential** (genuinely

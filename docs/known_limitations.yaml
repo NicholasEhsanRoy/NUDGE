@@ -411,20 +411,58 @@ anomalies:
       not molecular constants, and a mechanism call holds only under an approximately-affine
       reporter (NUDGE-LIM-006) whose doses span the inflection (NUDGE-LIM-007). Guarded by
       the consistency guard + the M=1 abstention + the fail-safe sweep
-      (tests/inference/test_multi_reporter.py).
+      (tests/inference/test_multi_reporter.py). (3) PER-CONDITION BATCH/DEPTH SCALE — THE
+      FLOOR-CONSISTENCY GATE + ITS RESIDUAL BOUND (P2 red-team,
+      scripts/redteam/multi_reporter_batch_confound.py). The consistency guard in (1) is
+      computed on the CONTROL curves and is structurally BLIND to a technical confound
+      applied to the perturbed condition only. A uniform multiplicative scale c on the WHOLE
+      perturbed panel (a batch / sequencing-depth / instrument-gain difference between the
+      control-condition and perturbed-condition measurement — very common: different
+      plate/day/instrument) is CONSISTENT with the shared latent (it scales every reporter by
+      the same fraction), so it sails past the consistency guard and aliases 1:1 onto a
+      shared latent-ceiling change A = c: originally a confident CEILING (CI excludes 0,
+      margins >100x) where the truth is NO-EFFECT (verified 6/6 across 2 seeds x 3 factors,
+      robust to realistic floors). CLOSED (for measurable floors) by a ceiling-scoped
+      FLOOR-CONSISTENCY GATE: a genuine ceiling scales only the ON term gain*A*f and leaves
+      each reporter's OFF baseline (floor, dose->0) UNCHANGED, whereas a batch scales the
+      whole perturbed signal so every reporter's floor is rescaled by c off its pinned
+      control floor. NUDGE measures off_on_coupling = log(perturbed/control OFF baseline) /
+      log(A) — approximately 0 for a genuine ceiling (floor fixed), approximately 1 for a
+      batch (floor moves fully with the ON scale) — and abstains UNRESOLVED before a ceiling
+      call when off_on_coupling > 0.5 (the physical midpoint). Measured separation (median
+      off_on_coupling): genuine ceiling 0.00-0.10 vs batch 0.67-1.00, at BOTH the red-team's
+      tiny floors (0.0,0.02) and realistic floors (0.2,0.6). RESIDUAL BOUND (locked, not
+      closed): on a (near-)ZERO-floor panel there is no measurable OFF baseline to anchor on
+      — the perturbed OFF doses are pure ON-leakage gain*A*f, which a genuine ceiling and a
+      batch scale IDENTICALLY (both off_on_coupling approximately 1 at floor=0), so the two
+      are GENUINELY INSEPARABLE. NUDGE detects this (floor_measurability = panel-median floor
+      fraction of the OFF baseline < 0.6) and abstains UNRESOLVED on BOTH a batch AND a
+      genuine ceiling there — the honest conservative outcome (never a confident-wrong, at
+      the cost of over-abstaining a real floorless ceiling). Separating a per-condition
+      multiplicative scale from a real ceiling on a (near-)zero-floor panel requires an
+      INDEPENDENT DEPTH ANCHOR (a spike-in, a housekeeping reporter, or a designated
+      no-response reporter) that NUDGE does not yet ingest. Guarded + locked by the
+      floor-consistency gate, the batch-scale decoy, the genuine-ceiling positive control,
+      and the strict-xfail floorless-bound marker (tests/inference/test_multi_reporter.py);
+      measured in scripts/vv/FINDINGS.md (P2).
     severity: major
     safety_relevance: context_dependent
     safety_relevance_rationale: >-
       The identifiability force-multiplier is only trustworthy if the panel really is one
-      latent switch; averaging an inconsistent panel (a reporter reading a hidden, different
-      latent) into a confident threshold/gain/ceiling call would be exactly the
-      confident-wrong failure the project exists to avoid — and it is tempting precisely
-      because a joint fit LOOKS more authoritative than a single curve. The guarantee rests
-      on the consistency guard (abstain off-model when the panel is not one shared latent)
-      and the single-reporter abstention (never pretend a lone reporter breaks the
-      degeneracy); a loosened consistency threshold, an unmodelled nonlinear reporter
-      (NUDGE-LIM-006), or a truncated dose series (NUDGE-LIM-007) would each resurrect a
-      false positive.
+      latent switch AND the perturbed condition is on the same measurement scale as the
+      control. Averaging an inconsistent panel (a reporter reading a hidden, different
+      latent) into a confident threshold/gain/ceiling call, or reading a per-condition
+      batch/depth scale as a confident CEILING, would each be exactly the confident-wrong
+      failure the project exists to avoid — and both are tempting precisely because a joint
+      fit LOOKS more authoritative than a single curve. The guarantee rests on the
+      consistency guard (abstain off-model when the panel is not one shared latent), the
+      single-reporter abstention (never pretend a lone reporter breaks the degeneracy), and
+      the floor-consistency gate (abstain unresolved before a ceiling call when the OFF
+      baseline is rescaled with the ON scale, or when the floors are too small to tell — the
+      documented near-zero-floor BOUND). A loosened consistency or floor-consistency
+      threshold, an unmodelled nonlinear reporter (NUDGE-LIM-006), a truncated dose series
+      (NUDGE-LIM-007), or a panel with no measurable floor and no independent depth anchor
+      would each resurrect a false positive.
 
   - anomaly_id: NUDGE-LIM-015
     title: A hidden node cannot be positively identified from an off-model verdict — NUDGE ships only the abstention
