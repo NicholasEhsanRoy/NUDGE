@@ -9,6 +9,25 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team ROUND 3 (design safety gate) + fix (`design/FAILSAFE_REDTEAM_3.md`,
+  HOLE 3 → `NUDGE-LIM-013`).** A third adversarial pass found that `design()`'s bifurcation
+  **safety gate** flagged `high_risk_of_instability` on a *relative* proximity rise only
+  (`delta > margin`, default 0.15) and **never** checked the **absolute** `proximity_after`
+  against the shipped near-fold cut `bifurcation.NEAR_FOLD = 0.55`. So an intervention that
+  pushed a robust switch (proximity 0.500) **across** 0.55 into the near-fold regime by a
+  **sub-margin** increment (→ 0.589) was cleared "safety: OK, stays away from the fold" — a
+  confident-wrong SAFETY label on a **proposal** (the highest-harm output), contradicting
+  `classify_robustness` on the identical circuit. **FIXED (additive, `design/invert.py`;
+  frozen core untouched):** the gate now fires on `delta > margin` **OR** `proximity_after
+  >= NEAR_FOLD` (an absolute check reusing the *existing* `NEAR_FOLD` constant, so the safety
+  gate and `classify_robustness` never disagree; recorded as `SafetyReport.near_fold`), routes
+  the near-fold case through wording that agrees with `classify_robustness`, and — closing the
+  aggravating factor — carries the one-sided-LOWER-bound caveat (`NUDGE-LIM-012`) on the SAFE
+  ("OK") reason branch too. Measured: the hole case now flags near-fold high-risk (0
+  confident-wrong); a positive control (a genuinely-robust intervention below `NEAR_FOLD`) is
+  still cleared "OK" (no over-abstention). Regression-locked by three `tests/design/
+  test_invert.py` cases; the deterministic repro
+  (`scripts/redteam/design_safety_gate_absolute_proximity.py`) now exits "no hole".
 - **Fail-safe red-team ROUND 2 (core engine) + two fixes (`design/FAILSAFE_REDTEAM_2.md`).**
   A second adversarial pass targeting the core engine found **2 more verified confident-wrong
   holes** — both in work shipped the same day — and both are now fixed:
