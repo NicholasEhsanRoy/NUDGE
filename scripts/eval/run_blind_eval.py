@@ -141,7 +141,7 @@ _WITH_NUDGE_TOOLS_LOTKA = (
     ", using the NUDGE tools via MCP — in particular `lotka`, which fits the gLV community and "
     "reports which knob (growth α / interaction β / susceptibility ε) a perturbation moved AND the "
     "IDENTIFIABILITY of the α⇄βᵢᵢ pair: the Laplace condition number, whether it is `degenerate`, "
-    "and — when it is — the null-space `degeneracy_direction` + a plain-language hint, instead of a "
+    "and — when it is — the null-space `degeneracy_direction` + a plain hint, instead of a "
     "fabricated point estimate. Pass the `.npz` path"
 )
 
