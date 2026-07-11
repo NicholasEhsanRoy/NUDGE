@@ -1059,6 +1059,50 @@ def lotka(
     )
 
 
+@app.command("oed")
+def oed(
+    model: str = typer.Option("logistic", help="forward model: logistic | glv"),
+    objective: str = typer.Option(
+        "crlb", help="design criterion: d_opt | a_opt | e_opt | crlb (targeted CRLB)"
+    ),
+    n_obs: int = typer.Option(8, help="number of measurement times in the design"),
+    steps: int = typer.Option(400, help="gradient-ascent steps on the design φ"),
+    seed: int = typer.Option(0, help="model / optimizer RNG seed"),
+) -> None:
+    """Optimal experimental design — gradient-optimize WHEN to measure (the moat).
+
+    A synthetic, zero-setup demo of the differentiability moat (``NUDGE-METHOD-014``).
+    Because NUDGE's forward model is DIFFERENTIABLE, the Fisher-information design criterion
+    is a differentiable function of the measurement schedule φ, so ``∂criterion/∂φ`` is
+    available by autodiff and we gradient-ascend φ to the EXACT optimal experiment. Starting
+    from a naive **near-equilibrium** schedule — where growth ⇄ self-limitation (α⇄βᵢᵢ) is
+    degenerate (``Kᵢ=−αᵢ/βᵢᵢ``) — it reports the MEASURED factor by which the growth
+    parameter's Cramér–Rao bound (and the FIM's smallest eigenvalue) improves. A black-box
+    solver has no ``∂/∂φ`` — it can only grid-search (exponential in the design size). Local
+    OED: the gain is measured at the nominal θ₀, not extrapolated (``NUDGE-LIM-024``).
+    """
+    from nudge.service import oed_demo
+
+    out = oed_demo(model=model, objective=objective, n_obs=n_obs, steps=steps, seed=seed)
+    _echo(f"OED  (model={out['model']}, objective={out['objective']}, "
+          f"target={out['target_parameter']})")
+    _echo(f"  naive (near-equilibrium) design φ:  {[round(t, 2) for t in out['phi_init']]}")
+    _echo(f"  gradient-optimal design    φ*: {[round(t, 2) for t in out['phi_opt']]}")
+    _echo(
+        f"  Cramér–Rao bound on {out['target_parameter']}: "
+        f"{out['target_crlb_init']:.4g} → {out['target_crlb_opt']:.4g}  "
+        f"({out['crlb_improvement']:.1f}× better)"
+    )
+    _echo(
+        f"  FIM smallest eigenvalue (sloppy direction): "
+        f"{out['min_eig_init']:.3g} → {out['min_eig_opt']:.3g}  "
+        f"({out['min_eig_improvement']:.1f}× better)"
+    )
+    _echo("\n  → the optimal experiment measures during the growth TRANSIENT, which breaks "
+          "the\n     α⇄βᵢᵢ tie the naive near-equilibrium schedule cannot resolve.")
+    _echo(f"\n  note: {out['caveat']}")
+
+
 @app.command("fibrillization")
 def fibrillization(
     mode: str = typer.Option(

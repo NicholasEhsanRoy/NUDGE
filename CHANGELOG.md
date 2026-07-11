@@ -34,6 +34,26 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   touches frozen `fit.py`/`core/`. `tests/inference/test_sloppiness_matrixfree.py`; FINDINGS
   "Matrix-free identifiability".
 
+- **Gradient-based Optimal Experimental Design — the differentiability moat
+  (`NUDGE-METHOD-014`, `NUDGE-LIM-024`).** The white-box advantage a black-box ODE solver
+  cannot offer: because NUDGE's forward model is **differentiable**, the Fisher-information
+  design criterion is itself a differentiable function of the *experiment*, so
+  `∂criterion/∂φ` is available by autodiff (straight through the ODE solve *and* the FIM
+  assembly) and we **gradient-ascend the measurement schedule φ to the exact optimal
+  experiment φ\***. A black-box solver has no `∂/∂φ` — it can only grid-search (exponential in
+  the design size). New `nudge.inference.oed` (additive; self-contained RK4 `lax.scan`;
+  touches neither `fit.py` nor `core/`) with D-/A-/E-optimality and a **targeted
+  reciprocal-CRLB** objective. Makes the gLV growth⇄self-limitation (α⇄βᵢᵢ) directional
+  abstention (`NUDGE-METHOD-012`) **actionable** — "sample the transient to break the tie"
+  becomes a computed schedule. **MEASURED** (logistic growth, target α): a naive
+  near-equilibrium design is near-singular (cond 136); the gradient-optimal design puts
+  samples in the transient → growth **CRLB 31.5× better, FIM smallest eigenvalue 17.8×
+  better**; all three objectives agree; a 3-taxon gLV community resolves **600×**. Honest
+  white-box-vs-grid check (the gradient lands on a fine grid's optimum from either start;
+  guaranteeing the optimum over `m` free times costs `rᵐ` evals — the moat is the scaling) +
+  the **local-OED** caveat (gains measured at θ₀, not extrapolated; `NUDGE-LIM-024`).
+  `nudge oed` CLI + `service.oed_demo` + Mechanism Card + `tests/inference/test_oed.py`
+  (7 fast + 5 slow) + `notebooks/Optimal_Experimental_Design.ipynb`.
 - **Protein aggregation / fibrillization attribution (`NUDGE-METHOD-013`, `NUDGE-LIM-021`)
   — the efficiency demo + a third dynamical-systems domain.** NUDGE analyzes an amyloid
   aggregation curve (the sigmoidal ThT / polymer-mass trace) by fitting the filament master
