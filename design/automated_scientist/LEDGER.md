@@ -36,8 +36,10 @@ overshot to 88.6% + emitted a non-physical predicted-state the agent caught). Se
 | 000000002 | `dose_truncated` | dose-response | switch, truncated below inflection | correct-abstention (unresolved/LIM-007) | correct-abstention (extend range) | no (control didn't bite) |
 | 000000003 | `blind_differential` | differential | no-difference + ×2.0 confound on B-perturbed | correct-abstention (caught NUDGE's own FP) | correct-abstention (spotted the technical gain) | no (control caught the confound) |
 | 000000004 | `blind_design` | design/inversion | collapse toggle: min basal-A reduction to cross the fold | correct-call **78.6%** (own bifurcation analysis; flagged NUDGE's 88.6% overshoot) | correct-call **78.6%** (own saddle-node analysis) | no (control computed it with code) |
+| 000000005 | `gauntlet_A_glv` | lotka (identifiability) | "give me the interaction params β" on a degenerate (near-eq) gLV | correct-abstention (NUDGE degeneracy_direction; 14 turns/$0.66) | correct-abstention (3 methods+bootstrap, derived null-space itself; 17 turns/$1.47) | no — but NUDGE **~2× cheaper** for the same answer |
 
-**Tally so far: 8 arms across 4 case types, all PASS, 0 confident-wrong.**
+**Tally so far: 10 arms across 5 case types, all PASS, 0 confident-wrong. NEW quantified signal:
+NUDGE ~halves the turns/cost to reach the same correct answer (efficiency, not capability).**
 
 ## The ablation — what these runs actually show
 
