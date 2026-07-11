@@ -1059,6 +1059,79 @@ def lotka(
     )
 
 
+@app.command("fibrillization")
+def fibrillization(
+    mode: str = typer.Option(
+        "single", help="single | inhibitor | series"),
+    inhibitor_target: str = typer.Option(
+        "secondary_nucleation",
+        help="for mode=inhibitor: which rate the inhibitor lowers "
+             "(primary_nucleation | elongation | secondary_nucleation | none)"),
+    steps: int = typer.Option(600, help="optimizer steps per fit"),
+    seed: int = typer.Option(0, help="fit / simulation RNG seed"),
+) -> None:
+    """Aggregation kinetics — the efficiency demo (``NUDGE-METHOD-013``).
+
+    Analyze a synthetic amyloid aggregation curve in ONE call. ``mode=single`` returns the
+    identifiable composites (κ, λ) and the MEASURED non-identifiability of the three
+    microscopic constants k_n / k_+ / k_2 (the exact gauge degeneracy, ``NUDGE-LIM-021``) —
+    the honest answer a control LLM agent took 12.2 min / 28 turns / 6 scripts to derive.
+    ``mode=inhibitor`` attributes which microscopic step an inhibitor lowered.
+    ``mode=series`` resolves the three individual constants from a concentration series +
+    a seeded anchor (and shows the series alone stays degenerate).
+    """
+    from nudge.service import fibrillization_demo
+
+    out = fibrillization_demo(
+        mode=mode, inhibitor_target=inhibitor_target, steps=steps, seed=seed)
+
+    if out["mode"] == "single":
+        gt = out["ground_truth"]
+        _echo("Aggregation-curve attribution (single curve, one call)")
+        _echo(
+            f"  ground truth: k_n={gt['k_n']:g} k_+={gt['k_plus']:g} k_2={gt['k_2']:g} "
+            f"(n_c={gt['n_c']:g}, n_2={gt['n_2']:g}, m_tot={gt['m_tot']:g})")
+        _echo(
+            f"  IDENTIFIABLE composites: κ={out['kappa']:.3g} "
+            f"(CI [{out['kappa_ci'][0]:.3g}, {out['kappa_ci'][1]:.3g}]), "
+            f"λ={out['lambda']:.3g} "
+            f"(CI [{out['lambda_ci'][0]:.3g}, {out['lambda_ci'][1]:.3g}])")
+        _echo(
+            f"  individual k_n, k_+, k_2 identifiable? {out['individual_k_identifiable']}  "
+            f"(Fisher condition number {out['cond_number']:.3g})")
+        _echo(
+            f"  null direction (log k_n, log k_+, log k_2): "
+            f"{[round(x, 3) for x in out['null_direction']]}  "
+            f"gauge check {out['gauge_check']:.2g}")
+        _echo(f"\n  → CALL: {out['call'].upper()}")
+        _echo(f"     {out['reason']}")
+        _echo(f"     GUIDANCE: {out['guidance']}")
+    elif out["mode"] == "inhibitor":
+        gt = out["ground_truth"]
+        _echo("Inhibitor attribution (control vs inhibited)")
+        _echo(f"  ground truth: inhibitor lowers '{gt['target']}' (×{gt['factor']:g})")
+        _echo(f"  composite shifts: r_λ={out['r_lambda']:+.3f}  r_κ={out['r_kappa']:+.3f}")
+        _echo(f"\n  → CALL: {out['call'].upper()}   (reliable={out['is_reliable']})")
+        _echo(f"     {out['reason']}")
+    else:  # series
+        wa, na, truth = out["with_anchor"], out["without_anchor"], out["ground_truth"]
+        _echo("Concentration-series resolution (global shared-parameter fit)")
+        _echo(
+            f"  ground truth: k_n={truth['k_n']:g} k_+={truth['k_plus']:g} "
+            f"k_2={truth['k_2']:g}")
+        _echo(
+            f"  WITHOUT seeded anchor: identifiable={na['identifiable']} "
+            f"(cond {na['cond_number']:.3g}) — the series alone cannot break the gauge")
+        _echo(
+            f"  WITH seeded anchor:    identifiable={wa['identifiable']} "
+            f"(cond {wa['cond_number']:.3g}) → k_n={wa['k_n']:.3g} k_+={wa['k_plus']:.3g} "
+            f"k_2={wa['k_2']:.3g}")
+        _echo(
+            "\n  note: a SINGLE curve identifies only the composites κ, λ; the three "
+            "\n  microscopic constants need a concentration series + a seeded anchor "
+            "(NUDGE-LIM-021).")
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()

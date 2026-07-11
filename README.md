@@ -138,6 +138,19 @@ Highlights so far:
   surfaces the honest abstention (*C. difficile*'s bloom is interaction-mediated, ε≈−0.31)
   (`nudge lotka`) — see
   [`notebooks/Temporal_Ecology.ipynb`](notebooks/Temporal_Ecology.ipynb).
+- **Protein aggregation / fibrillization attribution** (`NUDGE-METHOD-013`) — *the
+  efficiency demo, and a THIRD dynamical system*. NUDGE analyzes an **amyloid aggregation
+  curve** (the sigmoidal ThT trace) by fitting the filament master equation's principal
+  moments (`dP/dt = k_n·m^{n_c} + k_2·m^{n_2}·M`, `dM/dt = 2·k_+·m·P`) and, **in one
+  deterministic call**, returns the two identifiable composites **κ ≈ 1, λ ≈ 0.01** and the
+  **measured** non-identifiability of the three microscopic rate constants — an *exact gauge
+  symmetry* `(k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α)` (Fisher condition number → ∞, null
+  `[+0.577, −0.577, +0.577]`, gauge check ~1e-16; `NUDGE-LIM-021`). A **control LLM agent
+  took 12.2 min / 28 turns / 6 scripts** to hand-derive the same answer. A concentration
+  series + a seeded anchor (the Meisl discipline) resolves all three (0 confident-wrong); an
+  inhibitor is attributed to the microscopic step it lowers — primary / elongation /
+  secondary nucleation — or abstained on (`nudge fibrillization`) — see
+  [`notebooks/Aggregation_Kinetics.ipynb`](notebooks/Aggregation_Kinetics.ipynb).
 - **Honest figures — `nudge.viz`** (opt-in `[viz]` extra, first slice) — an additive,
   provenance-carrying figure layer that renders NUDGE's frozen result objects from one
   `render(result, out=…)` call. It only *reads* results (never re-fits; never touches

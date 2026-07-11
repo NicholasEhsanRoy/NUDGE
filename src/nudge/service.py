@@ -1605,3 +1605,89 @@ def lotka_file(
         "degeneracy_direction": None if dd is None else [float(x) for x in np.asarray(dd)],
         "human_readable_hint": res.human_readable_hint,
     }
+
+
+def fibrillization_demo(
+    *,
+    mode: str = "single",
+    inhibitor_target: str = "secondary_nucleation",
+    steps: int = 600,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Synthesize an amyloid aggregation curve + run NUDGE on it in one call (no data file).
+
+    The zero-setup efficiency demo of the fibrillization capability (``NUDGE-METHOD-013``).
+
+    - ``mode="single"`` — one aggregation curve → the identifiable composites (κ, λ) + the
+      MEASURED non-identifiability of the three microscopic constants (the exact gauge null,
+      ``NUDGE-LIM-021``); the honest answer a control LLM agent took 12.2 min / 28 turns / 6
+      scripts to hand-derive, in one call.
+    - ``mode="inhibitor"`` — a control vs inhibited curve pair → which microscopic step
+      (primary / elongation / secondary nucleation) the inhibitor lowered, or abstain.
+    - ``mode="series"`` — a concentration series + a seeded anchor → resolve the three
+      individual constants (and show a series WITHOUT the anchor stays degenerate).
+    """
+    from nudge.mechanisms.fibrillization import (
+        _BALANCED_TRUTH,
+        attribute_aggregation,
+        attribute_inhibitor,
+        resolve_series,
+        simulate_aggregation_curve,
+        simulate_concentration_series,
+        simulate_inhibitor_pair,
+    )
+
+    if mode == "single":
+        curve = simulate_aggregation_curve(seed=seed)
+        res = attribute_aggregation(curve, steps=steps, seed=seed)
+        ident = res.identifiability
+        return {
+            "mode": "single",
+            "call": res.call,
+            "reason": res.reason,
+            "guidance": res.guidance,
+            "kappa": _jsonsafe(res.kappa),
+            "lambda": _jsonsafe(res.lam),
+            "kappa_ci": [_jsonsafe(x) for x in res.fit.kappa_ci],
+            "lambda_ci": [_jsonsafe(x) for x in res.fit.lam_ci],
+            "individual_k_identifiable": bool(res.individual_k_identifiable),
+            "cond_number": _jsonsafe(ident.cond_number),
+            "null_direction": [float(x) for x in ident.null_direction],
+            "unidentifiable": list(ident.unidentifiable),
+            "gauge_check": _jsonsafe(ident.gauge_check),
+            "ground_truth": dict(curve.ground_truth),
+        }
+    if mode == "inhibitor":
+        ctrl, inhib, gt = simulate_inhibitor_pair(target=inhibitor_target, seed=seed)
+        res_i = attribute_inhibitor(ctrl, inhib, steps=steps, seed=seed)
+        return {
+            "mode": "inhibitor",
+            "call": res_i.call,
+            "reason": res_i.reason,
+            "is_reliable": bool(res_i.is_reliable),
+            "r_lambda": _jsonsafe(res_i.r_lambda),
+            "r_kappa": _jsonsafe(res_i.r_kappa),
+            "ground_truth": gt,
+        }
+    if mode == "series":
+        series = simulate_concentration_series(with_anchor=True, seed=seed)
+        with_anchor = resolve_series(series, use_anchor=True, steps=max(steps * 2, 1200))
+        no_anchor = resolve_series(series, use_anchor=False, steps=max(steps * 2, 1200))
+        truth = {"k_n": _BALANCED_TRUTH.k_n, "k_plus": _BALANCED_TRUTH.k_plus,
+                 "k_2": _BALANCED_TRUTH.k_2}
+        return {
+            "mode": "series",
+            "with_anchor": {
+                "identifiable": bool(with_anchor.identifiable),
+                "cond_number": _jsonsafe(with_anchor.cond_number),
+                "k_n": _jsonsafe(with_anchor.k_n), "k_plus": _jsonsafe(with_anchor.k_plus),
+                "k_2": _jsonsafe(with_anchor.k_2), "reason": with_anchor.reason,
+            },
+            "without_anchor": {
+                "identifiable": bool(no_anchor.identifiable),
+                "cond_number": _jsonsafe(no_anchor.cond_number),
+                "reason": no_anchor.reason,
+            },
+            "ground_truth": truth,
+        }
+    raise ValueError(f"unknown mode {mode!r}; expected single | inhibitor | series")

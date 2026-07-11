@@ -1751,3 +1751,63 @@ density rises (250→162→131→102 from n_pulse=2→16). **0 confident-wrong a
 (Part A real-Stein directional abstention, Part B the threshold curve). Real-data adapter reused
 read-only (`scripts/vv/stein_glv.py`).
 
+
+## Protein aggregation / fibrillization attribution (NUDGE-METHOD-013) — the efficiency demo + a measured EXACT gauge degeneracy
+
+**The efficiency demo, and the extensibility thesis pointed at a third dynamical system**
+(after the single-cell snapshot and the gLV trajectory). NUDGE analyzes an amyloid
+aggregation curve — the sigmoidal ThT / polymer-mass trace — fitting the filament master
+equation's principal moments (`dP/dt = k_n·m^{n_c} + k_2·m^{n_2}·M`; `dM/dt = 2·k_+·m·P`;
+Knowles 2009 / Cohen 2013 / Meisl 2016 / Michaels 2020) with a self-contained differentiable
+RK4 `lax.scan` (mirrors `lotka_volterra.simulate_glv`; no `diffrax`; touches neither
+`fit.py` nor `core/`). Module: `src/nudge/mechanisms/fibrillization.py`. `NUDGE-LIM-021`.
+
+**Motivation (the watchable efficiency gap).** A control LLM agent, unaided, took **12.2
+minutes / 28 turns / $1.63 / six iterative scripts** to correctly derive that a single
+aggregation curve's three microscopic rate constants are non-identifiable
+(`design/automated_scientist/runs/000000008`). NUDGE returns the same honest answer in ONE
+deterministic call (~13 s, compile-dominated).
+
+**MEASURED — single curve (secondary-dominated regime, true k_n=5e-4, k_+=0.1, k_2=5.0):**
+- The two composites ARE identifiable and recovered: **κ = 1.00 (95% CI [0.985, 1.02]),
+  λ = 0.00991 (95% CI [0.0093, 0.0106])** — matching the control agent's κ≈1, λ≈0.01.
+- The three individual constants are **NOT** identifiable — an **EXACT continuous gauge
+  symmetry** `(k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α)` leaves `M(t)/m_tot` identical.
+  Measured by the Fisher/Laplace curvature on `(log k_n, log k_+, log k_2)` (reusing
+  `inference/uncertainty.laplace_posterior`, under `enable_x64`): smallest eigenvalue
+  **9.9e-14**, **condition number 4.5e15** (→ ∞), all three flagged unidentifiable, null
+  direction **[+0.577, −0.577, +0.577]** = `(+log k_n, −log k_+, +log k_2)` (exactly the
+  control's hand-derived direction). Independent numerical gauge check: a 100× `k_+`
+  rescale changes the curve by **2.2e-16** (machine precision) — the exact symmetry
+  confirmed, not asserted.
+
+**MEASURED — concentration series (balanced regime, k_n=0.45, k_+=0.1, k_2=5.0, so both
+nucleation pathways contribute):** the mass-fraction gauge is **concentration-independent**,
+so a series ALONE stays degenerate — `resolve_series(use_anchor=False)` → **cond = ∞, NOT
+identifiable** (the honest half: a series of ThT curves cannot separate the individuals). A
+**seeded / elongation anchor** (a heavily-seeded early-window curve where `dM/dt ≈ 2·k_+·m·P_0`
+pins `k_+`; the Meisl discipline) breaks the gauge, and the global shared-parameter fit then
+**resolves all three: k_n = 0.45, k_+ = 0.10, k_2 = 4.97** (truth 0.45 / 0.10 / 5.0),
+condition number 106 (no flat direction; the verdict keys on the flat direction, NOT the
+cond — the sloppiness caveat, Transtrum et al. — and reports cond as a caveat). **0
+confident-wrong.**
+
+**MEASURED — inhibitor attribution (control vs inhibited, single curves):** the absolute
+constants are gauge-degenerate, but the inhibitor's RELATIVE effect on the composites is
+identifiable — a fibril-end binder (k_+) scales λ and κ together, a surface binder (k_2)
+lowers κ only, a primary-nucleus binder (k_n) lowers λ only. Across the battery
+(secondary / elongation / primary nucleation, factor 0.25, + a no-inhibitor null) NUDGE
+recovers the TRUE microscopic target or abstains, **never a wrong step (0 confident-wrong)**;
+the null → `no-effect`. Documented ambiguity: a global monomer-sequestering binder scales λ
+and κ together like an elongation binder, so the equal-drop branch reports "elongation OR
+monomer-sequestration" rather than over-claiming.
+
+**Fail-safe verdict.** 13/13 tests green (`tests/mechanisms/test_fibrillization.py`; 4 fast
++ 9 slow-lane verification/decoy, 5.6 min). The single curve recovers κ, λ and ABSTAINS on
+the individuals; the anchor-less series stays degenerate; the series+anchor resolves all
+three; the inhibitor battery is 0 confident-wrong. Never a false-precise individual rate
+constant from insufficient data — the classic aggregation-kinetics overfitting trap, made
+safe by a MEASURED degeneracy. `nudge fibrillization --mode {single,inhibitor,series}` CLI +
+`service.fibrillization_demo` + Mechanism Card (`NUDGE-METHOD-013`) + `notebooks/Aggregation_Kinetics.ipynb`.
+Real-data validation (AmyloFit / published Aβ42 concentration series) deferred as a later
+`needs_data` gate — the equations + synthetic-first round-trip are the deliverable here.

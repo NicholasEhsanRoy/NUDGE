@@ -844,3 +844,61 @@ anomalies:
       supports and NUDGE must not pretend otherwise. The decoy + the measured-curvature
       requirement are the regression tests that keep the abstention earned rather than
       asserted.
+
+  - anomaly_id: NUDGE-LIM-021
+    title: A single aggregation curve identifies only the composites κ, λ — the three microscopic rate constants are gauge-degenerate
+    description: >-
+      The protein-aggregation / fibrillization mechanism (NUDGE-METHOD-013) fits an amyloid
+      aggregation curve to the filament master equation's principal moments (dP/dt =
+      k_n·m^{n_c} + k_2·m^{n_2}·M; dM/dt = 2·k_+·m·P; Knowles/Cohen/Meisl 2016, Michaels
+      2020) and attributes an inhibitor to the microscopic rate constant it lowers (primary
+      nucleation k_n / elongation k_+ / secondary nucleation k_2). From a SINGLE curve at a
+      SINGLE monomer concentration only the two composite parameters λ = √(2·k_+·k_n·
+      m_tot^{n_c}) and κ = √(2·k_+·k_2·m_tot^{n_2+1}) are identifiable; the three individual
+      constants are NOT, because the moment model has an EXACT continuous gauge symmetry —
+      (k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α) leaves the mass-fraction curve M(t)/m_tot
+      identical for any α > 0 (verified numerically here: a 100× k_+ rescale changes the
+      curve by ~1e-16, machine precision). NUDGE must NOT report false-precise individual
+      rate constants from one curve; it returns the composites (with CIs) + the null
+      direction and prescribes more experiments. Crucially the abstention is EARNED BY A
+      MEASUREMENT, not asserted: the Fisher/Laplace curvature on (log k_n, log k_+, log k_2)
+      is computed (individual_k_identifiability, reusing inference/uncertainty.
+      laplace_posterior) and has a genuine zero eigenvalue along the null direction ≈
+      (+log k_n, −log k_+, +log k_2) — condition number → ∞ — so all three constants are
+      flagged unidentifiable, exactly reproducing how NUDGE measures the gain⇄threshold and
+      α⇄βᵢᵢ degeneracies elsewhere. What DOES resolve the individuals: the mass-fraction
+      gauge is CONCENTRATION-INDEPENDENT, so a concentration series ALONE still cannot
+      separate them (measured: series_identifiability stays degenerate, cond → ∞); the gauge
+      is broken only by a SEEDED / elongation reference (a heavily-seeded early-window curve
+      where dM/dt ≈ 2·k_+·m·P_0 constrains k_+ directly) — the Meisl discipline — after
+      which the global fit resolves all three (verified: k_n, k_+, k_2 recovered within 25%,
+      0 confident-wrong, in a balanced regime where both nucleation pathways contribute). In
+      a strongly secondary-dominated regime (κ ≫ λ) the primary rate k_n stays weakly
+      determined even with an anchor (the primary pathway is negligible) — a sloppy-but-
+      identifiable direction NUDGE reports with a wide CI rather than a false-precise value.
+      A further documented ambiguity: a global monomer-sequestering inhibitor scales λ and κ
+      together, the same composite signature as a fibril-END (k_+) binder, so the inhibitor
+      attribution reports "elongation OR monomer-sequestration" for the equal-drop case
+      rather than over-claiming. VERIFIED on synthetic ground truth
+      (tests/mechanisms/test_fibrillization.py): a single curve recovers κ ≈ 1, λ ≈ 0.01 and
+      ABSTAINS on the three individual constants with a measured gauge null; a concentration
+      series WITHOUT an anchor stays degenerate; a series WITH a seeded anchor resolves all
+      three; the inhibitor battery is 0 confident-wrong (recover the true microscopic target
+      — secondary / elongation / primary — or abstain, never a wrong step). Related:
+      NUDGE-METHOD-013.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      Handled correctly today (NUDGE abstains on the individual constants and reports only
+      the identifiable composites, 0 confident-wrong), but the guarantee rests on the
+      Fisher/Laplace gauge-degeneracy measurement and the discipline of NEVER reporting a
+      false-precise k from insufficient data. Aggregation-kinetic inference is a classic
+      overfitting trap: a naive least-squares fit of the three log-k's returns confident
+      point estimates that are meaningless (any point on the gauge orbit fits equally well).
+      The condition number ALONE is an unreliable identifiability test (the sloppiness
+      caveat: a sloppy-but-identifiable spectrum has a large finite cond, distinct from the
+      genuine zero eigenvalue of the gauge) — so the verdict keys on a flat (zero-curvature)
+      direction, not a cond threshold, and reports the cond as a sloppiness caveat. The
+      seeded-anchor requirement, the balanced-regime caveat for k_n, and the elongation ⇄
+      monomer-sequestration ambiguity are the honest bounds; the tests are the regression
+      that keeps the abstention earned rather than asserted.
