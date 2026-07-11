@@ -1,8 +1,16 @@
 # Guarding the identifiability CLASS, not the confound INSTANCE
 
 *A prototype + migration design for the whole family of per-condition **affine technical
-nuisances** on a differential's perturbed cells. Status: **PROTOTYPE MEASURED — criterion
-met** (with an honestly-bounded residual). Proposal only; the shipped gates stay put.*
+nuisances** on a differential's perturbed cells. Status: **GUARD B (the nuisance-augmented
+earn test) is now SHIPPED** as `differential.classify_differential` **gate 4d** (the P5 fix,
+hardening loop; `NUDGE-LIM-016`, FINDINGS §P5) — the earn logic was ported inline from the
+`_proto_nuisance` prototype (this doc's measured criterion), closing the whole uniform
+per-condition affine class (P1/P4/P5) with 0 confident-wrong and no blind gap. Migration-plan
+steps 1–3 (§4) are DONE; the OFF-cluster bands (4b/4c) are kept as a cheap first line + their
+locked P1/P4 regressions rather than ripped out. **Guard A (the INERT-FEATURE anchor) remains
+a proposal** — it is what buys back a genuine ceiling under a *non-uniform* perturbed-side
+scale (the documented residual §3.4), still un-shipped pending an inert-gene ingestion path in
+`inference/bridge.py` (§4 step 4).*
 
 Prototype code: `src/nudge/inference/_proto_nuisance.py` (sibling; imports differential's
 primitives read-only, touches no shipped code). Measurement: `scripts/eval/proto_nuisance_sweep.py`

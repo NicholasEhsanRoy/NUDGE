@@ -1108,6 +1108,17 @@ def differential_to_dict(res: Any) -> dict[str, Any]:
             "b": f.off_shift_b,
             "ratio": f.off_shift_ratio,
         },
+        "off_cluster_scale": {"a": f.off_scale_a, "b": f.off_scale_b},
+        "nuisance_earn": {
+            # gate 4d (NUDGE-LIM-016 P5): the profiled ΔBIC by which the winning knob
+            # out-explains a FREE per-condition affine (s, o) on the perturbed context (min
+            # over both directions). nan = not computed (only candidate positives pay). < the
+            # earn margin ⇒ the apparent difference is absorbable by a technical affine ⇒ abstain.
+            "earn": f.earn,
+            "side": f.earn_side,
+            "s_hat": f.nuisance_s,
+            "o_hat": f.nuisance_o,
+        },
         "lna_ok": {"a": f.lna_ok_a, "b": f.lna_ok_b},
         "estimates": {
             "a": {m: dict(f.est_a[m]) for m in f.est_a},

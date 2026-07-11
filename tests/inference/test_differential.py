@@ -13,6 +13,8 @@ Two layers:
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from nudge.circuits import ras_switch_1node
@@ -42,11 +44,13 @@ def _fit(
     off_shift_ratio: float = 1.0,
     off_scale: float = 1.0,
     best_diff: str | None = None,
+    earn: float = float("nan"),
 ) -> DifferentialFit:
     """A minimal ``DifferentialFit`` carrying just what ``classify_differential`` reads.
 
     ``off_scale`` is context B's OFF-cluster scale vs its own control (gate 4c, P4); A is
-    fixed at 1.0.
+    fixed at 1.0. ``earn`` is the free-affine nuisance profiled ΔBIC (gate 4d, P5); ``nan``
+    (the default) means "not computed" — gate 4d inactive, mirroring a non-candidate call.
     """
     if best_diff is None:
         best_diff = min(("n", "K", "vmax"), key=lambda m: bic[m])
@@ -62,6 +66,8 @@ def _fit(
         est_a=est, est_b=est_b, selected=min(bic, key=lambda m: bic[m]), best_diff=best_diff,
         depth_ratio=depth_ratio, off_shift_a=1.0, off_shift_b=off_shift_ratio,
         off_shift_ratio=off_shift_ratio, off_scale_a=1.0, off_scale_b=off_scale,
+        earn=earn, earn_side="B", nuisance_s=1.2 if best_diff else float("nan"),
+        nuisance_o=0.0,
     )
 
 
@@ -201,12 +207,76 @@ def test_classify_ceiling_off_scale_in_band_resolves() -> None:
     assert call == "ceiling-diff"
 
 
-def test_classify_off_scale_guard_is_ceiling_scoped() -> None:
-    # The gate-4c guard is CEILING-SCOPED (a global scale is degenerate with v_max, not gain):
-    # a GAIN winner with a wildly out-of-band OFF-cluster scale must STILL resolve gain-diff —
-    # a genuine gain difference reshapes the distribution, so there is no over-abstention here.
+# --------------------------------------------------------------------------- #
+# gate 4d: the free per-condition AFFINE nuisance "earn" guard (NUDGE-LIM-016, P5) — the
+# ALL-WINNER, no-blind-gap backstop that closes the whole per-condition affine confound
+# class. This REPLACES the old locked test `test_classify_off_scale_guard_is_ceiling_scoped`,
+# which asserted that a GAIN winner with an out-of-band OFF-cluster scale STILL resolves
+# gain-diff — that behaviour WAS the P5 hole (the small-multiplicative confound is BIC-assigned
+# to the gain channel, which the ceiling-scoped gate 4c never checks). The corrected contract:
+# off_scale (gate 4c) stays ceiling-scoped, but the general guard for EVERY winner is now the
+# earn test — a knob absorbed by a free affine (earn < margin) abstains, whatever channel BIC
+# picked. `earn` is computed only for a candidate-positive winner (attribute_differential),
+# so at the classify level a `nan` earn leaves gate 4d inactive.
+# --------------------------------------------------------------------------- #
+def test_classify_gain_winner_absorbed_by_affine_abstains() -> None:
+    # THE P5 fix: a GAIN winner whose apparent difference is absorbed by a free per-condition
+    # affine (earn < 0 — the small-multiplicative confound BIC-assigned to the gain channel)
+    # must ABSTAIN. Under the OLD contract this resolved a confident (wrong) gain-diff.
     bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
-    fit = _fit(bic, best_diff="n", off_scale=1.9)
+    fit = _fit(bic, best_diff="n", off_scale=1.25, earn=-2.1)
+    call, reason = classify_differential(fit)
+    assert call == "no-difference"
+    assert "affine" in reason and "NUDGE-LIM-016 P5" in reason
+
+
+def test_classify_gain_winner_earns_over_affine_resolves() -> None:
+    # No over-abstention: a GENUINE gain difference reshapes the distribution the affine
+    # cannot match, so it EARNS its parameter (measured +33…+96, FINDINGS §P5) → resolves.
+    bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
+    fit = _fit(bic, best_diff="n", off_scale=1.0, earn=59.3)
+    call, _ = classify_differential(fit)
+    assert call == "gain-diff"
+
+
+def test_classify_earn_half_earns_is_unresolved() -> None:
+    # 0 ≤ earn < margin: the knob only half out-explains the free affine → genuinely
+    # ambiguous, abstain LOUDER as unresolved (distinct from earn < 0 → no-difference).
+    bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
+    fit = _fit(bic, best_diff="vmax", earn=3.0)
+    call, reason = classify_differential(fit)
+    assert call == "unresolved"
+    assert "affine" in reason and "NUDGE-LIM-016 P5" in reason
+
+
+def test_classify_earn_not_computed_leaves_gate_4d_inactive() -> None:
+    # The candidate-positive-only design: when earn is nan (not computed — e.g. classify is
+    # called directly, or the call was never a candidate positive), gate 4d does NOT fire, so
+    # a clean winner still resolves. attribute_differential computes earn before any positive.
+    bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
+    fit = _fit(bic, best_diff="n", off_scale=1.9, earn=float("nan"))
+    call, _ = classify_differential(fit)
+    assert call == "gain-diff"
+
+
+def test_classify_earn_non_finite_abstains_unresolved() -> None:
+    # Fail-safe: if the earn guard RAN but a context could not be modeled as bistable at shared
+    # kinetics (earn is -inf — computed but non-finite), gate 4d must ABSTAIN unresolved, NOT
+    # pass through to a resolved positive. (nan = "not computed" is the DISTINCT inactive case
+    # above; -inf must be distinguished from it, else a non-finite earn would silently resolve.)
+    bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
+    fit = _fit(bic, best_diff="n", earn=float("-inf"))
+    call, reason = classify_differential(fit)
+    assert call == "unresolved"
+    assert "could not model" in reason and "NUDGE-LIM-016 P5" in reason
+
+
+def test_classify_off_scale_stays_ceiling_scoped() -> None:
+    # The off_scale band (gate 4c) remains CEILING-SCOPED — it is NOT the gain guard (that is
+    # gate 4d). A gain winner with a wildly out-of-band off_scale but no computed earn is NOT
+    # gated by 4c (only 4d, via the earn refit, catches a gain-channel affine confound).
+    bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
+    fit = _fit(bic, best_diff="n", off_scale=1.9)  # earn nan → neither 4c nor 4d fires
     call, _ = classify_differential(fit)
     assert call == "gain-diff"
 
@@ -429,3 +499,66 @@ def test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound() -> Non
     a, b = _pair("ceiling", 0.5, seed=1)
     res = attribute_differential(a, b, CIRC, steps=250, seed=0)
     assert res.call == "ceiling-diff"
+
+
+# --------------------------------------------------------------------------- #
+# DECOY (NUDGE-LIM-016, P5): a SMALL MULTIPLICATIVE factor (c ≈ 1.15–1.25) on ONE context's
+# PERTURBED cells (its control clean) manufactured a confident gain-diff / ceiling-diff past
+# BOTH gate 4b (a factor leaves the near-zero OFF baseline ≈ 0, so off_shift ≈ 1) AND gate 4c
+# (ceiling-scoped + the (1.18,1.30] blind gap; at small c the BIC winner is often gain (n),
+# which the ceiling-scoped 4c never checks) — red-team
+# scripts/redteam/differential_small_mult_gain_hole.py, 8 confident-wrong / 4 seeds. The
+# free-affine EARN guard (gate 4d) — the ALL-WINNER, no-blind-gap backstop — converts every one
+# to an abstention (no *-diff) because the apparent difference is absorbable by a per-condition
+# technical affine. Regime = the red-team generator (default switch, N=3000). SLOW (a candidate
+# positive pays the affine refit). The three parametrized cases are the exact confident-wrong
+# calls from the red-team (seed 0 × {1.15,1.20} → gain-diff; seed 1 × 1.25 → ceiling-diff).
+# --------------------------------------------------------------------------- #
+@pytest.mark.slow
+@pytest.mark.parametrize(("factor", "seed"), [(1.15, 0), (1.20, 0), (1.25, 1)])
+def test_decoy_small_multiplicative_perturbed_scale_abstains(factor: float, seed: int) -> None:
+    a, b = _multiplicative_confound_pair(factor, seed=seed)
+    res = attribute_differential(a, b, RT_CIRC, target_edge=0, steps=200, seed=seed)
+    assert res.call not in POSITIVE, (
+        f"factor={factor} seed={seed}: spurious {res.call} on a small multiplicative scale"
+    )
+    assert res.call in {"no-difference", "unresolved"}
+    # gate 4d fingerprint: the free per-condition affine absorbs the apparent difference. These
+    # are candidate-positive at the base fit, so the earn refit ran and the knob failed to earn.
+    assert math.isfinite(res.fit.earn), "gate 4d must have computed earn on a candidate positive"
+    assert res.fit.earn < 6.0
+
+
+@pytest.mark.slow
+def test_decoy_small_multiplicative_factor_one_is_no_difference() -> None:
+    # The paired positive control: factor 1.0 (no confound) → no-difference, isolating the
+    # small multiplicative scale as the culprit (not a base-fit artifact).
+    a, b = _multiplicative_confound_pair(1.0, seed=0)
+    res = attribute_differential(a, b, RT_CIRC, target_edge=0, steps=200, seed=0)
+    assert res.call == "no-difference"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("seed", [1, 2])
+def test_genuine_ceiling_earns_over_the_affine_nuisance(seed: int) -> None:
+    # THE gate-4d no-over-abstention lock: a GENUINE ceiling (×1.4, both controls clean, NO
+    # measurement scale) RESHAPES the distribution a free per-condition affine cannot match, so
+    # its v_max knob EARNS its parameter over the affine null (measured ≫ margin, FINDINGS §P5)
+    # → still resolves ceiling-diff. If gate 4d ever over-abstained on a genuine ceiling this
+    # fails loudly. (Complements test_genuine_ceiling_inflation_still_resolves_past_gate_4c.)
+    a, b = _pair("ceiling", 1.4, seed=seed)
+    res = attribute_differential(a, b, CIRC, steps=250, seed=0)
+    assert res.call == "ceiling-diff"
+    assert res.is_reliable
+    assert res.fit.earn > 6.0  # the knob earns its parameter over the affine — no over-abstention
+
+
+@pytest.mark.slow
+def test_genuine_gain_earns_over_the_affine_nuisance() -> None:
+    # The gain-channel no-over-abstention lock: a GENUINE gain difference (×0.55) reshapes the
+    # distribution, so it earns its n parameter over a free affine → still resolves gain-diff
+    # (the earn guard does NOT over-abstain on a real gain, the very channel P5 exploited).
+    a, b = _pair("gain", 0.55, seed=1)
+    res = attribute_differential(a, b, CIRC, steps=250, seed=0)
+    assert res.call == "gain-diff"
+    assert res.fit.earn > 6.0

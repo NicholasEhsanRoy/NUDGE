@@ -1405,6 +1405,93 @@ inflating + deflating) + the factor-1 positive control + the genuine-ceiling pos
 `test_genuine_ceiling_inflation_still_resolves_past_gate_4c` + the strict-xfail bound lock
 `test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound`.
 
+### P5 — a SMALL multiplicative perturbed-scale confound slips gate 4c; the free-affine EARN guard closes the whole affine class (hardening loop, `NUDGE-LIM-016` sharpened)
+
+**Correcting P4's overclaim first (honesty).** The §P4 verdict "INFLATION is CLOSED" was measured
+**only on large factors `c ≥ 1.5`**. It was not closed for the small-factor interior: the P4
+gate 4c is a per-magnitude BAND with two measured blind spots — (1) it is **ceiling-scoped**
+(never consults `off_scale` for a gain winner) and (2) its upper cut `1.30` sits *above* the
+genuine-ceiling maximum `1.18`, so the interval **`(1.18, 1.30]` is a blind gap** no genuine
+ceiling occupies but a small confound does. §P4 above is corrected to say gate 4c closes the
+LARGE-factor inflation only; the whole class is closed by gate 4d (this section).
+
+**The hole (independently reproduced through the shipped `attribute_differential`,
+`scripts/vv/p5_measure.py` + red-team `scripts/redteam/differential_small_mult_gain_hole.py`,
+default `ras_switch_1node`, N=3000, 2 seeds × {1.15, 1.20, 1.25}).** A **SMALL** uniform
+multiplicative factor `c ∈ [1.15, 1.25]` on ONE context's PERTURBED cells (control clean) on a
+`mechanism="none"` pair (truth = **no-difference**) slips BOTH gate 4b (`off_shift` ≈ 0.97–0.99,
+a factor scales the near-zero OFF baseline to near-zero) AND gate 4c two ways:
+
+```
+seed=0 c=1.15  shipped=gain-diff    best=n     off_scale=1.231   <HOLE (gate 4c ceiling-scoped; n winner)
+seed=0 c=1.20  shipped=gain-diff    best=n     off_scale=1.285   <HOLE (gate 4c ceiling-scoped; n winner)
+seed=1 c=1.25  shipped=ceiling-diff best=vmax  off_scale=1.279   <HOLE (off_scale in the (1.18,1.30] gap)
+```
+
+**3 confident-wrong across 2 seeds** through the shipped path (the red-team saw 8/4). At small `c`
+the joint LNA-BIC assigns the scale to the **gain (n)** channel (it compresses the modes' relative
+separation), which gate 4c never scopes; near `c = 1.25` the winner flips to `vmax` but `off_scale`
+can land ≤ 1.30. Either way NUDGE emitted a confident `*-diff` where the truth is no-difference.
+
+**The fix — guard the identifiability CLASS, not the confound magnitude (gate 4d, the STATE.md
+principle; prototyped + measured in `_proto_nuisance` / `design/PERTURBED_CONFOUND_STRATEGY.md`).**
+P1 (additive), P4 (large multiplicative), P5 (small multiplicative) are ONE thing: a per-condition
+**affine** `y = s·x + o` on one context's perturbed cells. Rather than add a fourth band, gate 4d
+adds `(s, o)` as a **free nuisance** on the perturbed context and asks ONE measured, threshold-free
+question before any positive `*-diff`: does the BIC-winning knob still **EARN** its parameter over
+a pure-affine null (the profiled ΔBIC `earn`, min over both directions — we don't know which
+context is confounded)? The whole confound family is BY CONSTRUCTION inside the free-affine null's
+span, so no `(s, o)` lets the bio knob earn.
+
+**The measured separator (the crux — a global goodness-of-fit gap, not another band).** Through the
+shipped path, `earn` separates the confound from a genuine mechanism with an enormous margin:
+
+| condition (truth) | `earn` (profiled ΔBIC of the winner over a free affine) | gate-4d call |
+|---|---|---|
+| small-mult confound `c` = 1.15 / 1.20 / 1.25 (both seeds) | **−7.5 … −2.1** (all < 0) | **no-difference** ✓ |
+| genuine **gain** ×0.55 (when it resolves) | **+59.3 … +96.6** | gain-diff (preserved) |
+| genuine **ceiling** ×1.4 | **+116 … +131** | ceiling-diff (preserved) |
+| genuine **ceiling** ×2.0 | **+584 … +616** | ceiling-diff (preserved) |
+| clean `none` (no confound) | −7.1 … −7.5 (already `no-difference` at the base fit) | no-difference |
+
+Margin **6.0** (a BIC "strong" threshold) sits in the plateau between the confound ceiling (−2.1)
+and the genuine floor (+59.3). It is a single margin on a global fit statistic — **not** a
+per-confound calibrated band, so there is no "next magnitude" to slip. (The local Fisher/Laplace
+condition number is NOT the discriminator — it saturates on the unit mismatch between the
+count-unit offset `o` and the log-scale knob; the degeneracy that matters is global, answered by
+the integrated `earn`; `_proto_nuisance` §3.5.)
+
+**Re-validation (through the shipped `attribute_differential`, `scripts/vv/p5_measure.py 2`).**
+- **The 3 confident-wrong → `no-difference`** (0 confident-wrong; all 6 confound cases across 2
+  seeds × 3 factors abstain, `earn` ∈ [−7.5, −2.1]). Re-run:
+  `uv run python scripts/vv/p5_measure.py 2`.
+- **No over-abstention — every positive control still resolves:** genuine `ceiling-diff` ×1.4 /
+  ×2.0 (`earn` +116 … +616), genuine `gain-diff` ×0.55 (`earn` +59). Measured **0 over-abstentions
+  on genuine** in the same run. The existing positive-control slow tests
+  (`test_recovers_ceiling_difference`, `test_genuine_ceiling_earns_over_the_affine_nuisance`,
+  `test_genuine_gain_earns_over_the_affine_nuisance`) run through gate 4d and stay green.
+- **No regression on P1/P4:** the additive (4b) and large-multiplicative (4c) decoys abstain at
+  their own gate BEFORE the earn refit runs (so they never even pay for it), unchanged.
+
+**Verdict: the whole UNIFORM per-condition affine class (P1/P4/P5) is CLOSED** (0 confident-wrong,
+every positive preserved, no blind gap). **Honest residual BOUNDs (documented, not "solved"):**
+(1) a **NON-uniform** perturbed-side scale (confined strictly to above-median / ON cells) is
+observationally *identical* to a genuine ceiling and cannot be separated by any readout-only
+method — it needs an independent **inert-feature anchor** (housekeeping / spike-in) that estimates
+`(s, o)` directly (`design/PERTURBED_CONFOUND_STRATEGY.md`, `_proto_nuisance` guard A); without
+one NUDGE abstains on both a genuine ceiling and such a scale. (2) The gate-4c DEFLATION
+ceiling-reduction sacrifice (a strong genuine ceiling reduction is degenerate with a deflating
+scale) is unchanged. NUDGE still requires each context's control to come from the same library as
+its perturbed cells.
+
+Decoy + locks: `test_decoy_small_multiplicative_perturbed_scale_abstains` (the 3 exact
+confident-wrong cases) + `test_decoy_small_multiplicative_factor_one_is_no_difference` (the
+paired factor-1 control) + the gate-4d no-over-abstention locks
+`test_genuine_ceiling_earns_over_the_affine_nuisance` /
+`test_genuine_gain_earns_over_the_affine_nuisance` + the fast gate-4d contract tests
+(`test_classify_gain_winner_absorbed_by_affine_abstains` and siblings, which replaced the
+now-falsified `test_classify_off_scale_guard_is_ceiling_scoped`).
+
 ## Temporal / Lotka–Volterra attribution (NUDGE-METHOD-012) — the extensibility thesis
 
 **The reframe.** NUDGE observes steady-state *snapshots*; the deferred Capability 4 (temporal)
