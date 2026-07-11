@@ -99,8 +99,10 @@ def main() -> int:
     (sandbox / "TASK.md").write_text(task)
 
     allowed = "Read,Write,Edit,Bash" + (",mcp__nudge__*" if with_nudge else "")
-    cmd = ["claude", "--print", "--output-format", "json", "--model", args.model,
-           "--allowedTools", allowed, task]
+    # NOTE: the prompt MUST be the value of ``-p`` (or piped via stdin); a trailing positional
+    # prompt is rejected by the CLI ("Input must be provided ... when using --print").
+    cmd = ["claude", "-p", task, "--output-format", "json", "--model", args.model,
+           "--allowedTools", allowed]
 
     print(f"=== blind eval · surface={args.surface} · mode={args.mode} ===")
     print(f"sandbox: {sandbox}")
@@ -118,8 +120,13 @@ def main() -> int:
     print("\n[RUN] invoking claude headless …")
     proc = subprocess.run(cmd, cwd=sandbox, capture_output=True, text=True)
     (sandbox / "run_result.json").write_text(proc.stdout)
+    if proc.stderr:  # keep stderr on disk so a failed run is diagnosable (never silently lost)
+        (sandbox / "run_stderr.txt").write_text(proc.stderr)
     print(f"exit={proc.returncode}; wrote {sandbox / 'run_result.json'} and "
           f"{sandbox / 'REPORT.md'} (if the agent produced it)")
+    if proc.returncode != 0:
+        print(f"  [nonzero exit] see {sandbox / 'run_stderr.txt'} — first line: "
+              f"{(proc.stderr or '').splitlines()[0] if proc.stderr else '(no stderr)'}")
     return proc.returncode
 
 

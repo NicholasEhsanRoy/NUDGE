@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Enforce the hardening audit trail is APPEND-ONLY — no deletions, records immutable.
+"""Enforce the project's audit trails are APPEND-ONLY — no deletions, records immutable.
 
-`design/hardening/` is the never-deleted, fully-traceable record of everything the
-hardening-loop agents do (see design/hardening/README.md). This check fails CI if a change:
+Two never-deleted, fully-traceable audit trails share this guard:
+  * ``design/hardening/`` — the hardening-loop agent record (see design/hardening/README.md).
+  * ``design/automated_scientist/`` — the automated-scientist blind-eval record
+    (see design/automated_scientist/README.md).
 
-  * DELETES any file under ``design/hardening/`` (nothing in the audit trail may vanish), or
-  * MODIFIES or RENAMES an existing immutable run record under ``design/hardening/runs/``
+This check fails CI if a change, in EITHER trail:
+
+  * DELETES any file under the trail root (nothing in an audit trail may vanish), or
+  * MODIFIES or RENAMES an existing immutable run record under the trail's ``runs/`` dir
     (a run record is written once and never edited; corrections are NEW records).
 
 Additions anywhere, and modifications to the live index files (``LEDGER.md`` / ``README.md``),
@@ -21,8 +25,11 @@ from __future__ import annotations
 import subprocess
 import sys
 
-HARDENING = "design/hardening/"
-RUNS = "design/hardening/runs/"
+# (trail root, immutable-records dir) — every trail is guarded identically.
+TRAILS: tuple[tuple[str, str], ...] = (
+    ("design/hardening/", "design/hardening/runs/"),
+    ("design/automated_scientist/", "design/automated_scientist/runs/"),
+)
 
 
 def _run(*args: str) -> tuple[int, str]:
@@ -54,24 +61,27 @@ def main(argv: list[str] | None = None) -> int:
         status, paths = parts[0], parts[1:]
         code = status[0]
         # A rename row is "Rxxx\told\tnew"; a delete/modify/add is "X\tpath".
-        if code == "D" and paths[0].startswith(HARDENING):
-            violations.append(f"DELETED (not allowed anywhere in the audit trail): {paths[0]}")
-        elif code == "M" and paths[0].startswith(RUNS):
-            violations.append(f"MODIFIED immutable run record (records are write-once): {paths[0]}")
-        elif code == "R":
-            old, new = paths[0], paths[-1]
-            if old.startswith(RUNS) or new.startswith(RUNS):
-                violations.append(f"RENAMED/moved immutable run record: {old} -> {new}")
-            if old.startswith(HARDENING) and not new.startswith(HARDENING):
-                violations.append(f"MOVED a record OUT of the audit trail: {old} -> {new}")
+        for root, runs in TRAILS:
+            if code == "D" and paths[0].startswith(root):
+                violations.append(
+                    f"DELETED (not allowed anywhere in the audit trail): {paths[0]}")
+            elif code == "M" and paths[0].startswith(runs):
+                violations.append(
+                    f"MODIFIED immutable run record (records are write-once): {paths[0]}")
+            elif code == "R":
+                old, new = paths[0], paths[-1]
+                if old.startswith(runs) or new.startswith(runs):
+                    violations.append(f"RENAMED/moved immutable run record: {old} -> {new}")
+                if old.startswith(root) and not new.startswith(root):
+                    violations.append(f"MOVED a record OUT of the audit trail: {old} -> {new}")
 
     if violations:
         print("check_hardening_append_only: APPEND-ONLY INVARIANT VIOLATED", file=sys.stderr)
         for v in violations:
             print(f"  - {v}", file=sys.stderr)
         print(
-            "\nThe hardening audit trail (design/hardening/) is append-only and never deleted. "
-            "Add a new record instead of editing or removing one.",
+            "\nThe audit trails (design/hardening/, design/automated_scientist/) are "
+            "append-only and never deleted. Add a new record instead of editing or removing one.",
             file=sys.stderr,
         )
         return 1
