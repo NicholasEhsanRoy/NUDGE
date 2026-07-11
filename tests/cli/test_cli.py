@@ -101,3 +101,45 @@ def test_attribute_runs_and_reports(tmp_path) -> None:
     )
     assert result.exit_code == 0
     assert "target: SOS1" in result.output
+
+
+# --------------------------------------------------------------------------- #
+# nudge viz — the figure-rendering verb (reuses the service.render_result seam)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("kind", ["identifiability", "robustness", "epistasis"])
+def test_viz_demo_writes_png(kind: str, tmp_path) -> None:
+    """`nudge viz KIND --demo --out ...` writes a non-empty PNG + succeeds (fast kinds)."""
+    pytest.importorskip("matplotlib")
+    out = tmp_path / f"{kind}.png"
+    result = runner.invoke(
+        app, ["viz", kind, "--demo", "--out", str(out), "--no-fig-code"]
+    )
+    assert result.exit_code == 0, result.output
+    assert out.exists() and out.stat().st_size > 0
+    assert "abstained:" in result.output
+
+
+def test_viz_bad_kind_lists_and_exits_2() -> None:
+    result = runner.invoke(app, ["viz", "not-a-kind"])
+    assert result.exit_code == 2
+    assert "unknown figure kind" in result.output
+    assert "dose_response" in result.output  # the list of known kinds is printed
+
+
+def test_viz_json_replay_roundtrips(tmp_path) -> None:
+    """`--json` replays a saved figure-data dict with no re-fit."""
+    pytest.importorskip("matplotlib")
+    import json
+
+    from nudge.viz.demo import demo_result
+
+    data = demo_result("differential")
+    jpath = tmp_path / "diff.json"
+    jpath.write_text(json.dumps(data))
+    out = tmp_path / "diff.png"
+    result = runner.invoke(
+        app, ["viz", "differential", "--json", str(jpath), "--out", str(out),
+              "--no-fig-code"]
+    )
+    assert result.exit_code == 0, result.output
+    assert out.exists() and out.stat().st_size > 0

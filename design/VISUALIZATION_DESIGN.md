@@ -1,17 +1,22 @@
 # NUDGE visualization module — design & recommendation
 
-**Status:** LARGELY BUILT on `feat/viz-renderers` (Author: Claude Opus 4.8). Built so far:
-the shared spine (`__init__`/`theme`/`base`/`provenance`), a **collision-aware placement
-layer** (`layout.py` — banner/K-label/legend never land on data or each other), the flagship
-`dose_response`, and a renderer per existing result type — `epistasis`, `differential`,
-`multi_reporter`, `temporal`/gLV, `aggregation`/fibrillization, `constitutive`, `diagnose`,
-`design`, `oed`, `cross_modality` (reuses the dose-response Hill panel), and `robustness`
-(the 0–1 dial). The **animation engine** (`animate.py`) is wired (`render(..., animate=True)`)
-with the constitutive-flip GIF. Every renderer inherits the automatic abstention overlay and
-ships the provenance sidecar; each has a render + overlay-fires test in `tests/viz/`. Not yet
-built: `attribution` (the `AttributionReport` chips) and `identifiability` (the cells×noise /
-Fisher spectrum), and the CLI `--fig-out`-on-every-verb / `nudge viz` verb / MCP tool surface
-(§3) beyond the existing `render_result` seam. Original design pass below.
+**Status:** BUILT and merged to `main` (Author: Claude Opus 4.8). Built: the shared spine
+(`__init__`/`theme`/`base`/`provenance`), a **collision-aware placement layer** (`layout.py`
+— banner/K-label/legend never land on data or each other), the flagship `dose_response`, and
+a renderer per result type — `attribution` (the core `AttributionReport`: per-op verdict
+chips + skips + the joint restricted-NLL profile), `identifiability` (the Fisher / sloppiness
+eigenvalue spectrum + the naive-vs-measured verdict — *sloppy-but-predictive ≠
+unidentifiable*), `epistasis`, `differential`, `multi_reporter`, `temporal`/gLV,
+`aggregation`/fibrillization, `constitutive`, `diagnose`, `design`, `oed`, `cross_modality`
+(reuses the dose-response Hill panel), and `robustness` (the 0–1 dial). The **animation
+engine** (`animate.py`) is wired (`render(..., animate=True)`) with the constitutive-flip GIF.
+Every renderer inherits the automatic abstention overlay and ships the provenance sidecar;
+each has a render + overlay-fires test in `tests/viz/`. **Integration surface BUILT:** the
+`nudge viz KIND [--demo|--json] [--out] [--theme] [--animate]` CLI verb + the MCP
+`render_figure` tool, both over the shared `service.render_result` seam, plus a zero-setup
+demo per kind (`nudge.viz.demo.demo_result`, reusing the `service.*_demo()` analyses where
+they exist). Still deferred (design §3.2): the per-verb `--fig-out` flag on *every* existing
+verb (only `dose-response` carries it today). Original design pass below.
 **Scope:** a generalized, reusable, provenance-carrying figure layer for NUDGE's
 result types — additive/opt-in, never touching `fit.py` or `core`. Targets the
 **Demo (30%)** judging criterion, currently the weakest.
