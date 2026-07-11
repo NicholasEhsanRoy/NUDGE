@@ -8,19 +8,20 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000021-orchestrator-P5-merge.md`. That immutable record is the source of truth;
+`runs/000000024-orchestrator-P6-merge.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING (POST-MOAT hardening loop).** The moat-first full sweep (`runs/000000018`)
-found **P6** (matrix-free `sloppiness` mislabel, `LIM-023`); the pre-existing **P5**
-(differential small mult confound, `LIM-016`) was also in the queue. **P5 is CLOSED + merged**
-(gate-4d free-affine earn guard; audit PASS `runs/000000020`; merge `480468c`). **P6 fix is
-committed** (`claude/p6-uq-fix` `2d54b57`) and **in independent audit** (`runs/000000023`).
+**Status: RUNNING (POST-MOAT hardening loop) — queue EMPTY, at the STOP gate.** The moat-first
+full sweep (`runs/000000018`) found **P6** (matrix-free `sloppiness` mislabel, `LIM-023`); the
+pre-existing **P5** (differential small mult confound, `LIM-016`) was also queued. **Both are now
+CLOSED + merged:** P5 (gate-4d free-affine earn guard; audit PASS `runs/000000020`; merge
+`480468c`); P6 (`dense_below=2048` deferral + inverse-iteration null probe; audit PASS
+`runs/000000023`; merge `3cd1f41` + honesty correction `ed3c381`).
 
-- **Next:** P6 audit → orchestrator merge P6 (iff PASS) → `nudge-red-team` re-scan.
-- The re-scan MUST cover the two surfaces the moat sweep left UNREACHED (`runs/000000018`):
-  `adjoint.ode_identifiability` reached through a real large ODE (same P6 root cause), and OED
-  multi-knob / end-to-end composition. Plus P5+P6 fix-induced-regression check.
+- **Next:** `nudge-red-team` **re-scan** — the loop's STOP gate. It MUST cover:
+  (a) a P5+P6 fix-induced-regression check; and (b) the two surfaces the moat sweep left UNREACHED
+  (`runs/000000018`): `adjoint.ode_identifiability` reached through a real large ODE (same P6 root
+  cause), and OED multi-knob design-space / end-to-end composition.
 - **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
 - **HELD this sweep (recorded as fail-safe wins):** OED structural-null (`min_eig` honest
   `0.0→0.0`), OED guarded ridge (over-cautious absolute CRLB), OED demo (no merge regression),
@@ -35,11 +36,10 @@ committed** (`claude/p6-uq-fix` `2d54b57`) and **in independent audit** (`runs/0
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-| **P6** | `sloppiness` (matrix-free) | LIM-023 | **NEW (post-moat sweep, `runs/000000018`).** The iterative Krylov path — and `method="auto"` whenever `n_params > dense_below=256` (its large-network raison-d'être) — labels a structurally-UNIDENTIFIABLE model (two params entering only via their sum ⇒ a provable Fisher zero) **`well-constrained`** (`n_null=0`), while `method="dense"` + the `jacfwd`-SVD oracle correctly say `unidentifiable`. `_verified_smallest_eigsh` Rayleigh-checks *eigenpair-ness*, not *smallest-ness*, so `eigsh(which="SA")` missing the isolated zero still certifies. The single most dangerous mislabel (unidentifiable → well-constrained); contradicts the module's stated fail-safe. Orchestrator-reproduced 6/6, x64 ON (not the float32 caveat). | `scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py` | IN-AUDIT (`claude/p6-uq-fix` `2d54b57`, `runs/000000023`) |
-
-P6 reported by red-team round 6 (`design/FAILSAFE_REDTEAM_6.md`, `runs/000000018`),
-independently re-reproduced by the orchestrator + fixer before fixing. **P5 is CLOSED + merged**
-— see "Closed problems" below (`runs/000000019–21`, merge `480468c`).
+*(no OPEN or IN-PROGRESS rows — **P5 and P6 are both CLOSED + merged**; see "Closed problems"
+below. The queue is EMPTY. The loop is at the STOP gate: a `nudge-red-team` re-scan must return
+`HOLES_FOUND: 0` after a genuine full sweep — covering the P5+P6 regression AND the two moat
+surfaces left UNREACHED by `runs/000000018` — before the loop STOPS.)*
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
@@ -94,6 +94,9 @@ last; never edit a past row):
 | 000000019 | `runs/000000019-uq-fixer-P5.md` | uq-fixer | P5 (LIM-016) | fix claim: gate-4d free per-condition affine "earn" guard closes the whole uniform P1/P4/P5 affine class (margin 6.0 on a global ΔBIC); CLOSED-uniform / BOUNDED-nonuniform; corrects P4 overclaim; commit `416c17e` (fixer stalled pre-commit; orchestrator finalized the commit) |
 | 000000020 | `runs/000000020-audit-P5.md` | audit | P5 fix | **AUDIT: PASS** — hole abstains (fixer seeds 0,1 + independent 5,7 → HOLES 0; earn −7.5…−6.9), positive controls resolve (slow 29 passed/1 xfailed), honesty accurate (minor genuine-earn label nit → orchestrator corrected), frozen core untouched, full gate green (301 passed) |
 | 000000021 | `runs/000000021-orchestrator-P5-merge.md` | orchestrator | P5 merge | independently re-verified + merged → `480468c` (clean ort); corrected FINDINGS §P5 genuine-earn label additively; P5 CLOSED/BOUNDED |
+| 000000022 | `runs/000000022-uq-fixer-P6.md` | uq-fixer | P6 (LIM-023) | fix claim: `auto` defers to exact reconstruction up to measured `dense_below=2048` + inverse-iteration one-sided null probe (catches the isolated zero `eigsh` misses; else abstain); trace-completeness rejected; CLOSED-mislabel / BOUNDED-over-abstention; commit `2d54b57` (1st dispatch was wrong-base via harness isolation → orchestrator caught + re-dispatched) |
+| 000000023 | `runs/000000023-audit-P6.md` | audit | P6 fix | **AUDIT: PASS** — hole closed (0/6 exit=1; independent seeds 7,13,42; slow probe test), BOUNDED residual structurally fail-safe (n=2100 auto→abstain, dense→well-constrained; decoy xfails), no over-abstention, threshold measured (n=2000 11.8s/0.75GB), pinned-pyright 0, fast-lane +9 tests (0 pre-existing fail); flagged the ~1e-19 probe-RQ overclaim (non-blocking) |
+| 000000024 | `runs/000000024-orchestrator-P6-merge.md` | orchestrator | P6 merge | independently re-measured probe RQ (~1e-12…1e-10, confirming ~1e-19 non-reproducing) + merged → `3cd1f41` (clean ort) + honesty correction `ed3c381`; P6 CLOSED/BOUNDED; queue now EMPTY |
 
 ---
 
@@ -106,6 +109,7 @@ last; never edit a past row):
 | **P4** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — the MULTIPLICATIVE sibling of P1: a per-context multiplicative perturbed-only scale fakes a confident `ceiling-diff`, slipping under gate 2 AND the P1 gate 4b (`off_shift`≈1 for a multiplicative factor). Measured ceiling-scoped gate 4c on the OFF-cluster SCALE (raw MAD, perturbed÷control), band [0.80,1.30] (genuine ceiling ×1.4–4 → ≤1.18; inflating confound c≥1.5 → ≥1.43). Deflating confound is degenerate with a genuine strong ceiling reduction → both abstain (a strict-xfail-locked honest bound; the narrow sacrifice verified by the audit). Genuine ceiling increases + gain/threshold still resolve. | `f5d0b87` (merge `ebda9c6`) | `runs/000000011-audit-P4.md` (PASS) |
 | **P2** | `multi_reporter` | LIM-014 | **CLOSED (measurable floors) / BOUNDED (near-zero floors)** — a per-condition multiplicative batch scale on the perturbed panel fakes a confident `ceiling` (control-only consistency guard blind; no per-condition depth normalization). Measured ceiling-scoped floor/OFF-consistency gate: a genuine ceiling leaves each reporter's floor fixed (`off_on_coupling`≈0) while a batch rescales every floor with the ON amplitude (≈1); abstain when the floor moves with the ceiling (cut 0.5 = physical midpoint) or floors are unmeasurable. On a (near-)zero-floor panel a batch ≡ a real ceiling without an independent anchor → both abstain (strict-xfail-locked honest bound). Genuine ceiling/threshold/gain still resolve. | `b870354` (merge `1d091c1`) | `runs/000000015-audit-P2.md` (PASS) |
 | **P5** | `differential` | LIM-016 | **CLOSED (uniform affine class) / BOUNDED (non-uniform + deflation)** — a SMALL uniform multiplicative perturbed-only scale (`c≈1.15–1.25`) faked a confident `gain-diff`/`ceiling-diff` slipping gate 4c (ceiling-scoped → silent on the `n` winner; `off_scale` in the `(1.18,1.30]` gap). Fixed by **gate 4d**: instead of a fourth per-magnitude band, add the per-condition affine `(s,o)` as a FREE nuisance on the perturbed context and abstain unless the BIC-winning knob **earns** its parameter over a pure-affine null by ≥ 6.0 (profiled ΔBIC, min over both directions). The whole confound family (P1 additive / P4 large-mult / P5 small-mult) is by construction inside the null's span → measured `earn` −7.5…−2.1 (confound) vs +59…+616 (genuine); margin 6.0 is a single cut on a GLOBAL fit statistic, no blind gap. Corrects the falsified P4 "INFLATION CLOSED" overclaim. Residual BOUND: a NON-uniform above-median-only scale is observationally identical to a genuine ceiling (needs an inert-feature anchor); gate-4c deflation sacrifice unchanged. | `416c17e` (merge `480468c`) | `runs/000000020-audit-P5.md` (PASS) |
+| **P6** | `sloppiness` (matrix-free) | LIM-023 | **CLOSED (isolated-null mislabel) / BOUNDED (huge-regime over-abstention)** — the iterative/`method="auto"` Krylov path certified a structurally-UNIDENTIFIABLE model (two params via their sum ⇒ a provable Fisher zero) **`well-constrained`**, because `_verified_smallest_eigsh` Rayleigh-checks eigenpair-*ness* not smallest-*ness* and `eigsh('SA')` misses the isolated zero. Fixed by (1) `auto` deferring to the exact dense-via-matvec reconstruction up to a MEASURED `dense_below=2048` (n=2000 = 11.8 s / 0.75 GB, recovers the null at every size 256–4096), and (2) an inverse-iteration null probe (shift-invert `(FIM+εI)⁻¹` via CG) that amplifies the smallest eigenvalue → catches the isolated null (measured probe RQ ~1e-12…1e-10 ≪ the rank floor ~3e-10; 0 false nulls on controls), used ONE-SIDED (a low RQ proves a null; when none is found the path ABSTAINS). Trace-completeness rejected (blind to a missed zero). Residual BOUND: above `dense_below` a genuine well-constrained model OVER-ABSTAINS (fail-safe, never confident-wrong; exact verdict via `method="dense"`), locked by a strict-xfail decoy. `NUDGE-LIM-023` → severity major; the ~1e-19 probe-RQ overclaim re-measured + corrected to ~1e-12…1e-10. | `2d54b57` (merge `3cd1f41`, honesty fix `ed3c381`) | `runs/000000023-audit-P6.md` (PASS) |
 
 *(P1/P2 remain OPEN in the queue above. When each passes audit its row moves here with the
 fix commit + the audit run record, so the queue only holds OPEN work while the full history
