@@ -1,0 +1,2330 @@
+# Deep-research: where a differentiable mechanistic engine (NUDGE) genuinely aids frontier-model drug discovery
+
+*Auto-generated from a deep-research workflow (102 agents, adversarial verification). Question: neurodegeneration drug discovery + differentiability as the decisive complement to a code-capable frontier agent.*
+
+## Executive summary
+
+A differentiable, compositional, mechanistic engine with attribution/inversion/calibrated-abstention is most essentially valuable in exactly the neurodegeneration drug-discovery problem classes where the biology forces a global, multi-condition inverse problem that ad-hoc agent scripts cannot reliably solve 0-shot. The strongest case is protein-aggregation kinetics: a single sigmoidal curve is provably non-identifiable and mechanism can only be recovered by global shared-parameter fitting across many monomer concentrations to one microscopic rate law (Meisl 2016), after which an inhibitor becomes a perturbation to specific microscopic rate constants (primary nucleation vs elongation vs secondary nucleation) with an explicit, continuous, invertible parameter map for dose/target design (Michaels 2020, PNAS) — a fit-attribute-invert pipeline whose value is the disciplined mechanistic constraint, not the solver. Differentiability is genuinely decisive (not mere efficiency) in three places the literature makes concrete: amortized/gradient-based Bayesian optimal experimental design over intractable-likelihood simulators (SBI-BOED / LF-PCE / Deep Adaptive Design), adjoint sensitivity that scales independently of parameter count for large mechanistic networks, and the sloppy-model caveat that FIM-optimal experiments can destroy predictivity — which is precisely the calibrated-abstention discriminator NUDGE must implement rather than blindly recommending. For the user's intrathecal/CSF microrobotic-delivery interest, published mechanistic PDE+ODE transport models of intrathecal ASO delivery and reduced-order Lagrangian-drift dispersion equations provide a ready compositional differentiable substrate for delivery-schedule/trajectory optimization. Net: prioritize a differentiable aggregation-kinetics module (highest leverage, best data) and an adjoint/SBI-based OED layer with sloppiness-aware abstention.
+
+
+## Findings (verified)
+
+### 1. [high, vote 3-0 (both merged claims)] 
+Protein-aggregation kinetics is a genuinely-essential fit-attribute-invert target: individual sigmoidal curves are non-identifiable (classic overfitting), and only global shared-parameter fitting of many monomer concentrations to one microscopic rate law can discriminate mechanisms (e.g. fragmentation vs surface-catalysed secondary nucleation). This is the highest-priority differentiable aggregation-kinetics module — a differentiable engine that fits globally and reports the exact degeneracy is the whole discipline, not a solver convenience.
+
+Sources: https://www-vendruscolo.ch.cam.ac.uk/meisl2016np.pdf; 10.1038/nprot.2016.010
+
+### 2. [high, vote 3-0 (both merged claims)] 
+An amyloid inhibitor can be attributed to the specific microscopic step it acts on (primary nucleation, elongation, secondary nucleation) by treating it as a perturbation to specific microscopic rate constants, because distinct binding targets selectively suppress distinct rates: monomer-binders reduce all steps, fibril-end binders lower elongation, fibril-surface binders reduce secondary nucleation. This defines the exact 'which rate constant to block, and by how much' design space NUDGE fits and inverts.
+
+Sources: https://www-vendruscolo.ch.cam.ac.uk/meisl2016np.pdf; https://www.pnas.org/doi/10.1073/pnas.2006684117; 10.1073/pnas.2006684117
+
+### 3. [high, vote 3-0 (both merged claims)] 
+Inhibitor efficacy is governed jointly by thermodynamics and kinetics via an explicit, continuous, invertible parameter map: a universal aggregation timescale 1/kappa serves as a ruler, and efficacy (lambda_eff/lambda, kappa_eff/kappa) is controlled by just two dimensionless numbers — normalized binding on-rate k_on*Ci/kappa and dimensionless binding constant K*Ci — defining three regimes (inactive / nonequilibrium / equilibrium inhibition). This is precisely the low-dimensional, differentiable parameter surface for gradient-based inverse-design of dose and binding target.
+
+Sources: https://www.pnas.org/doi/10.1073/pnas.2006684117; 10.1073/pnas.2006684117
+
+### 4. [high, vote 3-0 (all four merged claims)] 
+Differentiability is decisive (not merely efficient) for optimal experimental design over intractable-likelihood mechanistic simulators. A differentiable mutual-information objective lets you simultaneously optimize the experimental design AND the amortized (neural) posterior by gradient descent — the enabling move SBI simulators otherwise lack because they are non-differentiable. Amortization (Deep Adaptive Design) further turns per-step BOED optimization into a millisecond forward pass, enabling live adaptive experiment selection.
+
+Sources: https://arxiv.org/abs/2103.02438; https://arxiv.org/pdf/2502.08004; https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10327247/
+
+### 5. [high, vote 3-0] 
+Adjoint sensitivity analysis makes gradient-based parameter estimation of large mechanistic networks tractable because its cost is effectively independent of parameter count, whereas forward sensitivity requires integrating a system of dimension (n_x+1)*n_theta that grows with the number of parameters. For genome/network-scale compositional models this is the decisive enabler and a nontrivial thing for an agent to implement correctly 0-shot.
+
+Sources: https://www.biorxiv.org/content/10.1101/2022.08.08.503176v1.full; 10.1371/journal.pcbi.1005331
+
+### 6. [high, vote 3-0 (claims 13,15); 2-1 (claim 14)] 
+Calibrated abstention must be sloppiness-aware, not FIM-greedy: in sloppy mechanistic systems, FIM-optimal experiments can paradoxically make a model LESS predictive by constraining previously-loose parameters until omitted model discrepancy becomes relevant. Models fit to a few experiments with unconstrained (sloppy) parameters can be more predictive than the same models after optimal experiment selection. An honest engine must distinguish 'unidentifiable-but-predictive' from 'constrained-but-non-predictive' rather than blindly recommending the FIM-optimal experiment — the differentiator over an agent that would naively maximize Fisher information.
+
+Sources: https://journals.plos.org/ploscompbiol/article?id=10.1371%2Fjournal.pcbi.1005227; 10.1371/journal.pcbi.1005227
+
+### 7. [high, vote 3-0 (both merged claims)] 
+Sloppiness is a distinct property from identifiability: sloppy models can be structurally/practically identifiable, so a FIM/Hessian eigenvalue spectrum alone is an unreliable and potentially wrong test of whether unique parameter values can be estimated. Proper abstention decisions require dedicated structural/practical identifiability analysis, not just an eigenvalue gap — a subtlety a code-writing agent can easily get wrong by conflating the two.
+
+Sources: https://arxiv.org/pdf/1403.1417; 10.1016/j.mbs.2016.10.009
+
+### 8. [high, vote 3-0 (both merged claims)] 
+A real, data-backed compositional-mechanistic neurodegeneration target exists and already does mechanistic species-attribution: an 11-ODE Alzheimer's QSP model (amyloid-beta, tau, cognition modules) calibrated/validated on 4,056 subjects from lecanemab trials + ADNI, which attributes tau-driving potency across amyloid species — estimating Abeta protofibrils as ~2.3-fold higher lecanemab drug-effect targets and plaques as ~39% of protofibril neurotoxic effect. This is exactly the 'which mechanistic species/parameter dominates' question NUDGE targets, on a validated clinical-scale dataset.
+
+Sources: https://www.nature.com/articles/s41540-026-00677-4; 10.1038/s41540-026-00677-4
+
+### 9. [high, vote 3-0 (all three merged claims)] 
+For the user's intrathecal/CSF microrobotic-delivery interest, published mechanistic transport models provide a ready compositional, differentiable-ready substrate for delivery-schedule/trajectory optimization: a distributed intrathecal-ASO PK model couples 1D convection-diffusion PDEs (spinal CSF/tissue transport along the neuraxis, cylindrical finite volumes) with lumped ODE compartments and captures convection-plus-pulsation-enhanced dispersion; and a reduced-order model replaces full DNS with a convection-diffusion equation driven by the mean Lagrangian (drift) velocity (~125x speedup). These are exactly the transport physics an intrathecal delivery-schedule/trajectory optimizer must differentiate through.
+
+Sources: https://pmc.ncbi.nlm.nih.gov/articles/PMC10272745/; https://pmc.ncbi.nlm.nih.gov/articles/PMC12220655/; 10.1186/s12987-025-00657-6
+
+## Caveats
+- P
+- r
+- i
+- o
+- r
+- i
+- t
+- y
+- /
+- l
+- e
+- v
+- e
+- r
+- a
+- g
+- e
+-  
+- o
+- r
+- d
+- e
+- r
+- i
+- n
+- g
+-  
+- (
+- h
+- i
+- g
+- h
+- e
+- s
+- t
+-  
+- f
+- i
+- r
+- s
+- t
+- )
+-  
+- f
+- o
+- r
+-  
+- N
+- U
+- D
+- G
+- E
+- ,
+-  
+- b
+- a
+- s
+- e
+- d
+-  
+- o
+- n
+-  
+- d
+- a
+- t
+- a
+-  
+- a
+- v
+- a
+- i
+- l
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- a
+- n
+- d
+-  
+- w
+- h
+- e
+- r
+- e
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- i
+- s
+-  
+- d
+- e
+- c
+- i
+- s
+- i
+- v
+- e
+- :
+-  
+- (
+- 1
+- )
+-  
+- a
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- b
+- l
+- e
+-  
+- p
+- r
+- o
+- t
+- e
+- i
+- n
+- -
+- a
+- g
+- g
+- r
+- e
+- g
+- a
+- t
+- i
+- o
+- n
+- /
+- f
+- i
+- b
+- r
+- i
+- l
+- l
+- i
+- z
+- a
+- t
+- i
+- o
+- n
+- -
+- k
+- i
+- n
+- e
+- t
+- i
+- c
+- s
+-  
+- m
+- o
+- d
+- u
+- l
+- e
+-  
+- (
+- t
+- h
+- e
+- r
+- e
+-  
+- i
+- s
+-  
+- a
+- l
+- r
+- e
+- a
+- d
+- y
+-  
+- a
+-  
+- s
+- t
+- u
+- b
+- )
+-  
+- —
+-  
+- b
+- e
+- s
+- t
+-  
+- d
+- a
+- t
+- a
+- ,
+-  
+- t
+- e
+- x
+- t
+- b
+- o
+- o
+- k
+-  
+- g
+- l
+- o
+- b
+- a
+- l
+- -
+- f
+- i
+- t
+- t
+- i
+- n
+- g
+-  
+- d
+- i
+- s
+- c
+- i
+- p
+- l
+- i
+- n
+- e
+- ,
+-  
+- e
+- x
+- p
+- l
+- i
+- c
+- i
+- t
+-  
+- i
+- n
+- v
+- e
+- r
+- t
+- i
+- b
+- l
+- e
+-  
+- i
+- n
+- h
+- i
+- b
+- i
+- t
+- o
+- r
+-  
+- d
+- e
+- s
+- i
+- g
+- n
+-  
+- m
+- a
+- p
+- ,
+-  
+- a
+- n
+- d
+-  
+- t
+- h
+- e
+-  
+- c
+- l
+- e
+- a
+- r
+- e
+- s
+- t
+-  
+- f
+- i
+- t
+- -
+- a
+- t
+- t
+- r
+- i
+- b
+- u
+- t
+- e
+- -
+- i
+- n
+- v
+- e
+- r
+- t
+-  
+- s
+- t
+- o
+- r
+- y
+- ;
+-  
+- (
+- 2
+- )
+-  
+- a
+- d
+- j
+- o
+- i
+- n
+- t
+- /
+- S
+- B
+- I
+- -
+- b
+- a
+- s
+- e
+- d
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- b
+- l
+- e
+-  
+- O
+- E
+- D
+-  
+- l
+- a
+- y
+- e
+- r
+-  
+- w
+- i
+- t
+- h
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+- -
+- a
+- w
+- a
+- r
+- e
+- ,
+-  
+- i
+- d
+- e
+- n
+- t
+- i
+- f
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+- -
+- d
+- i
+- r
+- e
+- c
+- t
+-  
+- a
+- b
+- s
+- t
+- e
+- n
+- t
+- i
+- o
+- n
+-  
+- —
+-  
+- w
+- h
+- e
+- r
+- e
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- i
+- s
+-  
+- m
+- o
+- s
+- t
+-  
+- g
+- e
+- n
+- u
+- i
+- n
+- e
+- l
+- y
+-  
+- a
+-  
+- c
+- a
+- p
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- t
+- o
+- r
+-  
+- o
+- v
+- e
+- r
+-  
+- a
+- n
+-  
+- a
+- g
+- e
+- n
+- t
+- '
+- s
+-  
+- a
+- d
+- -
+- h
+- o
+- c
+-  
+- s
+- c
+- r
+- i
+- p
+- t
+- s
+- ;
+-  
+- (
+- 3
+- )
+-  
+- a
+-  
+- Q
+- S
+- P
+- /
+- P
+- K
+- -
+- P
+- D
+-  
+- l
+- a
+- y
+- e
+- r
+-  
+- a
+- n
+- c
+- h
+- o
+- r
+- e
+- d
+-  
+- t
+- o
+-  
+- t
+- h
+- e
+-  
+- v
+- a
+- l
+- i
+- d
+- a
+- t
+- e
+- d
+-  
+- 1
+- 1
+- -
+- O
+- D
+- E
+-  
+- A
+- l
+- z
+- h
+- e
+- i
+- m
+- e
+- r
+- '
+- s
+-  
+- m
+- o
+- d
+- e
+- l
+- ;
+-  
+- (
+- 4
+- )
+-  
+- a
+- n
+-  
+- i
+- n
+- t
+- r
+- a
+- t
+- h
+- e
+- c
+- a
+- l
+- -
+- C
+- S
+- F
+-  
+- t
+- r
+- a
+- n
+- s
+- p
+- o
+- r
+- t
+-  
+- m
+- o
+- d
+- u
+- l
+- e
+-  
+- f
+- o
+- r
+-  
+- d
+- e
+- l
+- i
+- v
+- e
+- r
+- y
+- -
+- s
+- c
+- h
+- e
+- d
+- u
+- l
+- e
+-  
+- o
+- p
+- t
+- i
+- m
+- i
+- z
+- a
+- t
+- i
+- o
+- n
+-  
+- (
+- m
+- o
+- s
+- t
+-  
+- s
+- p
+- e
+- c
+- u
+- l
+- a
+- t
+- i
+- v
+- e
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+-  
+- '
+- m
+- i
+- c
+- r
+- o
+- r
+- o
+- b
+- o
+- t
+- i
+- c
+- '
+-  
+- f
+- r
+- a
+- m
+- i
+- n
+- g
+- )
+- .
+-  
+- S
+- o
+- u
+- r
+- c
+- e
+- -
+- q
+- u
+- a
+- l
+- i
+- t
+- y
+-  
+- c
+- a
+- v
+- e
+- a
+- t
+- s
+- :
+-  
+- a
+- l
+- l
+-  
+- c
+- o
+- r
+- e
+-  
+- f
+- i
+- n
+- d
+- i
+- n
+- g
+- s
+-  
+- r
+- e
+- s
+- t
+-  
+- o
+- n
+-  
+- p
+- e
+- e
+- r
+- -
+- r
+- e
+- v
+- i
+- e
+- w
+- e
+- d
+-  
+- p
+- r
+- i
+- m
+- a
+- r
+- y
+-  
+- l
+- i
+- t
+- e
+- r
+- a
+- t
+- u
+- r
+- e
+-  
+- w
+- i
+- t
+- h
+-  
+- u
+- n
+- a
+- n
+- i
+- m
+- o
+- u
+- s
+-  
+- 3
+- -
+- 0
+-  
+- v
+- o
+- t
+- e
+- s
+- ,
+-  
+- E
+- X
+- C
+- E
+- P
+- T
+-  
+- t
+- h
+- e
+-  
+- '
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- i
+- s
+-  
+- f
+- u
+- n
+- d
+- a
+- m
+- e
+- n
+- t
+- a
+- l
+-  
+- d
+- e
+- g
+- e
+- n
+- e
+- r
+- a
+- c
+- y
+- '
+-  
+- s
+- u
+- b
+- -
+- p
+- o
+- i
+- n
+- t
+-  
+- (
+- c
+- l
+- a
+- i
+- m
+-  
+- 1
+- 4
+- ,
+-  
+- 2
+- -
+- 1
+- )
+-  
+- —
+-  
+- r
+- e
+- c
+- e
+- n
+- t
+-  
+- w
+- o
+- r
+- k
+-  
+- c
+- o
+- n
+- t
+- e
+- s
+- t
+- s
+-  
+- w
+- h
+- e
+- t
+- h
+- e
+- r
+-  
+- g
+- e
+- n
+- e
+- r
+- i
+- c
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- i
+- s
+-  
+- f
+- u
+- n
+- d
+- a
+- m
+- e
+- n
+- t
+- a
+- l
+-  
+- v
+- s
+-  
+- a
+-  
+- p
+- a
+- r
+- a
+- m
+- e
+- t
+- r
+- i
+- z
+- a
+- t
+- i
+- o
+- n
+- /
+- c
+- o
+- o
+- r
+- d
+- i
+- n
+- a
+- t
+- e
+-  
+- a
+- r
+- t
+- i
+- f
+- a
+- c
+- t
+- ,
+-  
+- s
+- o
+-  
+- l
+- e
+- a
+- n
+-  
+- o
+- n
+-  
+- s
+- t
+- r
+- u
+- c
+- t
+- u
+- r
+- a
+- l
+-  
+- u
+- n
+- i
+- d
+- e
+- n
+- t
+- i
+- f
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- (
+- s
+- i
+- n
+- g
+- u
+- l
+- a
+- r
+-  
+- F
+- I
+- M
+- ,
+-  
+- i
+- n
+- f
+- i
+- n
+- i
+- t
+- e
+- l
+- y
+- -
+- v
+- a
+- r
+- y
+- i
+- n
+- g
+-  
+- d
+- i
+- r
+- e
+- c
+- t
+- i
+- o
+- n
+- s
+- )
+- ,
+-  
+- n
+- o
+- t
+-  
+- o
+- n
+-  
+- r
+- a
+- w
+-  
+- F
+- I
+- M
+- -
+- e
+- i
+- g
+- e
+- n
+- v
+- a
+- l
+- u
+- e
+-  
+- f
+- r
+- a
+- m
+- i
+- n
+- g
+- .
+-  
+- F
+- o
+- u
+- r
+-  
+- c
+- l
+- a
+- i
+- m
+- s
+-  
+- w
+- e
+- r
+- e
+-  
+- R
+- E
+- F
+- U
+- T
+- E
+- D
+-  
+- (
+- 0
+- -
+- 3
+- )
+-  
+- a
+- n
+- d
+-  
+- s
+- h
+- o
+- u
+- l
+- d
+-  
+- N
+- O
+- T
+-  
+- b
+- e
+-  
+- u
+- s
+- e
+- d
+- :
+-  
+- t
+- h
+- e
+-  
+- p
+- u
+- b
+- l
+- i
+- s
+- h
+- e
+- d
+-  
+- A
+- l
+- z
+- h
+- e
+- i
+- m
+- e
+- r
+-  
+- Q
+- S
+- P
+-  
+- m
+- o
+- d
+- e
+- l
+- '
+- s
+-  
+- F
+- I
+- M
+-  
+- c
+- o
+- n
+- d
+- i
+- t
+- i
+- o
+- n
+-  
+- n
+- u
+- m
+- b
+- e
+- r
+-  
+- /
+-  
+- R
+- S
+- E
+-  
+- c
+- a
+- l
+- i
+- b
+- r
+- a
+- t
+- i
+- o
+- n
+-  
+- f
+- r
+- a
+- m
+- i
+- n
+- g
+- ;
+-  
+- t
+- h
+- e
+-  
+- a
+- s
+- s
+- e
+- r
+- t
+- i
+- o
+- n
+-  
+- t
+- h
+- a
+- t
+-  
+- s
+- t
+- e
+- a
+- d
+- y
+- -
+- s
+- t
+- a
+- t
+- e
+-  
+- a
+- d
+- j
+- o
+- i
+- n
+- t
+-  
+- m
+- e
+- t
+- h
+- o
+- d
+- s
+-  
+- '
+- d
+- i
+- d
+-  
+- n
+- o
+- t
+-  
+- e
+- x
+- i
+- s
+- t
+- '
+-  
+- b
+- e
+- f
+- o
+- r
+- e
+-  
+- t
+- h
+- a
+- t
+-  
+- p
+- r
+- e
+- p
+- r
+- i
+- n
+- t
+- ;
+-  
+- t
+- h
+- a
+- t
+-  
+- B
+- O
+- E
+- D
+-  
+- h
+- a
+- d
+-  
+- '
+- n
+- o
+- t
+-  
+- b
+- e
+- e
+- n
+-  
+- i
+- n
+- t
+- e
+- g
+- r
+- a
+- t
+- e
+- d
+- '
+-  
+- w
+- i
+- t
+- h
+-  
+- S
+- B
+- I
+- ;
+-  
+- a
+- n
+- d
+-  
+- t
+- h
+- a
+- t
+-  
+- t
+- h
+- e
+-  
+- i
+- n
+- t
+- r
+- a
+- t
+- h
+- e
+- c
+- a
+- l
+-  
+- A
+- S
+- O
+-  
+- p
+- a
+- p
+- e
+- r
+-  
+- l
+- e
+- a
+- v
+- e
+- s
+-  
+- a
+-  
+- t
+- o
+- t
+- a
+- l
+- l
+- y
+-  
+- '
+- u
+- n
+- o
+- c
+- c
+- u
+- p
+- i
+- e
+- d
+-  
+- n
+- i
+- c
+- h
+- e
+- '
+-  
+- —
+-  
+- m
+- e
+- a
+- n
+- i
+- n
+- g
+-  
+- t
+- h
+- e
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- b
+- l
+- e
+- -
+- O
+- E
+- D
+-  
+- n
+- i
+- c
+- h
+- e
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+- s
+- e
+-  
+- m
+- o
+- d
+- e
+- l
+- s
+-  
+- i
+- s
+-  
+- r
+- e
+- a
+- l
+-  
+- b
+- u
+- t
+-  
+- m
+- u
+- s
+- t
+-  
+- b
+- e
+-  
+- a
+- r
+- g
+- u
+- e
+- d
+-  
+- a
+- s
+-  
+- a
+- d
+- d
+- i
+- n
+- g
+-  
+- n
+- e
+- w
+-  
+- c
+- a
+- p
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+- ,
+-  
+- n
+- o
+- t
+-  
+- a
+- s
+-  
+- '
+- n
+- o
+-  
+- p
+- r
+- i
+- o
+- r
+-  
+- w
+- o
+- r
+- k
+- .
+- '
+-  
+- T
+- i
+- m
+- e
+- -
+- s
+- e
+- n
+- s
+- i
+- t
+- i
+- v
+- i
+- t
+- y
+- :
+-  
+- S
+- B
+- I
+- -
+- B
+- O
+- E
+- D
+-  
+- (
+- 2
+- 0
+- 2
+- 5
+- )
+- ,
+-  
+- t
+- h
+- e
+-  
+- C
+- S
+- F
+-  
+- r
+- e
+- d
+- u
+- c
+- e
+- d
+- -
+- o
+- r
+- d
+- e
+- r
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- (
+- 2
+- 0
+- 2
+- 5
+- )
+- ,
+-  
+- a
+- n
+- d
+-  
+- t
+- h
+- e
+-  
+- A
+- l
+- z
+- h
+- e
+- i
+- m
+- e
+- r
+-  
+- Q
+- S
+- P
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- (
+- 2
+- 0
+- 2
+- 6
+- )
+-  
+- a
+- r
+- e
+-  
+- v
+- e
+- r
+- y
+-  
+- r
+- e
+- c
+- e
+- n
+- t
+-  
+- a
+- n
+- d
+-  
+- l
+- i
+- g
+- h
+- t
+- l
+- y
+-  
+- r
+- e
+- p
+- l
+- i
+- c
+- a
+- t
+- e
+- d
+- ;
+-  
+- t
+- h
+- e
+-  
+- a
+- g
+- g
+- r
+- e
+- g
+- a
+- t
+- i
+- o
+- n
+- -
+- k
+- i
+- n
+- e
+- t
+- i
+- c
+- s
+-  
+- a
+- n
+- d
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- f
+- o
+- u
+- n
+- d
+- a
+- t
+- i
+- o
+- n
+- s
+-  
+- (
+- 2
+- 0
+- 1
+- 6
+- -
+- 2
+- 0
+- 2
+- 0
+- )
+-  
+- a
+- r
+- e
+-  
+- m
+- a
+- t
+- u
+- r
+- e
+-  
+- a
+- n
+- d
+-  
+- s
+- t
+- a
+- b
+- l
+- e
+- .
+-  
+- T
+- h
+- e
+-  
+- '
+- a
+-  
+- f
+- r
+- o
+- n
+- t
+- i
+- e
+- r
+-  
+- a
+- g
+- e
+- n
+- t
+-  
+- c
+- a
+- n
+- n
+- o
+- t
+-  
+- m
+- a
+- t
+- c
+- h
+-  
+- t
+- h
+- i
+- s
+-  
+- 0
+- -
+- s
+- h
+- o
+- t
+- '
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- t
+- o
+- r
+-  
+- i
+- s
+-  
+- s
+- t
+- r
+- o
+- n
+- g
+- e
+- s
+- t
+-  
+- f
+- o
+- r
+-  
+- (
+- a
+- )
+-  
+- g
+- l
+- o
+- b
+- a
+- l
+-  
+- m
+- u
+- l
+- t
+- i
+- -
+- c
+- o
+- n
+- d
+- i
+- t
+- i
+- o
+- n
+-  
+- c
+- o
+- n
+- s
+- t
+- r
+- a
+- i
+- n
+- e
+- d
+-  
+- f
+- i
+- t
+- t
+- i
+- n
+- g
+-  
+- w
+- h
+- e
+- r
+- e
+-  
+- t
+- h
+- e
+-  
+- d
+- i
+- s
+- c
+- i
+- p
+- l
+- i
+- n
+- e
+-  
+- (
+- n
+- o
+- t
+-  
+- t
+- h
+- e
+-  
+- s
+- o
+- l
+- v
+- e
+- r
+- )
+-  
+- i
+- s
+-  
+- t
+- h
+- e
+-  
+- v
+- a
+- l
+- u
+- e
+- ,
+-  
+- a
+- n
+- d
+-  
+- (
+- b
+- )
+-  
+- e
+- n
+- d
+- -
+- t
+- o
+- -
+- e
+- n
+- d
+-  
+- d
+- i
+- f
+- f
+- e
+- r
+- e
+- n
+- t
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- t
+- h
+- r
+- o
+- u
+- g
+- h
+-  
+- a
+-  
+- m
+- e
+- c
+- h
+- a
+- n
+- i
+- s
+- t
+- i
+- c
+-  
+- s
+- i
+- m
+- u
+- l
+- a
+- t
+- o
+- r
+-  
+- c
+- o
+- u
+- p
+- l
+- e
+- d
+-  
+- t
+- o
+-  
+- a
+- n
+-  
+- a
+- m
+- o
+- r
+- t
+- i
+- z
+- e
+- d
+-  
+- p
+- o
+- s
+- t
+- e
+- r
+- i
+- o
+- r
+-  
+- f
+- o
+- r
+-  
+- O
+- E
+- D
+-  
+- —
+-  
+- b
+- o
+- t
+- h
+-  
+- a
+- r
+- e
+-  
+- a
+- r
+- c
+- h
+- i
+- t
+- e
+- c
+- t
+- u
+- r
+- e
+-  
+- t
+- h
+- e
+-  
+- e
+- n
+- g
+- i
+- n
+- e
+-  
+- e
+- m
+- b
+- o
+- d
+- i
+- e
+- s
+-  
+- r
+- a
+- t
+- h
+- e
+- r
+-  
+- t
+- h
+- a
+- n
+-  
+- a
+-  
+- s
+- c
+- r
+- i
+- p
+- t
+-  
+- a
+- n
+-  
+- a
+- g
+- e
+- n
+- t
+-  
+- w
+- r
+- i
+- t
+- e
+- s
+-  
+- o
+- n
+-  
+- d
+- e
+- m
+- a
+- n
+- d
+- .
+
+## Refuted / not supported
+- Existing stochastic-gradient Bayesian optimal experimental design (BOED) methods scale to high-dimensional design problems but have not been integrated with simulation-based inference (SBI) because many SBI simulators are non-differentiable — the exact identifiability gap NUDGE's differentiable engine addresses for mechanistic OED.
+- Before this work, adjoint sensitivity methods tailored to steady-state (pre-equilibration / dose-response) measurements did not exist — the paper fills a concrete gap needed to differentiate through steady-state constraints in large models.
+- Parameter identifiability was assessed via the Fisher Information Matrix (condition number 3492.1) and relative standard errors (all RSE% <= 35%) over 74 parameters, showing that Fisher/identifiability diagnostics are the standard calibration bottleneck in neurodegeneration QSP — the degeneracy NUDGE measures.
+- The published model does NOT perform sensitivity analysis, optimal experimental design, inverse design, or use differentiability — leaving a clear, unoccupied niche where an autodiff/adjoint engine would add genuinely new capability rather than duplicate existing work.
