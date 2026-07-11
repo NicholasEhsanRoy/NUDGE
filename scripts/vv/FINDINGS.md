@@ -1811,3 +1811,79 @@ safe by a MEASURED degeneracy. `nudge fibrillization --mode {single,inhibitor,se
 `service.fibrillization_demo` + Mechanism Card (`NUDGE-METHOD-013`) + `notebooks/Aggregation_Kinetics.ipynb`.
 Real-data validation (AmyloFit / published Aβ42 concentration series) deferred as a later
 `needs_data` gate — the equations + synthetic-first round-trip are the deliverable here.
+
+---
+
+# Matrix-free identifiability — the sloppiness diagnostic that doesn't OOM (`NUDGE-LIM-023`)
+
+The sloppiness/identifiability diagnostic (`inference/sloppiness.py`) classifies a model
+`well-constrained` / `sloppy-but-predictive` / `unidentifiable` from the Fisher-information
+matrix (FIM = `JᵀJ/σ²`) eigenspectrum + a structural-null test. The dense path builds the
+sensitivity matrix `J = ∂(observables)/∂θ` with `jax.jacfwd` — the forward-mode tangent
+fan-out materializes a per-parameter trajectory, so **memory grows ∝ n_params·n_steps·n_states
+and OOMs** on a large ODE network. NUDGE now has a **matrix-free** path
+(`sloppiness_diagnostic_matrixfree` / `analyze_model_matrixfree` / `adjoint.ode_identifiability`)
+that touches the FIM only through matvecs `JᵀJ·v` — one `jax.jvp` (`J·v`) composed with one
+`jax.vjp` (`Jᵀ·w`) — **never forming J**, so its memory is independent of the `n_obs·n_params`
+product. Additive/opt-in; the dense `sloppiness_diagnostic(jac_log, …)` API is unchanged.
+
+## Matrix-free == dense (VERIFIED, tight tolerance)
+
+On the validated small cases (`scripts/vv/sloppiness_validation.py`,
+`tests/inference/test_sloppiness_matrixfree.py`) the matrix-free verdict matches the dense one
+**bit-for-bit** — same label, extreme eigenvalues to rel 1e-6, same null direction:
+
+| case | dense label | matrix-free label | cond (dense≈mf) | null direction |
+|---|---|---|---|---|
+| sum-of-exponentials (sloppy) | sloppy-but-predictive | **sloppy-but-predictive ✓** | 4.42e7 | — |
+| A·e^{-(k₁+k₂)t} (unident.) | unidentifiable | **unidentifiable ✓** | ∞ | `{A:0, k₁:+0.79, k₂:−0.61}` (‖cos‖=1.0) |
+| linear (well-cond.) | well-constrained | **well-constrained ✓** | 201 | — |
+
+The exactness comes from the **dense-via-matvec** route (default `method="auto"` /
+`method="dense"` for `n_params ≤ dense_below`): it reconstructs the `n_params×n_params` FIM from
+`n_params` matvecs and `eigh`'s it — still never forming J or the jacfwd tangent, so it *also*
+dodges the OOM. `fim_matvec` reproduces the dense `JᵀJ/σ²` action to rtol 1e-8.
+
+## Scaling — matrix-free stays FLAT where dense OOMs (MEASURED, `scripts/vv/sloppiness_scaling.py`)
+
+A 77-state gLV network (`make_glv_problem`), 462 observations, sweeping the free-parameter
+count. Dense (`jacfwd` sensitivity + dense diagnostic) runs in a systemd `MemoryMax=2.5 GB`
+cgroup scope so a jacfwd blow-up is a clean OOM-kill (not a host-endangering ~60 GB SIGKILL);
+matrix-free runs the O(n_params + n_obs) **iterative** path. Peak RSS / wall-time:
+
+| n_params | dense (jacfwd) | matrix-free (iterative) |
+|---|---|---|
+| 500 | 4.5 s / 762 MB | 2.5 s / 427 MB |
+| 1000 | 10.2 s / 1145 MB | 2.6 s / 443 MB |
+| 2000 | 29.5 s / 1951 MB | 2.9 s / 432 MB |
+| 4000 | **OOM** (>2.5 GB) | 3.2 s / **419 MB** ✓ |
+| 6000 | **OOM** (>2.5 GB) | 3.5 s / **425 MB** ✓ |
+
+**Dense peak RSS grows ∝ n_params** (762 → 1145 → 1951 MB) and OOMs at **n_params = 4000**;
+matrix-free is **flat at 419–443 MB (max/min 1.06×)** and completes **6000 params in 3.5 s**,
+returning the correct `unidentifiable` verdict (agreeing with dense at every size where dense
+survived). This is the dense-jacfwd OOM the ad-hoc script hits (~2000/6000 params → ~59 GB at
+the documented 2000-*state* scale, extrapolating the measured ∝n_params·n_steps·n_states slope),
+turned into a flat-memory analysis.
+
+## The honest bound — smallest eigenvalues need care (`NUDGE-LIM-023`, fail-safe)
+
+An iterative Krylov eigensolver is reliable for the LARGEST eigenvalues but **NOT** for the
+SMALLEST of an ill-conditioned FIM — and the smallest eigenvalue *is* the sloppy/near-null
+direction. MEASURED on a rank-deficient gLV (120 params, 17 true nulls at ≈1e-14):
+`eigsh(which='SA')` returned a **large** eigenvalue as "smallest" (λ_min ≈ 2.3e5 vs true ≈0,
+which alone would MISLABEL it `well-constrained`), and unpreconditioned LOBPCG returned ≈1e-3
+for true ≈1e-14 — neither reaches the null space, and both are slow (~2 min). So the iterative
+path **fails safe, never confidently wrong**: (1) when `n_params > n_obs` the FIM is
+rank-deficient BY SHAPE (rank ≤ n_obs) → `unidentifiable` certified from shape alone (the
+realistic large-network regime — fast, exact, and what the scaling table above exercises); (2)
+any iterative smallest eigenpair is **Rayleigh-residual verified** (`‖FIM·v − λv‖/λ_max`) and
+trusted only if converged; (3) if the smallest end doesn't converge, the diagnostic
+**ABSTAINS** (`unidentifiable`, with an explicit non-convergence reason) rather than assert
+identifiability it can't verify. Verified: the 120-param case → `method="dense"` recovers all
+17 nulls exactly (`unidentifiable`); `method="iterative"` → fail-safe abstention (never
+`well-constrained`). The definitive verdict on a moderate-size model is the exact dense-via-
+matvec path; the O(n_params) iterative path is the flat-memory option for enormous `n_params`,
+where the shape rank-deficiency carries the verdict. Guarded by
+`tests/inference/test_sloppiness_matrixfree.py` (fast: dense==matrix-free on the validated
+cases + the `fim_matvec` action; slow: the gLV shape-null + iterative fail-safe).

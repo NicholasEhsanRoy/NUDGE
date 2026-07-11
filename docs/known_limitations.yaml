@@ -902,3 +902,53 @@ anomalies:
       seeded-anchor requirement, the balanced-regime caveat for k_n, and the elongation ⇄
       monomer-sequestration ambiguity are the honest bounds; the tests are the regression
       that keeps the abstention earned rather than asserted.
+
+  - anomaly_id: NUDGE-LIM-023
+    title: Matrix-free identifiability cannot certify the smallest FIM eigenvalue by iteration
+    description: >-
+      The matrix-free sloppiness/identifiability path (sloppiness_diagnostic_matrixfree /
+      analyze_model_matrixfree / adjoint.ode_identifiability) computes the Fisher-information
+      (FIM = JᵀJ/σ²) eigenspectrum using ONLY matrix-vector products JᵀJ·v — one jax.jvp
+      (J·v) composed with one jax.vjp (Jᵀ·w) — so it never materializes the sensitivity matrix
+      J and does NOT OOM the way the dense jacfwd path does on a large ODE network (MEASURED,
+      scripts/vv/sloppiness_scaling.py: a 77-state gLV, dense jacfwd OOMs at ~4000–6000 free
+      params under a 2.5 GB cap while the matrix-free path stays flat at ~0.42 GB and ~3 s to
+      6000 params). The LIMITATION: an iterative Krylov eigensolver (Lanczos eigsh, LOBPCG) is
+      reliable for the LARGEST eigenvalues but NOT for the SMALLEST eigenvalues of an
+      ill-conditioned FIM — and the smallest eigenvalue / its eigenvector is exactly the
+      sloppy/near-null direction the diagnostic reports. Measured on a rank-deficient gLV
+      (120 params, 17 true nulls): eigsh which='SA' returned a LARGE eigenvalue as "smallest"
+      (and would mislabel a rank-deficient model well-constrained), and unpreconditioned
+      LOBPCG returned ~1e-3 for true ~1e-14 eigenvalues — neither reaches the null space. NUDGE
+      therefore does NOT trust an iterative smallest-eigenvalue estimate blindly; it FAILS
+      SAFE along three lines, so the iterative path is never confidently wrong: (1) when
+      n_params > n_obs the FIM is rank-deficient BY SHAPE (rank ≤ n_obs), so unidentifiable is
+      certified from shape alone — the realistic large-network regime, fast and exact; (2)
+      every iteratively-found smallest eigenpair is Rayleigh-residual verified (‖FIM·v − λv‖ /
+      λ_max) and only trusted if it converged; (3) if the smallest end does not converge and
+      shape does not settle it, the diagnostic ABSTAINS (label unidentifiable, with an explicit
+      non-convergence reason) rather than assert identifiability it could not verify. The
+      DEFINITIVE verdict on a moderate-n_params model comes from the exact dense-via-matvec
+      route (method='dense' / auto below dense_below): it reconstructs the n_params×n_params
+      FIM from n_params matvecs and eigh's it — still never forming J or the jacfwd tangent
+      fan-out — matching the dense sloppiness_diagnostic bit-for-bit (VERIFIED,
+      tests/inference/test_sloppiness_matrixfree.py: same label, eigenvalues, and null
+      direction on the sum-of-exponentials sloppy case and the A·e^{-(k₁+k₂)t} unidentifiable
+      case); its cost is O(n_params²) memory, so it is the recommended path only until
+      n_params is enormous, above which the O(n_params + n_obs) iterative path (top-k + shape
+      + fail-safe) takes over. Related: NUDGE-METHOD (sloppiness diagnostic), the adjoint
+      scaling capability, FINDINGS "Matrix-free identifiability".
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      Handled correctly today (0 confident-wrong): the dangerous error would be labelling a
+      rank-deficient / near-unidentifiable model "well-constrained" or "sloppy-but-predictive"
+      off an unconverged iterative smallest eigenvalue — which is precisely what the shape
+      test, the Rayleigh-residual verification, and the non-convergence abstention prevent. The
+      guarantee is asymmetric and honest: proving a SMALL eigenvalue (a null / sloppy
+      direction, hence unidentifiable) is safe from any low Rayleigh quotient, but proving a
+      LARGE smallest eigenvalue (identifiability) needs a converged, verified smallest end, so
+      when the iterative solve cannot deliver that the path abstains (potentially
+      over-abstaining, never over-claiming). A user needing a definitive identifiable verdict
+      on a moderate-size model should use method='dense' (exact). The regression tests lock the
+      dense==matrix-free agreement and the iterative fail-safe so the abstention stays earned.

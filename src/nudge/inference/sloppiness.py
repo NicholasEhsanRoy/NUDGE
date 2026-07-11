@@ -55,6 +55,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -67,7 +68,10 @@ __all__ = [
     "relative_sensitivity_jacobian",
     "fisher_information",
     "sloppiness_diagnostic",
+    "sloppiness_diagnostic_matrixfree",
     "analyze_model",
+    "analyze_model_matrixfree",
+    "fim_matvec",
     "sum_of_exponentials_predict",
     "redundant_exponential_predict",
     "well_conditioned_predict",
@@ -225,6 +229,67 @@ def _guarded_inverse(fim: np.ndarray, ridge: float) -> np.ndarray:
     return (evecs * inv) @ evecs.T
 
 
+def _classify_verdict(
+    *,
+    n_null: int,
+    is_sloppy: bool,
+    predictive: bool,
+    span_decades: float,
+    cond: float,
+    rel_pred_std: float,
+    pred_rel_tol: float,
+    frac: float,
+    rank_rtol: float,
+    null_hint: str,
+) -> tuple[str, str, str | None]:
+    """The three-way verdict tree, shared by the dense and matrix-free diagnostics.
+
+    Pure function of the measured summary statistics — the *identical* logic and wording
+    is used whether the FIM spectrum was obtained by a dense ``eigh`` or by a matrix-free
+    iterative eigensolver, so the two paths return the same label/reason on the same model.
+    """
+    fim_greedy_warning: str | None = None
+    if n_null > 0:
+        label = "unidentifiable"
+        reason = (
+            f"STRUCTURAL non-identifiability: {n_null} sensitivity-matrix null "
+            f"direction(s) (singular value/σ_max < {rank_rtol:g}) — a parameter "
+            "combination the data cannot recover no matter how much is collected. "
+            + (null_hint or "")
+        )
+    elif is_sloppy and predictive:
+        label = "sloppy-but-predictive"
+        reason = (
+            f"SLOPPY but PREDICTIVE: the Fisher spectrum spans {span_decades:.1f} decades "
+            f"(cond {cond:.2e}) — individual parameters are poorly constrained — yet the "
+            f"prediction is tight (max relative prediction std {rel_pred_std:.2%} < "
+            f"{pred_rel_tol:.0%}) and there is NO structural null. The model is usable: "
+            "do not abstain, and do not naively Fisher-optimize the sloppy directions."
+        )
+        fim_greedy_warning = (
+            f"Only {frac:.1%} of the prediction variance comes from the sloppy directions, "
+            "so a Fisher-greedy experiment that constrains them adds ~no predictive value "
+            "and risks destroying predictivity by over-fitting previously-loose parameters "
+            "where model discrepancy lives (deep-research finding 6)."
+        )
+    elif is_sloppy and not predictive:
+        label = "unidentifiable"
+        reason = (
+            f"PRACTICALLY non-identifiable: the Fisher spectrum spans {span_decades:.1f} "
+            f"decades AND the loose directions make predictions loose (max relative "
+            f"prediction std {rel_pred_std:.2%} ≥ {pred_rel_tol:.0%}) — parameters not "
+            "recoverable and predictions not trustworthy. Abstain."
+        )
+    else:
+        label = "well-constrained"
+        reason = (
+            f"WELL-CONSTRAINED: the Fisher spectrum spans only {span_decades:.1f} decades "
+            f"(cond {cond:.2e}); every parameter is individually identifiable and the "
+            f"prediction is tight (max relative prediction std {rel_pred_std:.2%})."
+        )
+    return label, reason, fim_greedy_warning
+
+
 def sloppiness_diagnostic(
     jac_log: np.ndarray,
     y: np.ndarray,
@@ -316,45 +381,18 @@ def sloppiness_diagnostic(
     )
 
     # --- the verdict ---------------------------------------------------------------- #
-    fim_greedy_warning: str | None = None
-    if n_null > 0:
-        label = "unidentifiable"
-        reason = (
-            f"STRUCTURAL non-identifiability: {n_null} sensitivity-matrix null "
-            f"direction(s) (singular value/σ_max < {rank_rtol:g}) — a parameter "
-            "combination the data cannot recover no matter how much is collected. "
-            + (null_dirs[0].hint if null_dirs else "")
-        )
-    elif is_sloppy and predictive:
-        label = "sloppy-but-predictive"
-        reason = (
-            f"SLOPPY but PREDICTIVE: the Fisher spectrum spans {span_decades:.1f} decades "
-            f"(cond {cond:.2e}) — individual parameters are poorly constrained — yet the "
-            f"prediction is tight (max relative prediction std {rel_pred_std:.2%} < "
-            f"{pred_rel_tol:.0%}) and there is NO structural null. The model is usable: "
-            "do not abstain, and do not naively Fisher-optimize the sloppy directions."
-        )
-        fim_greedy_warning = (
-            f"Only {frac:.1%} of the prediction variance comes from the sloppy directions, "
-            "so a Fisher-greedy experiment that constrains them adds ~no predictive value "
-            "and risks destroying predictivity by over-fitting previously-loose parameters "
-            "where model discrepancy lives (deep-research finding 6)."
-        )
-    elif is_sloppy and not predictive:
-        label = "unidentifiable"
-        reason = (
-            f"PRACTICALLY non-identifiable: the Fisher spectrum spans {span_decades:.1f} "
-            f"decades AND the loose directions make predictions loose (max relative "
-            f"prediction std {rel_pred_std:.2%} ≥ {pred_rel_tol:.0%}) — parameters not "
-            "recoverable and predictions not trustworthy. Abstain."
-        )
-    else:
-        label = "well-constrained"
-        reason = (
-            f"WELL-CONSTRAINED: the Fisher spectrum spans only {span_decades:.1f} decades "
-            f"(cond {cond:.2e}); every parameter is individually identifiable and the "
-            f"prediction is tight (max relative prediction std {rel_pred_std:.2%})."
-        )
+    label, reason, fim_greedy_warning = _classify_verdict(
+        n_null=n_null,
+        is_sloppy=is_sloppy,
+        predictive=predictive,
+        span_decades=span_decades,
+        cond=cond,
+        rel_pred_std=rel_pred_std,
+        pred_rel_tol=pred_rel_tol,
+        frac=frac,
+        rank_rtol=rank_rtol,
+        null_hint=(null_dirs[0].hint if null_dirs else ""),
+    )
 
     naive_verdict = (
         "unidentifiable"
@@ -471,4 +509,416 @@ def analyze_model(
         jac_pred_log=jac_pred_log, y_pred=y_pred,
         rank_rtol=rank_rtol, sloppy_decade_threshold=sloppy_decade_threshold,
         pred_rel_tol=pred_rel_tol, naive_cond_threshold=naive_cond_threshold,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# the MATRIX-FREE path — the SAME verdict without ever materializing J
+# --------------------------------------------------------------------------- #
+# The dense path (above) builds ``J = ∂(observables)/∂θ`` with ``jax.jacfwd`` — an
+# O(n_obs · n_params) array whose forward-mode intermediates also scale with n_params. For a
+# large mechanistic ODE network that array (and jacfwd's tangent fan-out) OOMs (measured:
+# dense/jacfwd SIGKILL'd at ~6000 params on a 62 GB box). The matrix-free path below computes
+# the SAME Fisher-information (FIM = JᵀJ/σ²) eigenspectrum + verdict using ONLY matrix-vector
+# products ``JᵀJ·v`` — one ``jax.jvp`` (a single forward tangent, ``J_log·v``) composed with
+# one ``jax.vjp`` (a single reverse cotangent, ``J_logᵀ·w``) — never forming J. Peak memory is
+# O(n_params + n_obs + reverse-mode tape), independent of the *product* n_obs·n_params.
+
+
+def _as_working(theta: np.ndarray | Sequence[float]) -> Array:
+    """A device array in the working precision — float64 iff the input is float64 (mirrors
+    :func:`relative_sensitivity_jacobian`). NOTE: float64 requires ``jax_enable_x64``; without
+    it JAX silently downcasts to float32 and the smallest eigenvalues lose resolution."""
+    arr = np.asarray(theta)
+    if arr.dtype == np.float64:
+        return jnp.asarray(arr, jnp.float64)
+    return jnp.asarray(arr, jnp.float32)
+
+
+def _build_matvecs(
+    predict_fn: Callable[[Array], Array], theta_j: Array, sigma: float
+) -> tuple[Callable[[Array], Array], Callable[[Array], Array]]:
+    """Return ``(fim_mv, jvp_log)`` as jitted JAX closures on **log-parameter** vectors.
+
+    ``fim_mv(v) = (JᵀJ/σ²)·v`` (the FIM matvec); ``jvp_log(v) = J_log·v`` (a forward tangent,
+    the prediction-space image of a parameter direction). Both use a single ``jvp`` / ``vjp``,
+    so their memory is independent of the parameter count.
+    """
+    inv_s2 = 1.0 / (float(sigma) ** 2)
+
+    @jax.jit
+    def jvp_log(v: Array) -> Array:
+        # J_log·v = (∂y/∂θ)·(θ ⊙ v) — one forward tangent.
+        return jax.jvp(predict_fn, (theta_j,), (theta_j * v,))[1]
+
+    @jax.jit
+    def fim_mv(v: Array) -> Array:
+        _y, jv = jax.jvp(predict_fn, (theta_j,), (theta_j * v,))  # J_log·v  (n_obs,)
+        _y2, vjp_fn = jax.vjp(predict_fn, theta_j)
+        (jt,) = vjp_fn(jv)  # Jᵀ·(J_log·v)  (n_params,)
+        return (theta_j * jt) * inv_s2  # J_logᵀ·(J_log·v)/σ²
+
+    return fim_mv, jvp_log
+
+
+def fim_matvec(
+    predict_fn: Callable[[Array], Array], theta: np.ndarray | Sequence[float], sigma: float
+) -> Callable[[np.ndarray], np.ndarray]:
+    """A matrix-free FIM matvec ``v -> (JᵀJ/σ²)·v`` (log-parameter space), numpy-in/numpy-out.
+
+    Never forms J: one ``jax.jvp`` (``J_log·v``) composed with one ``jax.vjp`` (``J_logᵀ·w``).
+    The returned callable is exactly what drives an iterative eigensolver
+    (``scipy.sparse.linalg.eigsh`` over a ``LinearOperator``) — see
+    :func:`sloppiness_diagnostic_matrixfree`.
+    """
+    theta_j = _as_working(theta)
+    fim_mv, _ = _build_matvecs(predict_fn, theta_j, sigma)
+    out_dtype = np.float64 if theta_j.dtype == jnp.float64 else np.float32
+
+    def matvec(v: np.ndarray) -> np.ndarray:
+        return np.asarray(fim_mv(jnp.asarray(v, theta_j.dtype)), dtype=out_dtype)
+
+    return matvec
+
+
+def _dense_spectrum_from_matvec(
+    fim_mv: Callable[[Array], Array], n: int, dtype: Any
+) -> tuple[np.ndarray, np.ndarray]:
+    """FULL spectrum via ``n`` matvecs (reconstruct the n×n FIM column-by-column, then
+    ``eigh``). Uses ONLY the matvec — never forms J. For small ``n`` this is exact and makes
+    the matrix-free verdict match the dense one bit-for-bit; O(n²) memory bounds it to small n.
+    """
+    cols = np.asarray(jax.vmap(fim_mv)(jnp.eye(n, dtype=dtype)))  # (n, n): column i = FIM·e_i
+    fim = 0.5 * (cols + cols.T)
+    evals, evecs = np.linalg.eigh(fim)
+    return np.asarray(evals, np.float64), np.asarray(evecs, np.float64)
+
+
+def _topk_eigsh(
+    matvec_np: Callable[[np.ndarray], np.ndarray], n: int, k: int, dtype: Any
+) -> tuple[np.ndarray, np.ndarray]:
+    """The **top-``k``** FIM eigenpairs (``which='LM'``) via Lanczos over a matrix-free
+    ``LinearOperator`` — never forms the FIM. Lanczos is fast and reliable for the LARGEST
+    eigenvalues, so this pins ``λ_max`` (and the stiff directions) accurately."""
+    from scipy.sparse.linalg import ArpackNoConvergence, LinearOperator, eigsh
+
+    op = LinearOperator((n, n), matvec=matvec_np, dtype=dtype)  # type: ignore  # noqa: PGH003
+    k = int(np.clip(k, 1, n - 2))
+    ncv = int(min(n, max(2 * k + 1, 20)))
+    try:
+        w, v = eigsh(op, k=k, which="LM", ncv=ncv, maxiter=n * 20, tol=0)
+    except ArpackNoConvergence as exc:  # keep whatever converged
+        w, v = exc.eigenvalues, exc.eigenvectors
+    order = np.argsort(w)
+    return np.asarray(w[order], np.float64), np.asarray(v[:, order], np.float64)
+
+
+def _verified_smallest_eigsh(
+    matvec_np: Callable[[np.ndarray], np.ndarray],
+    n: int,
+    k: int,
+    lam_max: float,
+    dtype: Any,
+    res_tol: float = 1e-3,
+) -> tuple[np.ndarray, np.ndarray, bool]:
+    """Best-effort **smallest-``k``** FIM eigenpairs (``which='SA'``), each **verified** by its
+    Rayleigh residual ``‖FIM·v − λv‖/λ_max``.
+
+    Lanczos is UNRELIABLE for the smallest eigenvalues of an ill-conditioned FIM (measured: it
+    can return a large eigenvalue as "smallest" and mislabel a rank-deficient model
+    well-constrained). So every returned pair is checked against the matvec itself; only pairs
+    whose residual is below ``res_tol`` are trusted. Returns ``(evals, evecs, converged)`` for
+    the trusted pairs; ``converged=False`` means the smallest end could NOT be certified (the
+    caller must then fail safe — never assert identifiability it did not verify).
+    """
+    from scipy.sparse.linalg import ArpackNoConvergence, LinearOperator, eigsh
+
+    op = LinearOperator((n, n), matvec=matvec_np, dtype=dtype)  # type: ignore  # noqa: PGH003
+    k = int(np.clip(k, 1, n - 2))
+    ncv = int(min(n, max(2 * k + 1, 20)))
+    try:
+        w, v = eigsh(op, k=k, which="SA", ncv=ncv, maxiter=n * 40, tol=0)
+    except ArpackNoConvergence as exc:
+        w, v = exc.eigenvalues, exc.eigenvectors
+    if w is None or np.size(w) == 0:
+        return np.empty(0), np.empty((n, 0)), False
+    w = np.atleast_1d(np.asarray(w, np.float64))
+    v = np.asarray(v, np.float64).reshape(n, -1)
+    scale = max(lam_max, 1e-300)
+    keep_w, keep_v = [], []
+    for i in range(w.shape[0]):
+        vi = v[:, i]
+        nv = float(np.linalg.norm(vi))
+        if nv == 0.0:
+            continue
+        vi = vi / nv
+        resid = float(np.linalg.norm(matvec_np(vi) - w[i] * vi)) / scale
+        if resid < res_tol:
+            keep_w.append(max(w[i], 0.0))
+            keep_v.append(vi)
+    if not keep_w:
+        return np.empty(0), np.empty((n, 0)), False
+    order = np.argsort(keep_w)
+    kw = np.asarray(keep_w, np.float64)[order]
+    kv = np.stack(keep_v, axis=1)[:, order]
+    return kw, kv, True
+
+
+def sloppiness_diagnostic_matrixfree(
+    predict_fn: Callable[[Array], Array],
+    theta: np.ndarray | Sequence[float],
+    sigma: float,
+    param_names: Sequence[str] | None = None,
+    *,
+    predict_of_interest: Callable[[Array], Array] | None = None,
+    n_eigs: int = 6,
+    rank_rtol: float = 1e-7,
+    sloppy_decade_threshold: float = 3.0,
+    pred_rel_tol: float = 0.05,
+    naive_cond_threshold: float = 1e6,
+    ridge: float = 1e-10,
+    method: str = "auto",
+    dense_below: int = 256,
+) -> SloppinessReport:
+    """Matrix-free twin of :func:`sloppiness_diagnostic`: the SAME :class:`SloppinessReport`
+    (label / null direction / spectrum / verdict) from a differentiable ``predict_fn`` —
+    **without ever materializing the sensitivity matrix J** (so it does not OOM the way the
+    dense ``jacfwd`` path does on a large ODE network). The FIM (``JᵀJ/σ²``) is touched only
+    through matvecs (:func:`fim_matvec`: one ``jvp`` + one ``vjp``).
+
+    Two matrix-free routes, chosen by ``method``:
+
+    - ``"dense"`` (and ``"auto"`` when ``n_params ≤ dense_below``) — reconstruct the exact
+      ``n_params × n_params`` FIM from ``n_params`` matvecs and ``eigh`` it. **Exact** full
+      spectrum, so it matches :func:`sloppiness_diagnostic` bit-for-bit; O(n_params²) memory,
+      but it *still* avoids the dense-J OOM (the matvec never forms J or the ``jacfwd`` tangent
+      fan-out). The recommended path whenever ``n_params`` is not enormous.
+    - ``"iterative"`` (and ``"auto"`` when ``n_params > dense_below``) — an iterative
+      eigensolver (Lanczos ``eigsh``) over the matvec ``LinearOperator``, O(n_params + n_obs)
+      memory. Lanczos is reliable for the LARGEST eigenvalues (``λ_max`` + stiff directions).
+      The **smallest** eigenvalues of an ill-conditioned FIM are NOT reliably reachable by a
+      matrix-free Krylov method (measured: ``eigsh``/LOBPCG can return a large eigenvalue as
+      "smallest" and mislabel a rank-deficient model well-constrained), so the smallest end is
+      handled fail-safe:
+
+        * ``n_params > n_obs`` ⇒ the FIM is rank-deficient **by shape** (rank ≤ n_obs) ⇒
+          ``unidentifiable``, certified without any smallest-eigenvalue solve;
+        * otherwise the smallest eigenpairs are computed best-effort and **Rayleigh-residual
+          verified**; if none converge, the diagnostic **abstains** (``unidentifiable`` with an
+          explicit non-convergence reason) rather than assert identifiability it cannot verify.
+
+    **Honest bounds of the iterative path.** ``λ_max`` / the stiff spectrum are accurate; the
+    condition number / span use ``λ_min`` from the verified-smallest (or ``0`` for a shape
+    null). The prediction-variance propagation sums over the computed eigendirections only —
+    because parameter-space variance ``Σ = Σ_i v_iv_iᵀ/λ_i`` is dominated by the SMALLEST
+    eigenvalues, the reported ``max_prediction_std`` is a tight lower bound. ``fim_eigenvalues``
+    holds the computed subset, not the full spectrum, in the iterative case. For a definitive
+    verdict on a moderate ``n_params`` prefer ``method="dense"`` (exact).
+    """
+    theta_arr = np.asarray(theta, dtype=np.float64)
+    n_theta = int(theta_arr.shape[0])
+    names = (
+        tuple(param_names) if param_names is not None else tuple(f"θ{i}" for i in range(n_theta))
+    )
+    theta_j = _as_working(theta_arr)
+    out_dtype = np.float64 if theta_j.dtype == jnp.float64 else np.float32
+
+    fim_mv, jvp_log = _build_matvecs(predict_fn, theta_j, sigma)
+    y = np.asarray(predict_fn(theta_j), dtype=np.float64)
+    n_obs = int(y.size)
+
+    poi = predict_fn if predict_of_interest is None else predict_of_interest
+    if predict_of_interest is None:
+        jvp_pred, y_pred = jvp_log, y
+    else:
+        _, jvp_pred = _build_matvecs(poi, theta_j, sigma)
+        y_pred = np.asarray(poi(theta_j), dtype=np.float64)
+
+    # --- the FIM spectrum, matrix-free ------------------------------------------------ #
+    shape_null = max(n_theta - n_obs, 0)  # n_params > n_obs ⇒ rank ≤ n_obs ⇒ exact nulls
+    use_iterative = method == "iterative" or (method == "auto" and n_theta > dense_below)
+    if use_iterative and n_theta <= 2 * n_eigs + 2:
+        use_iterative = False  # too few params for a meaningful extremal split → exact
+    if method == "dense":
+        use_iterative = False
+
+    smallest_certified = True
+    if use_iterative:
+        # RELIABLE end: top-k via Lanczos 'LM' (anchors λ_max + the stiff directions).
+        matvec_np = fim_matvec(predict_fn, theta_arr, sigma)
+        w_top, v_top = _topk_eigsh(matvec_np, n_theta, n_eigs, out_dtype)
+        lam_max = float(w_top[-1]) if w_top.size else 0.0
+        if shape_null > 0:
+            # n_params > n_obs: the FIM is rank-deficient by SHAPE — unidentifiable, exactly,
+            # WITHOUT the (slow, unreliable) smallest-eigenvalue solve. λ_min ≡ 0.
+            evals = np.concatenate([[0.0], w_top])
+            evecs = np.concatenate([np.zeros((n_theta, 1)), v_top], axis=1)
+        else:
+            # HARD end: smallest eigenvalues, best-effort AND residual-verified.
+            w_sa, v_sa, smallest_certified = _verified_smallest_eigsh(
+                matvec_np, n_theta, n_eigs, lam_max, out_dtype
+            )
+            evals = np.concatenate([w_sa, w_top]) if w_sa.size else w_top
+            evecs = np.concatenate([v_sa, v_top], axis=1) if w_sa.size else v_top
+        full_spectrum = False
+    else:
+        evals, evecs = _dense_spectrum_from_matvec(fim_mv, n_theta, theta_j.dtype)
+        full_spectrum = True
+
+    evals = np.clip(evals, 0.0, None)
+    order = np.argsort(evals)
+    evals, evecs = evals[order], evecs[:, order]
+    lam_min = float(evals[0])
+    lam_max = float(evals[-1])
+    cond = np.inf if lam_min <= 0.0 else lam_max / lam_min
+    span_decades = float(np.log10(lam_max / lam_min)) if lam_min > 0.0 else np.inf
+
+    # --- structural nulls ------------------------------------------------------------- #
+    # FIM eigenvalue λ = (singular value)²/σ², so the dense ``sv/sv_max < rank_rtol`` test is
+    # ``λ/λ_max < rank_rtol²``. Plus the shape deficiency (n_params > n_obs).
+    lam_floor_ratio = rank_rtol**2
+    computed_null = int(np.sum(evals < lam_floor_ratio * lam_max)) if lam_max > 0.0 else evals.size
+    n_null = shape_null if shape_null > 0 else computed_null
+
+    # null directions: only from VERIFIED near-null eigenvectors (residual-checked in the
+    # iterative path; exact in the dense path). A shape-null (n_params > n_obs) is certain but
+    # we don't fabricate a specific vector for its huge null space — the verdict + count carry it.
+    null_idx = list(np.where(evals < lam_floor_ratio * lam_max)[0]) if lam_max > 0.0 else []
+    sigma_f = float(sigma)
+    null_dirs: list[NullDirection] = []
+    for j in null_idx[:n_eigs]:
+        v = np.asarray(evecs[:, j], dtype=np.float64)
+        if float(np.linalg.norm(v)) == 0.0:  # the shape-null placeholder slot
+            continue
+        dom = int(np.argmax(np.abs(v)))
+        if v[dom] < 0.0:
+            v = -v
+        loadings = {names[i]: float(v[i]) for i in range(n_theta)}
+        null_dirs.append(
+            NullDirection(
+                vector=v,
+                param_loadings=loadings,
+                prediction_sensitivity=float(sigma_f * np.sqrt(max(float(evals[j]), 0.0))),
+                hint=_null_hint(loadings),
+            )
+        )
+
+    # --- prediction uncertainty (matrix-free covariance propagation) ------------------ #
+    # pred_var[o] = Σ_i (1/max(λ_i, floor)) · (J_pred·v_i)²[o]; dominated by small λ_i.
+    floor = ridge * lam_max if lam_max > 0.0 else ridge
+    pred_var = np.zeros(y_pred.size, dtype=np.float64)
+    contrib = np.zeros(evals.size, dtype=np.float64)  # per-direction total pred variance
+    for i in range(evals.size):
+        vi = jnp.asarray(evecs[:, i], theta_j.dtype)
+        jvi = np.asarray(jvp_pred(vi), dtype=np.float64)  # J_pred·v_i in prediction space
+        inv_i = 1.0 / max(float(evals[i]), floor)
+        pred_var += inv_i * jvi**2
+        contrib[i] = inv_i * float(np.sum(jvi**2))
+    max_pred_std = float(np.sqrt(pred_var.max())) if pred_var.size else 0.0
+    pred_rms = float(np.sqrt(np.mean(y_pred**2))) + 1e-12
+    rel_pred_std = max_pred_std / pred_rms
+    predictive = rel_pred_std < pred_rel_tol
+
+    total_contrib = float(contrib.sum())
+    sloppy_mask = evals < (lam_max * 10.0 ** (-sloppy_decade_threshold))
+    frac = float(contrib[sloppy_mask].sum() / total_contrib) if total_contrib > 0.0 else 0.0
+
+    is_sloppy = span_decades > sloppy_decade_threshold
+    n_sloppy = int(np.sum(sloppy_mask)) + (0 if full_spectrum else shape_null)
+
+    # --- the verdict (shared with the dense path) ------------------------------------- #
+    if not smallest_certified:
+        # FAIL-SAFE: the iterative smallest-eigenvalue solve did not converge (the FIM is
+        # ill-conditioned; Lanczos/LOBPCG cannot certify the smallest eigenvalue matrix-free).
+        # We must NOT assert identifiability we could not verify — abstain instead.
+        label = "unidentifiable"
+        reason = (
+            "MATRIX-FREE ABSTENTION: the iterative smallest-eigenvalue solve did NOT converge "
+            f"at n_params={n_theta} (the Fisher matrix is ill-conditioned, and Lanczos/LOBPCG "
+            "cannot certify the smallest eigenvalue from matvecs alone). NUDGE will not claim "
+            "identifiability it has not verified — rerun with method='dense' for the exact "
+            "spectrum (feasible per-matvec; O(n_params²) memory), or add observations."
+        )
+        fim_greedy_warning = None
+    else:
+        label, reason, fim_greedy_warning = _classify_verdict(
+            n_null=n_null,
+            is_sloppy=is_sloppy,
+            predictive=predictive,
+            span_decades=span_decades,
+            cond=cond,
+            rel_pred_std=rel_pred_std,
+            pred_rel_tol=pred_rel_tol,
+            frac=frac,
+            rank_rtol=rank_rtol,
+            null_hint=(null_dirs[0].hint if null_dirs else ""),
+        )
+
+    naive_verdict = (
+        "unidentifiable"
+        if (not np.isfinite(cond)) or cond > naive_cond_threshold
+        else "identifiable"
+    )
+    naive_is_wrong = naive_verdict == "unidentifiable" and label in (
+        "sloppy-but-predictive",
+        "well-constrained",
+    )
+
+    return SloppinessReport(
+        label=label,
+        param_names=names,
+        fim_eigenvalues=evals,
+        cond_number=float(cond),
+        spectral_span_decades=span_decades,
+        smallest_eigenvalue=lam_min,
+        largest_eigenvalue=lam_max,
+        n_sloppy_dims=n_sloppy,
+        n_null_dims=n_null,
+        is_sloppy=is_sloppy,
+        predictive=predictive,
+        max_prediction_std=max_pred_std,
+        relative_prediction_std=rel_pred_std,
+        sloppy_prediction_variance_fraction=frac,
+        naive_verdict=naive_verdict,
+        naive_is_wrong=naive_is_wrong,
+        null_directions=tuple(null_dirs),
+        reason=reason,
+        fim_greedy_warning=fim_greedy_warning,
+    )
+
+
+def analyze_model_matrixfree(
+    predict_fn: Callable[[Array], Array],
+    theta: np.ndarray | Sequence[float] | None = None,
+    *,
+    sigma: float,
+    param_names: Sequence[str] | None = None,
+    predict_of_interest: Callable[[Array], Array] | None = None,
+    n_eigs: int = 6,
+    rank_rtol: float = 1e-7,
+    sloppy_decade_threshold: float = 3.0,
+    pred_rel_tol: float = 0.05,
+    naive_cond_threshold: float = 1e6,
+    method: str = "auto",
+    dense_below: int = 256,
+) -> SloppinessReport:
+    """End-to-end matrix-free classify (twin of :func:`analyze_model`): read ``theta`` /
+    ``param_names`` from the model (``predict_fn.theta0`` / ``.names`` when present) and run
+    the matrix-free diagnostic. Scales to large ODE networks that OOM the dense jacfwd path.
+    """
+    if theta is None:
+        theta = getattr(predict_fn, "theta0", None)
+        if theta is None:
+            raise ValueError("theta not given and predict_fn has no .theta0")
+    theta_arr = np.asarray(theta, dtype=np.float64)
+    if param_names is None:
+        param_names = getattr(predict_fn, "names", None) or [
+            f"theta{i}" for i in range(theta_arr.shape[0])
+        ]
+    return sloppiness_diagnostic_matrixfree(
+        predict_fn, theta_arr, sigma, param_names,
+        predict_of_interest=predict_of_interest, n_eigs=n_eigs,
+        rank_rtol=rank_rtol, sloppy_decade_threshold=sloppy_decade_threshold,
+        pred_rel_tol=pred_rel_tol, naive_cond_threshold=naive_cond_threshold,
+        method=method, dense_below=dense_below,
     )

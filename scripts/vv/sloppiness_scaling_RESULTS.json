@@ -1,0 +1,235 @@
+{
+  "n_species": 77,
+  "sweep": [
+    500,
+    1000,
+    2000,
+    4000,
+    6000
+  ],
+  "dense_cap_gb": 2.5,
+  "rows": [
+    {
+      "method": "dense",
+      "n_theta": 500,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 4.5417640329978894,
+      "peak_rss_mb": 761.57421875
+    },
+    {
+      "method": "matrixfree",
+      "n_theta": 500,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 2.513335196999833,
+      "peak_rss_mb": 427.3046875
+    },
+    {
+      "method": "dense",
+      "n_theta": 1000,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 10.200631430001522,
+      "peak_rss_mb": 1145.359375
+    },
+    {
+      "method": "matrixfree",
+      "n_theta": 1000,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 2.589329900998564,
+      "peak_rss_mb": 442.9765625
+    },
+    {
+      "method": "dense",
+      "n_theta": 2000,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 29.457681818996207,
+      "peak_rss_mb": 1951.19140625
+    },
+    {
+      "method": "matrixfree",
+      "n_theta": 2000,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 2.935594898997806,
+      "peak_rss_mb": 432.1171875
+    },
+    {
+      "method": "dense",
+      "n_theta": 4000,
+      "n_species": 77,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_theta": 4000,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 3.1585026259999722,
+      "peak_rss_mb": 418.765625
+    },
+    {
+      "method": "dense",
+      "n_theta": 6000,
+      "n_species": 77,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_theta": 6000,
+      "n_species": 77,
+      "n_obs": 462,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 3.4631643039974733,
+      "peak_rss_mb": 425.296875
+    }
+  ],
+  "summary": [
+    {
+      "n_theta": 500,
+      "dense": {
+        "method": "dense",
+        "n_theta": 500,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 4.5417640329978894,
+        "peak_rss_mb": 761.57421875
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_theta": 500,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 2.513335196999833,
+        "peak_rss_mb": 427.3046875
+      }
+    },
+    {
+      "n_theta": 1000,
+      "dense": {
+        "method": "dense",
+        "n_theta": 1000,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 10.200631430001522,
+        "peak_rss_mb": 1145.359375
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_theta": 1000,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 2.589329900998564,
+        "peak_rss_mb": 442.9765625
+      }
+    },
+    {
+      "n_theta": 2000,
+      "dense": {
+        "method": "dense",
+        "n_theta": 2000,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 29.457681818996207,
+        "peak_rss_mb": 1951.19140625
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_theta": 2000,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 2.935594898997806,
+        "peak_rss_mb": 432.1171875
+      }
+    },
+    {
+      "n_theta": 4000,
+      "dense": {
+        "method": "dense",
+        "n_theta": 4000,
+        "n_species": 77,
+        "status": "oom",
+        "label": null,
+        "wall_s": NaN,
+        "peak_rss_mb": NaN,
+        "stderr_tail": []
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_theta": 4000,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 3.1585026259999722,
+        "peak_rss_mb": 418.765625
+      }
+    },
+    {
+      "n_theta": 6000,
+      "dense": {
+        "method": "dense",
+        "n_theta": 6000,
+        "n_species": 77,
+        "status": "oom",
+        "label": null,
+        "wall_s": NaN,
+        "peak_rss_mb": NaN,
+        "stderr_tail": []
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_theta": 6000,
+        "n_species": 77,
+        "n_obs": 462,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 3.4631643039974733,
+        "peak_rss_mb": 425.296875
+      }
+    }
+  ],
+  "mismatches": [],
+  "dense_ok_max_ntheta": 2000,
+  "dense_oom_min_ntheta": 4000,
+  "mf_rss_flatness": 1.0578150069027275,
+  "verdict": "MATRIX-FREE FLAT + SCALES PAST DENSE OOM"
+}
