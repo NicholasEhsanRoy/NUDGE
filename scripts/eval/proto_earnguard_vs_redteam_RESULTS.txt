@@ -1,0 +1,43 @@
+EARN-GUARD vs red-team P1/P4/P5 — exact repro constructions, 2 seed(s)
+
+--- P1: ADDITIVE offset on B.perturbed (truth=no-difference) ---
+P1 add o=1 s=0             base=no-difference  EARN-GUARD=no-difference  knob=vmax  earnB=   -7.1 earnA=    nan OK [baseline hole=False] (34s)
+P1 add o=2 s=0             base=no-difference  EARN-GUARD=no-difference  knob=n     earnB=   -2.1 earnA=    nan OK [baseline hole=False] (21s)
+P1 add o=3 s=0             base=unresolved     EARN-GUARD=no-difference  knob=n     earnB=   -2.1 earnA=    nan OK [baseline hole=False] (45s)
+P1 add o=5 s=0             base=gain-diff      EARN-GUARD=no-difference  knob=n     earnB=   -2.1 earnA=    nan OK [baseline hole=True] (26s)
+P1 add o=1 s=1             base=no-difference  EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=False] (19s)
+P1 add o=2 s=1             base=no-difference  EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=False] (18s)
+P1 add o=3 s=1             base=no-difference  EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=False] (28s)
+P1 add o=5 s=1             base=gain-diff      EARN-GUARD=no-difference  knob=n     earnB=   -5.8 earnA=    nan OK [baseline hole=True] (19s)
+
+--- P4: MULTIPLICATIVE scale on B.perturbed (truth=no-difference) ---
+P4 mult c=1.5 s=0          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.2 earnA=    nan OK [baseline hole=True] (22s)
+P4 mult c=2 s=0            base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.2 earnA=    nan OK [baseline hole=True] (24s)
+P4 mult c=2.4 s=0          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.2 earnA=    nan OK [baseline hole=True] (31s)
+P4 mult c=0.7 s=0          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.1 earnA=    nan OK [baseline hole=True] (18s)
+P4 mult c=0.5 s=0          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.1 earnA=    nan OK [baseline hole=True] (17s)
+P4 mult c=1.5 s=1          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=True] (20s)
+P4 mult c=2 s=1            base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=True] (20s)
+P4 mult c=2.4 s=1          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=True] (20s)
+P4 mult c=0.7 s=1          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=True] (17s)
+P4 mult c=0.5 s=1          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=True] (24s)
+
+--- P5: SMALL MULTIPLICATIVE scale on B.perturbed (truth=no-difference) ---
+P5 mult c=1.15 s=0         base=gain-diff      EARN-GUARD=no-difference  knob=n     earnB=   -2.1 earnA=    nan OK [baseline hole=True] (20s)
+P5 mult c=1.2 s=0          base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.1 earnA=    nan OK [baseline hole=True] (61s)
+P5 mult c=1.25 s=0         base=unresolved     EARN-GUARD=no-difference  knob=K     earnB=   -1.8 earnA=    nan OK [baseline hole=False] (62s)
+P5 mult c=1.15 s=1         base=unresolved     EARN-GUARD=no-difference  knob=n     earnB=   -6.0 earnA=    nan OK [baseline hole=False] (67s)
+P5 mult c=1.2 s=1          base=unresolved     EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=False] (60s)
+P5 mult c=1.25 s=1         base=ceiling-diff   EARN-GUARD=no-difference  knob=vmax  earnB=   -7.5 earnA=    nan OK [baseline hole=True] (73s)
+
+--- positive controls (genuine differences; must RESOLVE, not over-abstain) ---
+gain fac=0.55              base=unresolved     EARN-GUARD=gain-diff      RESOLVED
+ceiling fac=1.4            base=ceiling-diff   EARN-GUARD=ceiling-diff   RESOLVED
+threshold fac=1.4          base=no-difference  EARN-GUARD=ceiling-diff   RESOLVED
+
+========================================================================
+CONFOUND CASES: 24  (baseline shipped fired confident *-diff on 15/24 — the holes are real)
+EARN-GUARD CONFIDENT-WRONG: 0/24  (target: 0)
+POSITIVE CONTROLS RESOLVED: 3/3  (target: 3 — no over-abstention)
+========================================================================
+PROOF: PASS ✅
