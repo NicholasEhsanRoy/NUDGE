@@ -1,0 +1,121 @@
+{
+  "threshold": 2,
+  "n_confident_wrong": 0,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "meta": {
+    "n_species": 3,
+    "n_replicates": 36,
+    "steps": 120,
+    "n_sim": 28,
+    "delta": -0.5,
+    "truth": "susceptibility"
+  },
+  "densities": [
+    {
+      "n_pulse": 0,
+      "n_obs_total": 9,
+      "resolve_rate": 0.0,
+      "calls": [
+        "no-change",
+        "unresolved",
+        "no-change"
+      ],
+      "cond_numbers": [
+        254.5973255856829,
+        Infinity,
+        151.9800343075614
+      ],
+      "median_cond": 203.28867994662215,
+      "confident_wrong": 0
+    },
+    {
+      "n_pulse": 1,
+      "n_obs_total": 10,
+      "resolve_rate": 0.6666666666666666,
+      "calls": [
+        "susceptibility",
+        "no-change",
+        "susceptibility"
+      ],
+      "cond_numbers": [
+        241.69792950854412,
+        Infinity,
+        Infinity
+      ],
+      "median_cond": 241.69792950854412,
+      "confident_wrong": 0
+    },
+    {
+      "n_pulse": 2,
+      "n_obs_total": 11,
+      "resolve_rate": 1.0,
+      "calls": [
+        "susceptibility",
+        "susceptibility",
+        "susceptibility"
+      ],
+      "cond_numbers": [
+        250.31917208152555,
+        Infinity,
+        Infinity
+      ],
+      "median_cond": 250.31917208152555,
+      "confident_wrong": 0
+    },
+    {
+      "n_pulse": 4,
+      "n_obs_total": 13,
+      "resolve_rate": 1.0,
+      "calls": [
+        "susceptibility",
+        "susceptibility",
+        "susceptibility"
+      ],
+      "cond_numbers": [
+        162.21338877933292,
+        Infinity,
+        Infinity
+      ],
+      "median_cond": 162.21338877933292,
+      "confident_wrong": 0
+    },
+    {
+      "n_pulse": 8,
+      "n_obs_total": 17,
+      "resolve_rate": 1.0,
+      "calls": [
+        "susceptibility",
+        "susceptibility",
+        "susceptibility"
+      ],
+      "cond_numbers": [
+        130.7910235838129,
+        Infinity,
+        Infinity
+      ],
+      "median_cond": 130.7910235838129,
+      "confident_wrong": 0
+    },
+    {
+      "n_pulse": 16,
+      "n_obs_total": 25,
+      "resolve_rate": 1.0,
+      "calls": [
+        "susceptibility",
+        "susceptibility",
+        "susceptibility"
+      ],
+      "cond_numbers": [
+        102.38205194168523,
+        Infinity,
+        Infinity
+      ],
+      "median_cond": 102.38205194168523,
+      "confident_wrong": 0
+    }
+  ]
+}
