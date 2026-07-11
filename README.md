@@ -151,6 +151,19 @@ Highlights so far:
   inhibitor is attributed to the microscopic step it lowers — primary / elongation /
   secondary nucleation — or abstained on (`nudge fibrillization`) — see
   [`notebooks/Aggregation_Kinetics.ipynb`](notebooks/Aggregation_Kinetics.ipynb).
+- **Optimal experimental design — the differentiability moat** (`NUDGE-METHOD-014`) — *the
+  white-box advantage a black-box ODE solver can't offer*. Because NUDGE's forward model is
+  **differentiable**, the Fisher-information design criterion is itself a differentiable
+  function of the *experiment*, so `∂criterion/∂φ` is available by autodiff and NUDGE
+  **gradient-optimizes *when to measure*** to the exact schedule that resolves a sloppy,
+  degenerate parameter — a black box has no `∂/∂φ` and can only grid-search (exponential in
+  the design size). This makes the gLV growth⇄self-limitation abstention **actionable**:
+  from a naive **near-equilibrium** schedule (where α⇄βᵢᵢ is degenerate, cond 136) the
+  optimal design puts samples in the growth **transient** and **measurably** resolves α —
+  **CRLB 31× better, FIM smallest eigenvalue 18× better** (600× on a gLV community); all
+  D-/E-/CRLB objectives agree. Local OED (`NUDGE-LIM-023`): the gains are measured at the
+  nominal θ₀, not extrapolated (`nudge oed`) — see
+  [`notebooks/Optimal_Experimental_Design.ipynb`](notebooks/Optimal_Experimental_Design.ipynb).
 - **Honest figures — `nudge.viz`** (opt-in `[viz]` extra, first slice) — an additive,
   provenance-carrying figure layer that renders NUDGE's frozen result objects from one
   `render(result, out=…)` call. It only *reads* results (never re-fits; never touches

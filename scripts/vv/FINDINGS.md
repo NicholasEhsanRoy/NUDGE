@@ -1811,3 +1811,73 @@ safe by a MEASURED degeneracy. `nudge fibrillization --mode {single,inhibitor,se
 `service.fibrillization_demo` + Mechanism Card (`NUDGE-METHOD-013`) + `notebooks/Aggregation_Kinetics.ipynb`.
 Real-data validation (AmyloFit / published Aβ42 concentration series) deferred as a later
 `needs_data` gate — the equations + synthetic-first round-trip are the deliverable here.
+
+---
+
+## Optimal Experimental Design — the differentiability moat (`NUDGE-METHOD-014`, `NUDGE-LIM-023`)
+
+**The white-box advantage a black-box ODE solver cannot offer, MEASURED.** Everywhere else
+NUDGE takes gradients of a *fit* loss w.r.t. the *parameters*; this capability takes
+gradients of an *identifiability criterion* w.r.t. the **experimental design** itself.
+Because NUDGE's forward model is DIFFERENTIABLE, the Fisher Information Matrix
+`FIM(φ) = J(φ)ᵀJ(φ)/σ²` (with `J = ∂observe/∂θ` by autodiff through the ODE solve) is a
+differentiable function of an experimental-design parameter `φ` (the measurement times), so
+`∂criterion/∂φ` is available by autodiff and we gradient-ASCEND `φ` to the exact optimal
+experiment `φ*`. A black-box solver has no `∂/∂φ` — it can only grid-search (exponential in
+the design size). Module `nudge.inference.oed` (additive; self-contained RK4 `lax.scan`;
+touches neither `fit.py` nor `core/`). This makes the gLV directional abstention
+(`NUDGE-METHOD-012`: *"α⇄βᵢᵢ is degenerate near equilibrium — sample the transient to break
+the tie"*) EXACT: the design gradient says precisely which times break the tie and by what
+factor.
+
+**MEASURED — logistic growth `dx/dt = x(α + βx)` (α=0.8, β=−0.4, K=−α/β=2), target = the
+growth parameter α, m=8 measurement times.** The naive **near-equilibrium** design
+(sample [0.6·t_max, t_max], the realistic "measure at steady state" default) is
+near-singular: FIM condition number **136**, smallest eigenvalue **54.3**, `CRLB(α)=7.34e-3`
+— α and β are confounded along the `K=−α/β` direction. Gradient-ascending the targeted
+reciprocal-CRLB objective moves the schedule to `φ* = [3.62, 3.62, 3.62, 12, 12, 12, 12, 12]`
+— a clean two-support-point design that puts samples in the growth **transient** (t≈3.62)
+and at equilibrium (t=12). Result: `CRLB(α)` **7.34e-3 → 2.33e-4 = 31.5× better**; FIM
+smallest eigenvalue **54.3 → 965 = 17.8× better**; condition number **136 → 9.5**. The
+previously-sloppy growth parameter is resolved — with every number *measured at the nominal
+θ₀*, never asserted.
+
+**MEASURED — all three objectives resolve it.** D-optimality `log det FIM` **12.9 → 16.0**
+(CRLB(α) 31.3×, min-eig 17.5×); E-optimality `λ_min(FIM)` **54.4 → 987** (18.2×, CRLB(α)
+30.3×); targeted reciprocal-CRLB `−log[FIM⁻¹]_αα` **4.91 → 8.36** (min-eig 17.8×, CRLB(α)
+31.5×). The design gradient is finite and non-zero at the naive design (‖∇‖≈1.0) — the moat
+exists.
+
+**MEASURED — the white-box gradient beats black-box grid search (honestly).** On a 1-D
+design knob (5 samples fixed at equilibrium, one free transient time `t1`), a **fine grid**
+of 200 points finds the optimum at `t1=3.692`; the **gradient** — started from two very
+different points (`t1=1.0` and `t1=10.8`) — lands on `t1*=3.700` **both times** (matches the
+grid to <0.3). So on a knob a black box CAN afford to grid, the gradient reaches the same
+optimum — but deterministically and without the grid. The moat is in the SCALING: a
+structured grid guaranteeing the optimum over `m` free times costs `rᵐ` FIM evaluations —
+**m=8: 65,536 (r=4) / 1.7M (r=6); m=16: 4.3×10⁹ / 2.8×10¹²** — infeasible, while the gradient
+optimizes all `m` times jointly in ~400 cheap steps.
+
+**MEASURED — generalizes to a multi-species gLV community** (3 taxa, target taxon's α_t
+confounded with its self-interaction β_tt, `K_t=1.06`): naive near-equilibrium `CRLB(α_t)`
+**1.52 → 2.54e-3 = 600× better**. Same mechanism, a compositional network.
+
+**Honesty (`NUDGE-LIM-023`): this is LOCAL OED.** The FIM is the local likelihood curvature
+at a NOMINAL θ₀, so the optimal design and the reported gains are valid near θ₀ and are the
+ones *measured there* — not extrapolated to far-from-θ₀ truths (a robust design would
+marginalize over a θ prior; not implemented). Near-singular FIMs are inverted with a guarded
+relative ridge (never a plain pseudo-inverse, which would zero a flat direction's variance
+and UNDERSTATE the CRLB — the opposite of safe), mirroring `inference/uncertainty.
+laplace_posterior`; and the gradient finds a LOCAL optimum of a non-convex criterion, which
+is why the grid-search baseline is shipped to CHECK it. This is a design-recommendation
+capability, not an attribution verdict, so it cannot itself emit a confident-wrong mechanism
+call — its output is "measure at these times to resolve parameter X", framed as *optimal
+given the current best estimate, gain measured at θ₀*.
+
+`tests/inference/test_oed.py` (7 fast + 5 slow: FIM PSD, the measured near-equilibrium
+degeneracy, the non-zero design gradient, transient-beats-equilibrium, the CRLB/min-eig
+improvement, all three objectives, the gLV generalization). `nudge oed` CLI +
+`service.oed_demo` + Mechanism Card (`NUDGE-METHOD-014`) + `notebooks/Optimal_Experimental_Design.ipynb`.
+Real-data lock-in (a longitudinal series with a real design choice) deferred as a later
+`needs_data` gate — the differentiable criterion + the synthetic round-trip are the
+deliverable.

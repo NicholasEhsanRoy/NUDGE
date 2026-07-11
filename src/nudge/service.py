@@ -1607,6 +1607,70 @@ def lotka_file(
     }
 
 
+def oed_demo(
+    *,
+    model: str = "logistic",
+    objective: str = "crlb",
+    n_obs: int = 8,
+    steps: int = 400,
+    learning_rate: float = 0.2,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Gradient-optimize an experimental design + report the MEASURED identifiability gain.
+
+    The zero-setup demo of the optimal-experimental-design capability (``NUDGE-METHOD-014``,
+    the differentiability moat). Starting from a naive **near-equilibrium** measurement
+    schedule — where the growth ⇄ self-limitation (α⇄βᵢᵢ) pair is degenerate
+    (``Kᵢ=−αᵢ/βᵢᵢ``) — it gradient-ascends the measurement times to the optimal design and
+    reports the factor by which the growth parameter's Cramér–Rao bound (and the FIM's
+    smallest eigenvalue) improves. ``model`` ∈ ``{"logistic", "glv"}``; ``objective`` ∈
+    ``{"d_opt", "a_opt", "e_opt", "crlb"}``. Everything returned is *measured* at the nominal
+    θ₀ (local OED; ``NUDGE-LIM-023``), never asserted.
+    """
+    import numpy as np
+
+    from nudge.inference.oed import (
+        make_glv_design_problem,
+        make_logistic_design_problem,
+        optimize_design,
+    )
+
+    if model == "logistic":
+        prob = make_logistic_design_problem()
+        target = "log_alpha"
+    elif model == "glv":
+        prob = make_glv_design_problem(seed=seed)
+        target = "log_alpha_t"
+    else:
+        raise ValueError(f"unknown model {model!r}; expected 'logistic' or 'glv'")
+
+    lo, hi = prob.phi_bounds
+    naive = np.linspace(0.6 * hi, hi, n_obs)  # the "measure at steady state" default
+    res = optimize_design(
+        prob, naive, objective=objective, target=target, steps=steps,
+        learning_rate=learning_rate, seed=seed,
+    )
+    return {
+        "model": model,
+        "objective": objective,
+        "target_parameter": res.target_name,
+        "phi_init": [float(x) for x in np.sort(res.phi_init)],
+        "phi_opt": [float(x) for x in np.sort(res.phi_opt)],
+        "criterion_init": _jsonsafe(res.criterion_init),
+        "criterion_opt": _jsonsafe(res.criterion_opt),
+        "target_crlb_init": _jsonsafe(res.target_crlb_init),
+        "target_crlb_opt": _jsonsafe(res.target_crlb_opt),
+        "crlb_improvement": _jsonsafe(res.crlb_improvement),
+        "min_eig_init": _jsonsafe(res.min_eig_init),
+        "min_eig_opt": _jsonsafe(res.min_eig_opt),
+        "min_eig_improvement": _jsonsafe(res.min_eig_improvement),
+        "caveat": (
+            "local OED: the optimal design and the reported gains are MEASURED at the "
+            "nominal parameter θ₀, not extrapolated to far-from-θ₀ truths (NUDGE-LIM-023)."
+        ),
+    }
+
+
 def fibrillization_demo(
     *,
     mode: str = "single",

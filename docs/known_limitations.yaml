@@ -902,3 +902,51 @@ anomalies:
       seeded-anchor requirement, the balanced-regime caveat for k_n, and the elongation ⇄
       monomer-sequestration ambiguity are the honest bounds; the tests are the regression
       that keeps the abstention earned rather than asserted.
+
+  - anomaly_id: NUDGE-LIM-023
+    title: Gradient-based optimal experimental design is LOCAL (valid near the nominal θ₀)
+    description: >-
+      The optimal-experimental-design capability (NUDGE-METHOD-014, nudge.inference.oed)
+      gradient-optimizes an experimental design φ (the measurement times) to maximize a
+      Fisher-information criterion — D-optimality (log det FIM), E-optimality (smallest FIM
+      eigenvalue), or the targeted reciprocal Cramér–Rao bound of one sloppy parameter — and
+      so prescribes the exact experiment that resolves a degenerate parameter (e.g. the gLV
+      growth⇄self-limitation α⇄βᵢᵢ pair that NUDGE-METHOD-012 abstains on near equilibrium,
+      Kᵢ=−αᵢ/βᵢᵢ). The Fisher Information Matrix FIM(φ) = J(φ)ᵀJ(φ)/σ² is the LOCAL curvature
+      of the likelihood at a NOMINAL parameter θ₀, so the design it returns is optimal for
+      parameters NEAR θ₀ and the reported identifiability gains (the CRLB / smallest-
+      eigenvalue improvement factors) are the ones MEASURED at θ₀ — they are NOT extrapolated
+      and are NOT guaranteed if the true parameters are far from θ₀. This is the standard
+      local-OED caveat: a fully robust design would marginalize the criterion over a prior on
+      θ (Bayesian / pseudo-Bayesian OED) or min-max over a θ box, which this module does NOT
+      implement. NUDGE must therefore present an optimal design as "optimal given the current
+      best estimate θ₀", never as unconditionally optimal, and must report the gain as a
+      measurement at θ₀. Two further honest bounds: (1) the design gradient finds a LOCAL
+      optimum of a generally non-convex criterion — it converges deterministically to a good
+      design (the whole point vs a black-box grid search) but not provably the global one, so
+      the module also ships a grid-search baseline to CHECK the gradient optimum (on a 1-D
+      design knob the gradient lands on the fine grid's optimum; a structured grid
+      guaranteeing the optimum over m free times costs rᵐ evaluations, infeasible — the moat);
+      (2) near-singular FIMs are inverted with a guarded relative ridge (never a plain
+      pseudo-inverse, which would zero a flat direction's variance and UNDERSTATE the CRLB —
+      the opposite of safe), so a reported CRLB on a still-degenerate design is a large-but-
+      finite over-cautious bound, not a false-precise small one. VERIFIED on synthetic ground
+      truth (tests/inference/test_oed.py; scripts/vv/FINDINGS.md "Optimal Experimental
+      Design"): the naive near-equilibrium design is measurably near-singular; the gradient-
+      optimal design resolves the growth parameter (logistic ~31x CRLB / ~18x smallest
+      eigenvalue; gLV ~600x CRLB) across all three objectives; the design gradient is finite
+      and non-zero; the 1-D gradient optimum coincides with the fine-grid optimum. Related:
+      NUDGE-METHOD-014, NUDGE-METHOD-012, NUDGE-LIM-020.
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      This is a design-recommendation capability, not an attribution verdict, so it cannot
+      itself emit a confident-wrong mechanism call — its output is "measure at these times to
+      resolve parameter X", and the risk is a design that under-delivers on identifiability if
+      the true θ is far from the nominal θ₀ used to build the FIM (the local-OED caveat) or if
+      the gradient settled on a local rather than global optimum. Both are bounded by
+      construction: the reported gain is a MEASUREMENT at θ₀ (never extrapolated), the
+      guarded-ridge inverse makes an unresolved design's CRLB over-cautious rather than
+      false-precise, and the grid-search baseline lets a caller CHECK the gradient optimum.
+      The honest framing — "optimal given the current best estimate, gain measured at θ₀" —
+      and the tests are what keep the prescription from being oversold.
