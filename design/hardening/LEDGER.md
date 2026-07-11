@@ -8,19 +8,19 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000018-redteam-moat-fullsweep.md`. That immutable record is the source of truth;
+`runs/000000021-orchestrator-P5-merge.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING (POST-MOAT hardening loop).** The freshly-merged differentiability moat
-(`oed.py`, `sloppiness.py` matrix-free, `adjoint.ode_identifiability`) had never been
-red-teamed. The moat-first full sweep (`runs/000000018`) returned **HOLES_FOUND: 1** → NOT a
-STOP: a NEW hole **P6** (matrix-free `sloppiness` iterative/`auto` path mislabels a
-structurally-UNIDENTIFIABLE model `well-constrained`, `LIM-023`). The pre-existing **P5**
-(differential small mult confound, `LIM-016`) is also in the fix loop.
+**Status: RUNNING (POST-MOAT hardening loop).** The moat-first full sweep (`runs/000000018`)
+found **P6** (matrix-free `sloppiness` mislabel, `LIM-023`); the pre-existing **P5**
+(differential small mult confound, `LIM-016`) was also in the queue. **P5 is CLOSED + merged**
+(gate-4d free-affine earn guard; audit PASS `runs/000000020`; merge `480468c`). **P6 fix is
+committed** (`claude/p6-uq-fix` `2d54b57`) and **in independent audit** (`runs/000000023`).
 
-- **Next agents (parallel, disjoint files):** `nudge-uq-fixer` on **P6** (`sloppiness.py`)
-  and `nudge-uq-fixer` on **P5** (`differential.py`, already in flight), each in its own
-  worktree; then `nudge-audit` on each → orchestrator merge → `nudge-red-team` (re-scan).
+- **Next:** P6 audit → orchestrator merge P6 (iff PASS) → `nudge-red-team` re-scan.
+- The re-scan MUST cover the two surfaces the moat sweep left UNREACHED (`runs/000000018`):
+  `adjoint.ode_identifiability` reached through a real large ODE (same P6 root cause), and OED
+  multi-knob / end-to-end composition. Plus P5+P6 fix-induced-regression check.
 - **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
 - **HELD this sweep (recorded as fail-safe wins):** OED structural-null (`min_eig` honest
   `0.0→0.0`), OED guarded ridge (over-cautious absolute CRLB), OED demo (no merge regression),
@@ -35,12 +35,11 @@ structurally-UNIDENTIFIABLE model `well-constrained`, `LIM-023`). The pre-existi
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-| **P6** | `sloppiness` (matrix-free) | LIM-023 | **NEW (post-moat sweep, `runs/000000018`).** The iterative Krylov path — and `method="auto"` whenever `n_params > dense_below=256` (its large-network raison-d'être) — labels a structurally-UNIDENTIFIABLE model (two params entering only via their sum ⇒ a provable Fisher zero) **`well-constrained`** (`n_null=0`), while `method="dense"` + the `jacfwd`-SVD oracle correctly say `unidentifiable`. `_verified_smallest_eigsh` Rayleigh-checks *eigenpair-ness*, not *smallest-ness*, so `eigsh(which="SA")` missing the isolated zero still certifies. The single most dangerous mislabel (unidentifiable → well-constrained); contradicts the module's stated fail-safe. Orchestrator-reproduced 6/6, x64 ON (not the float32 caveat). | `scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py` | IN-PROGRESS (uq-fixer) |
-| **P5** | `differential` | LIM-016 | A SMALL uniform multiplicative perturbed-only scale (`c≈1.15–1.25`, control clean) fakes a confident `gain-diff` / `ceiling-diff` (truth no-difference). Slips the P4 gate 4c two ways: (1) at small `c` the BIC winner is often **gain (n)**, and gate 4c is ceiling-scoped (never checks `off_scale` for a gain winner); (2) on the ceiling channel `off_scale` lands in the **(1.18, 1.30] blind gap** — above the measured genuine-ceiling max (1.18) yet below gate 4c's upper cut (1.30). The P4 fix was calibrated only on `c≥1.5`; the interior was unprobed. Verified 8 confident-wrong / 4 seeds. | `scripts/redteam/differential_small_mult_gain_hole.py` | IN-PROGRESS (uq-fixer) |
+| **P6** | `sloppiness` (matrix-free) | LIM-023 | **NEW (post-moat sweep, `runs/000000018`).** The iterative Krylov path — and `method="auto"` whenever `n_params > dense_below=256` (its large-network raison-d'être) — labels a structurally-UNIDENTIFIABLE model (two params entering only via their sum ⇒ a provable Fisher zero) **`well-constrained`** (`n_null=0`), while `method="dense"` + the `jacfwd`-SVD oracle correctly say `unidentifiable`. `_verified_smallest_eigsh` Rayleigh-checks *eigenpair-ness*, not *smallest-ness*, so `eigsh(which="SA")` missing the isolated zero still certifies. The single most dangerous mislabel (unidentifiable → well-constrained); contradicts the module's stated fail-safe. Orchestrator-reproduced 6/6, x64 ON (not the float32 caveat). | `scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py` | IN-AUDIT (`claude/p6-uq-fix` `2d54b57`, `runs/000000023`) |
 
-P5 reported by red-team round 5 (`design/FAILSAFE_REDTEAM_5.md`, `runs/000000017`); P6 by
-red-team round 6 (`design/FAILSAFE_REDTEAM_6.md`, `runs/000000018`). Both independently
-re-reproduced by the orchestrator/fixer before fixing.
+P6 reported by red-team round 6 (`design/FAILSAFE_REDTEAM_6.md`, `runs/000000018`),
+independently re-reproduced by the orchestrator + fixer before fixing. **P5 is CLOSED + merged**
+— see "Closed problems" below (`runs/000000019–21`, merge `480468c`).
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
@@ -92,6 +91,9 @@ last; never edit a past row):
 | 000000016 | `runs/000000016-orchestrator-P2-merge.md` | orchestrator | P2 merge | independently re-verified + merged → `1d091c1` (2 additive doc conflicts resolved); P2 CLOSED/BOUNDED; queue now EMPTY |
 | 000000017 | `runs/000000017-redteam-finalsweep.md` | redteam | FINAL full sweep | **HOLES_FOUND: 1** — NOT a STOP: NEW hole **P5** (differential small mult confound slips P4 gate 4c); 4 fixes held jointly; report `FAILSAFE_REDTEAM_5.md`; commit `6a1c774` |
 | 000000018 | `runs/000000018-redteam-moat-fullsweep.md` | redteam | POST-MOAT full sweep (moat-first) | **HOLES_FOUND: 1** — NOT a STOP: NEW hole **P6** (matrix-free `sloppiness` iterative/`auto` path mislabels an unidentifiable model `well-constrained`, LIM-023); OED targets + 4 prior fixes HELD; report `FAILSAFE_REDTEAM_6.md`; commit `749954f` |
+| 000000019 | `runs/000000019-uq-fixer-P5.md` | uq-fixer | P5 (LIM-016) | fix claim: gate-4d free per-condition affine "earn" guard closes the whole uniform P1/P4/P5 affine class (margin 6.0 on a global ΔBIC); CLOSED-uniform / BOUNDED-nonuniform; corrects P4 overclaim; commit `416c17e` (fixer stalled pre-commit; orchestrator finalized the commit) |
+| 000000020 | `runs/000000020-audit-P5.md` | audit | P5 fix | **AUDIT: PASS** — hole abstains (fixer seeds 0,1 + independent 5,7 → HOLES 0; earn −7.5…−6.9), positive controls resolve (slow 29 passed/1 xfailed), honesty accurate (minor genuine-earn label nit → orchestrator corrected), frozen core untouched, full gate green (301 passed) |
+| 000000021 | `runs/000000021-orchestrator-P5-merge.md` | orchestrator | P5 merge | independently re-verified + merged → `480468c` (clean ort); corrected FINDINGS §P5 genuine-earn label additively; P5 CLOSED/BOUNDED |
 
 ---
 
@@ -103,6 +105,7 @@ last; never edit a past row):
 | **P1** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — measured one-sided gate 4b abstains when a context's perturbed OFF baseline is inflated >2.5× its own control (separator: confident-wrong `off_shift≥2.99` vs genuine `≤1.96`). Deflating perturbed-only offset aliases with a genuine reduction → documented residual, not guarded. Decoy + tests; genuine ceiling/gain still resolve (no over-abstention). | `b562da9` (merge `99d73b8`) | `runs/000000007-audit-P1.md` (PASS) |
 | **P4** | `differential` | LIM-016 | **CLOSED (inflating) / BOUNDED (deflating)** — the MULTIPLICATIVE sibling of P1: a per-context multiplicative perturbed-only scale fakes a confident `ceiling-diff`, slipping under gate 2 AND the P1 gate 4b (`off_shift`≈1 for a multiplicative factor). Measured ceiling-scoped gate 4c on the OFF-cluster SCALE (raw MAD, perturbed÷control), band [0.80,1.30] (genuine ceiling ×1.4–4 → ≤1.18; inflating confound c≥1.5 → ≥1.43). Deflating confound is degenerate with a genuine strong ceiling reduction → both abstain (a strict-xfail-locked honest bound; the narrow sacrifice verified by the audit). Genuine ceiling increases + gain/threshold still resolve. | `f5d0b87` (merge `ebda9c6`) | `runs/000000011-audit-P4.md` (PASS) |
 | **P2** | `multi_reporter` | LIM-014 | **CLOSED (measurable floors) / BOUNDED (near-zero floors)** — a per-condition multiplicative batch scale on the perturbed panel fakes a confident `ceiling` (control-only consistency guard blind; no per-condition depth normalization). Measured ceiling-scoped floor/OFF-consistency gate: a genuine ceiling leaves each reporter's floor fixed (`off_on_coupling`≈0) while a batch rescales every floor with the ON amplitude (≈1); abstain when the floor moves with the ceiling (cut 0.5 = physical midpoint) or floors are unmeasurable. On a (near-)zero-floor panel a batch ≡ a real ceiling without an independent anchor → both abstain (strict-xfail-locked honest bound). Genuine ceiling/threshold/gain still resolve. | `b870354` (merge `1d091c1`) | `runs/000000015-audit-P2.md` (PASS) |
+| **P5** | `differential` | LIM-016 | **CLOSED (uniform affine class) / BOUNDED (non-uniform + deflation)** — a SMALL uniform multiplicative perturbed-only scale (`c≈1.15–1.25`) faked a confident `gain-diff`/`ceiling-diff` slipping gate 4c (ceiling-scoped → silent on the `n` winner; `off_scale` in the `(1.18,1.30]` gap). Fixed by **gate 4d**: instead of a fourth per-magnitude band, add the per-condition affine `(s,o)` as a FREE nuisance on the perturbed context and abstain unless the BIC-winning knob **earns** its parameter over a pure-affine null by ≥ 6.0 (profiled ΔBIC, min over both directions). The whole confound family (P1 additive / P4 large-mult / P5 small-mult) is by construction inside the null's span → measured `earn` −7.5…−2.1 (confound) vs +59…+616 (genuine); margin 6.0 is a single cut on a GLOBAL fit statistic, no blind gap. Corrects the falsified P4 "INFLATION CLOSED" overclaim. Residual BOUND: a NON-uniform above-median-only scale is observationally identical to a genuine ceiling (needs an inert-feature anchor); gate-4c deflation sacrifice unchanged. | `416c17e` (merge `480468c`) | `runs/000000020-audit-P5.md` (PASS) |
 
 *(P1/P2 remain OPEN in the queue above. When each passes audit its row moves here with the
 fix commit + the audit run record, so the queue only holds OPEN work while the full history

@@ -1443,8 +1443,14 @@ a pure-affine null (the profiled ΔBIC `earn`, min over both directions — we d
 context is confounded)? The whole confound family is BY CONSTRUCTION inside the free-affine null's
 span, so no `(s, o)` lets the bio knob earn.
 
-**The measured separator (the crux — a global goodness-of-fit gap, not another band).** Through the
-shipped path, `earn` separates the confound from a genuine mechanism with an enormous margin:
+**The measured separator (the crux — a global goodness-of-fit gap, not another band).** `earn`
+separates the confound from a genuine mechanism with an enormous margin. **Honesty on the numbers
+(P5 audit, `runs/000000020`):** the **confound-side** magnitudes below (the safety-relevant
+separator) reproduce on the SHIPPED `attribute_differential`; the **genuine-side** magnitudes are
+from the prototype driver `scripts/vv/p5_measure.py` (steps=150) — an independent shipped-path
+re-measurement (steps=200) gives *lower* genuine values (e.g. ceiling ×1.4 ≈ +90 rather than
++116…+131) that remain **≫ the margin**, so nothing load-bearing depends on the exact magnitude
+(the shipped slow test locks only `earn > 6.0`, which holds with wide headroom):
 
 | condition (truth) | `earn` (profiled ΔBIC of the winner over a free affine) | gate-4d call |
 |---|---|---|
