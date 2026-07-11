@@ -1,0 +1,2405 @@
+# Deep-research: model + datasets for the adjoint + sloppiness blind case
+
+*Verified deep-research synthesis (102 agents, adversarial verification). For grounding automated-scientist run 000000010 (the capability demo).*
+
+## Executive summary
+
+The strongest single (MODEL + DATASET) candidate for the blind case is the 2026 Neuro-Dynamic Alzheimer's QSP model (11 coupled ODEs, 74 parameters — 35 fixed, 32 with inter-subject variability, 7 fixed-effect) calibrated on 4,056 real subjects from two lecanemab trials plus ADNI across six longitudinal endpoints — it is squarely neurodegeneration-relevant, has a compositional amyloid→tau→neurodegeneration→cognition structure, and sits at a scale where per-subject nonlinear-mixed-effects fitting with inter-subject random effects makes ad-hoc forward-sensitivity gradients expensive while adjoint sensitivity (the AMICI/pyPESTO regime) is the standard scalable tool. For raw scale where forward sensitivity is decisively impractical, the PEtab Benchmark-Models collection's Froehlich_CellSystems2018 model (4,231 estimated parameters, 1,396 species) is the canonical adjoint-required benchmark, but it is pan-cancer signaling, not neurodegeneration, and carries no attached sloppiness analysis. The sloppiness-vs-identifiability claim rests on a deep, unanimous primary-literature base: Gutenkunst/Sethna 2007 established that essentially all such models have multi-decade (>10^6) FIM eigenvalue spectra with no clean gap (so a naive eigenvalue-gap identifiability test is misleading), while Chis/Villaverde 2016, Raue 2009 (profile likelihood), and Wieland 2021 establish that a sloppy or even singular FIM does NOT by itself prove unidentifiability — sloppy models can be identifiable, and FIM-based tests give the wrong answer for nonlinear ODEs. The Henderson alpha-synuclein network-diffusion model is a documented POOR candidate (essentially one fit parameter, closed-form matrix exponential) and should be excluded. Prioritize the Alzheimer's Neuro-Dynamic QSP model as the neurodegeneration-relevant blind case, using the PEtab collection as the standardized-format backbone and the Froehlich model as the pure-scale stress case.
+
+
+## Findings (verified)
+
+### 1. [high, vote 3-0 (across three merged claims)]
+TOP CANDIDATE (neurodegeneration): The 2026 Neuro-Dynamic Alzheimer's QSP model is a compositional mechanistic ODE model — 11 coupled ODEs, 74 parameters (35 fixed, 32 estimated with inter-subject variability, 7 fixed-effect only) — coupling amyloid aggregation (monomer→oligomer→protofibril→plaque), amyloid-driven tau pathology and neuronal degeneration, and cognitive decline (CDR-SB, ADAS-Cog), with lecanemab modeled as selective protofibril/plaque clearance. It was calibrated on a large REAL multivariate longitudinal dataset of 4,056 subjects (Study 201 N=854, Study 301 N=1,795, ADNI N=1,407) across six endpoints (amyloid PET, plasma Abeta42/40, tau PET, plasma p-tau181, CDR-SB, ADAS-Cog). Its size + nonlinear-mixed-effects fitting with per-subject random effects on 32 parameters is where ad-hoc forward-sensitivity gradients get expensive and adjoint is the standard scalable tool.
+
+Sources: https://www.nature.com/articles/s41540-026-00677-4; https://pmc.ncbi.nlm.nih.gov/articles/PMC13096144/; PubMed 41792131
+
+_Evidence/caveat:_ Merges claims [0][1][2], each 3-0. Primary peer-reviewed source (npj Systems Biology and Applications 2026, DOI 10.1038/s41540-026-00677-4) with open PMC copy. Verbatim: '11 ordinary differential equations... 74 parameters, of which 35 were fixed, 32 were estimated with inter-subject variability, and 7 were estimated with only fixed effects.' Amyloid cascade, tau coupling, both cognitive endpoints, lecanemab selective clearance, and the 4056-subject / six-endpoint calibration (854+1795+1407=4056) all confirmed. NOTE: the 'forward-sensitivity OOM/timeout' framing is my synthesis, not a source c
+
+### 2. [high, vote 3-0 (across three merged claims)]
+SLOPPINESS BENCHMARK (validation target): Gutenkunst/Sethna 2007 'Universally Sloppy' is the canonical benchmark for 'sloppy-but-predictive vs unidentifiable.' Across 17 diverse systems-biology models (circadian, metabolism, signaling, mostly from BioModels) EVERY model has a sloppy FIM/Hessian spectrum — eigenvalues roughly evenly spaced in log, all but one spanning >10^6 (sloppiest axes >1,000x longer than stiffest), with no clean gap between 'important' and 'unimportant' parameter combinations. This multi-decade, gapless spectrum is exactly what makes a naive Fisher-eigenvalue-gap identifiability test misleading, and individual parameters can be very poorly constrained while predictions stay tight ('sloppy-but-predictive').
+
+Sources: https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.0030189
+
+_Evidence/caveat:_ Merges claims [5][6][7], each 3-0. Foundational primary reference (Gutenkunst et al., PLoS Comput Biol 3(10):e189, 2007, DOI 10.1371/journal.pcbi.0030189, ~1000+ citations). Verbatim support for N=17, 'every model we examine has a sloppy spectrum of sensitivities,' the >10^6 span / >1,000x axis-length statement, 'no well-defined cutoff between important and unimportant parameter combinations,' and tight-predictions-despite-poor-parameters. Provides a recognized benchmark to validate the sloppiness diagnostic on.
+
+### 3. [high, vote 3-0 (across seven merged claims, one included claim [10] partial)]
+CORE DIAGNOSTIC JUSTIFICATION: A sloppy (multi-decade FIM eigenvalue spread) — or even a singular/rank-deficient — FIM does NOT by itself prove structural or practical unidentifiability. Sloppiness is distinct from identifiability (identifiability is binary; sloppiness is a continuum between full identifiability and its loss, relating to practical rather than structural identifiability), so a naive Fisher-eigenvalue-gap test can give the WRONG identifiability verdict — sloppy models can indeed be identifiable. Numerical error can also make a FIM non-singular when it should be singular. Parameter estimability should therefore be assessed with dedicated structural/practical identifiability analysis, not FIM-eigenvalue diagnostics.
+
+Sources: https://www.sciencedirect.com/science/article/abs/pii/S0025556416302668; https://onlinelibrary.wiley.com/doi/10.1155/2019/8497093; https://www.researchgate.net/publication/260604980_Sloppy_models_can_be_identifiable; https://arxiv.org/abs/1403.1417
+
+_Evidence/caveat:_ Merges claims [12][13][14][15][16][22][23], all 3-0. Primary source: Chis, Villaverde, Banga & Balsa-Canto, 'On the relationship between sloppiness and identifiability,' Math. Biosci. 282:147-161 (2016), DOI 10.1016/j.mbs.2016.10.009 — 'sloppiness is not equivalent to lack of identifiability... sloppy models can be identifiable. Thus, using sloppiness to draw conclusions about the possibility of estimating parameter values can be misleading.' Corroborated by arXiv:1403.1417 ('Sloppy models can be identifiable'), the Wiley 2019 review (DOI 10.1155/2019/8497093), and the Sethna group's own 2015 
+
+### 4. [high, vote 3-0 (across five merged claims)]
+THE RIGHT ALTERNATIVE + WHY FIM FAILS FOR ODEs: Profile likelihood distinguishes structural non-identifiability (flat profile, redundant/data-independent parameterization) from practical non-identifiability (unique likelihood minimum but confidence region extends to infinity) — a distinction a naive Fisher/eigenvalue test conflates. FIM-based curvature is only valid when parameter functional relations are linear, which is generally false for ODE reaction networks (observables depend nonlinearly on parameters); because all nontrivial ODE solutions are nonlinear in parameters, the Cramer-Rao/quadratic approximation fails, FIM confidence intervals become uncontrollable, and FIM-based intervals are INSENSITIVE to practical non-identifiability (can look finite/identifiable when actually non-identifiable, or flat/structural when actually practical). Recommendation: FIM-based identifiability analysis can be misleading in typical systems-biology applications; use profile likelihood.
+
+Sources: https://academic.oup.com/bioinformatics/article/25/15/1923/213246; https://www.sciencedirect.com/science/article/pii/S245231002100007X
+
+_Evidence/caveat:_ Merges claims [17][18][19][20][21], all 3-0. Primary sources: Raue et al. 2009, Bioinformatics 25(15):1923, DOI 10.1093/bioinformatics/btp358 (the canonical profile-likelihood paper — verbatim on the flat vs unique-minimum-but-infinite-CI distinction and 'appropriate if functional relations... are linear. This is often not the case for reaction networks modeled by ODE'); and Wieland, Hauber, Rosenblatt, Toensing, Timmer 2021, Curr. Opin. Syst. Biol. 25:60-69 (arXiv:2102.05100) — 'FIM-based intervals are insensitive to practical nonidentifiabilities... identifiability analysis based on the FIM 
+
+### 5. [high, vote 3-0 (across two merged claims)]
+ADJOINT SCALING FACT: AMICI implements forward, adjoint, and steady-state sensitivity analysis for large ODE models, positioning adjoint as a core scalable-calibration method. For large, comprehensive models with many states/parameters the cost of simulating or calibrating becomes limiting — the explicit motivation for AMICI's high-performance (adjoint) sensitivity methods, because forward-sensitivity cost scales with parameter count while adjoint does not.
+
+Sources: https://academic.oup.com/bioinformatics/article/37/20/3676/6209017; https://amici.readthedocs.io
+
+_Evidence/caveat:_ Merges claims [8][9], each 3-0. Primary source: Froehlich et al. 2021, 'AMICI: high-performance sensitivity analysis for large ordinary differential equation models,' Bioinformatics 37(20):3676, DOI 10.1093/bioinformatics/btab227 — 'provides forward, adjoint and steady-state sensitivity analysis' and 'for large and comprehensive models, the computational cost of simulating or calibrating can be limiting.' NOTE: the surviving claims confirm the cost-is-limiting motivation and that adjoint is a supported core method; the specific quantitative 'adjoint cost is independent of parameter count vs fo
+
+### 6. [high, vote 3-0 (across two merged claims)]
+STANDARDIZED-FORMAT BACKBONE + PURE-SCALE STRESS CASE: The Benchmarking-Initiative PEtab Benchmark-Models collection is a downloadable, standardized set of ~43 parameter-estimation benchmark models, each in PEtab format with SBML files in per-model subfolders (with SBML4Humans links; versioned on Zenodo). It contains Froehlich_CellSystems2018 with 4,231 estimated parameters, 1,396 species, 9,169 conditions — a scale where ad-hoc forward-sensitivity fitting is impractical and adjoint sensitivity is required (this IS the canonical published adjoint-advantage demonstration). CAVEAT: this mega-model is pan-cancer signaling/drug-response, NOT neurodegeneration, and has no attached sloppiness-vs-unidentifiability analysis; the next-largest models are ~294 params / 124 states.
+
+Sources: https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab; https://doi.org/10.5281/zenodo.14009826; https://www.cell.com/cell-systems/fulltext/S2405-4712(18)30119-0
+
+_Evidence/caveat:_ Merges claims [3][4], each 3-0. Primary source: Benchmark-Models-PEtab GitHub README spec table — 43 models in PEtab/SBML per-model subfolders; Froehlich_CellSystems2018 listed with exactly 4,231 params / 1,396 species / 9,169 conditions (by far the largest; next ~294 params). Derives from Froehlich et al., Cell Systems 2018, the canonical demonstration that adjoint (AMICI) makes ~4,000-parameter ODE fitting tractable because forward sensitivity scales with parameter count. Use as the standardized-format backbone and pure-scale stress case; pair with the Alzheimer's QSP model for neurodegenera
+
+### 7. [high, vote 3-0 (2-1 on the descriptive sub-claim, 3-0 on the poor-candidate conclusion)]
+EXCLUDE (documented poor candidate): The Henderson et al. 2019 alpha-synuclein spreading model is linear network diffusion on a directed 116-region brain connectome (x(t)=exp(-cLt)x0, out-degree graph Laplacian) with essentially a SINGLE fit parameter — the time constant c — selected by maximizing Pearson correlation of log predicted vs observed pathology. It is 116 states but only 1 parameter and a closed-form matrix exponential, so forward sensitivity poses no scaling problem and adjoint offers no advantage. It is neurodegeneration-relevant but the WRONG shape to demonstrate an adjoint-vs-forward advantage.
+
+Sources: https://www.nature.com/articles/s41593-019-0457-5; https://pmc.ncbi.nlm.nih.gov/articles/PMC6662627/
+
+_Evidence/caveat:_ Merges claims [10][11]. Primary source: Henderson et al., Nature Neuroscience 2019, DOI 10.1038/s41593-019-0457-5 (open PMC6662627). Confirmed: 116-region parcellation, out-degree Laplacian, single scalar c fit by log-log Pearson correlation, expression-weighted variant adds no fitted parameters. Forward-sensitivity cost scales with parameter count (=1 here), and the fit is a closed-form matrix exponential, so neither forward nor adjoint sensitivity is even needed. Explicitly identified as a POOR demo candidate. (A later Cornblath 2021 bidirectional 2-parameter variant exists but is still tiny
+
+## Caveats
+- (
+- 1
+- )
+-  
+- T
+- h
+- e
+-  
+- s
+- i
+- n
+- g
+- l
+- e
+-  
+- b
+- i
+- g
+- g
+- e
+- s
+- t
+-  
+- g
+- a
+- p
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+-  
+- i
+- n
+- t
+- e
+- n
+- d
+- e
+- d
+-  
+- b
+- l
+- i
+- n
+- d
+-  
+- c
+- a
+- s
+- e
+- :
+-  
+- N
+- O
+-  
+- s
+- u
+- r
+- v
+- i
+- v
+- i
+- n
+- g
+-  
+- c
+- l
+- a
+- i
+- m
+-  
+- d
+- o
+- c
+- u
+- m
+- e
+- n
+- t
+- s
+-  
+- a
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- t
+- h
+- a
+- t
+-  
+- i
+- s
+-  
+- s
+- i
+- m
+- u
+- l
+- t
+- a
+- n
+- e
+- o
+- u
+- s
+- l
+- y
+-  
+- (
+- a
+- )
+-  
+- n
+- e
+- u
+- r
+- o
+- d
+- e
+- g
+- e
+- n
+- e
+- r
+- a
+- t
+- i
+- o
+- n
+- -
+- r
+- e
+- l
+- e
+- v
+- a
+- n
+- t
+- ,
+-  
+- (
+- b
+- )
+-  
+- l
+- a
+- r
+- g
+- e
+-  
+- e
+- n
+- o
+- u
+- g
+- h
+-  
+- t
+- h
+- a
+- t
+-  
+- f
+- o
+- r
+- w
+- a
+- r
+- d
+-  
+- s
+- e
+- n
+- s
+- i
+- t
+- i
+- v
+- i
+- t
+- y
+-  
+- p
+- r
+- o
+- v
+- a
+- b
+- l
+- y
+-  
+- O
+- O
+- M
+- s
+- /
+- t
+- i
+- m
+- e
+- s
+-  
+- o
+- u
+- t
+- ,
+-  
+- A
+- N
+- D
+-  
+- (
+- c
+- )
+-  
+- h
+- a
+- s
+-  
+- a
+-  
+- p
+- u
+- b
+- l
+- i
+- s
+- h
+- e
+- d
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+- -
+- v
+- s
+- -
+- s
+- t
+- r
+- u
+- c
+- t
+- u
+- r
+- a
+- l
+- -
+- u
+- n
+- i
+- d
+- e
+- n
+- t
+- i
+- f
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+-  
+- a
+- n
+- a
+- l
+- y
+- s
+- i
+- s
+- .
+-  
+- T
+- h
+- e
+-  
+- A
+- l
+- z
+- h
+- e
+- i
+- m
+- e
+- r
+- '
+- s
+-  
+- Q
+- S
+- P
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- s
+- a
+- t
+- i
+- s
+- f
+- i
+- e
+- s
+-  
+- (
+- a
+- )
+-  
+- a
+- n
+- d
+-  
+- p
+- a
+- r
+- t
+- i
+- a
+- l
+- l
+- y
+-  
+- (
+- b
+- )
+-  
+- v
+- i
+- a
+-  
+- i
+- t
+- s
+-  
+- m
+- i
+- x
+- e
+- d
+- -
+- e
+- f
+- f
+- e
+- c
+- t
+- s
+-  
+- s
+- t
+- r
+- u
+- c
+- t
+- u
+- r
+- e
+-  
+- b
+- u
+- t
+-  
+- h
+- a
+- s
+-  
+- n
+- o
+-  
+- p
+- u
+- b
+- l
+- i
+- s
+- h
+- e
+- d
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+- /
+- F
+- I
+- M
+-  
+- s
+- p
+- e
+- c
+- t
+- r
+- u
+- m
+- ;
+-  
+- t
+- h
+- e
+-  
+- F
+- r
+- o
+- e
+- h
+- l
+- i
+- c
+- h
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- s
+- a
+- t
+- i
+- s
+- f
+- i
+- e
+- s
+-  
+- (
+- b
+- )
+-  
+- d
+- e
+- c
+- i
+- s
+- i
+- v
+- e
+- l
+- y
+-  
+- b
+- u
+- t
+-  
+- n
+- o
+- t
+-  
+- (
+- a
+- )
+-  
+- o
+- r
+-  
+- (
+- c
+- )
+- ;
+-  
+- t
+- h
+- e
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- b
+- e
+- n
+- c
+- h
+- m
+- a
+- r
+- k
+-  
+- m
+- o
+- d
+- e
+- l
+- s
+-  
+- (
+- G
+- u
+- t
+- e
+- n
+- k
+- u
+- n
+- s
+- t
+- )
+-  
+- s
+- a
+- t
+- i
+- s
+- f
+- y
+-  
+- (
+- c
+- )
+-  
+- b
+- u
+- t
+-  
+- a
+- r
+- e
+-  
+- n
+- o
+- t
+-  
+- n
+- e
+- u
+- r
+- o
+- d
+- e
+- g
+- e
+- n
+- e
+- r
+- a
+- t
+- i
+- o
+- n
+- .
+-  
+- A
+-  
+- d
+- e
+- m
+- o
+-  
+- m
+- u
+- s
+- t
+-  
+- t
+- h
+- e
+- r
+- e
+- f
+- o
+- r
+- e
+-  
+- e
+- i
+- t
+- h
+- e
+- r
+-  
+- (
+- i
+- )
+-  
+- c
+- o
+- m
+- p
+- u
+- t
+- e
+-  
+- t
+- h
+- e
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- d
+- i
+- a
+- g
+- n
+- o
+- s
+- t
+- i
+- c
+-  
+- i
+- t
+- s
+- e
+- l
+- f
+-  
+- o
+- n
+-  
+- t
+- h
+- e
+-  
+- A
+- l
+- z
+- h
+- e
+- i
+- m
+- e
+- r
+- '
+- s
+-  
+- Q
+- S
+- P
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- (
+- n
+- o
+- v
+- e
+- l
+-  
+- c
+- o
+- n
+- t
+- r
+- i
+- b
+- u
+- t
+- i
+- o
+- n
+- ,
+-  
+- n
+- o
+- t
+-  
+- p
+- r
+- e
+- -
+- v
+- a
+- l
+- i
+- d
+- a
+- t
+- e
+- d
+- )
+-  
+- o
+- r
+-  
+- (
+- i
+- i
+- )
+-  
+- a
+- c
+- c
+- e
+- p
+- t
+-  
+- a
+-  
+- t
+- w
+- o
+- -
+- m
+- o
+- d
+- e
+- l
+-  
+- s
+- t
+- o
+- r
+- y
+-  
+- (
+- Q
+- S
+- P
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- f
+- o
+- r
+-  
+- n
+- e
+- u
+- r
+- o
+-  
+- r
+- e
+- l
+- e
+- v
+- a
+- n
+- c
+- e
+-  
+- +
+-  
+- a
+-  
+- G
+- u
+- t
+- e
+- n
+- k
+- u
+- n
+- s
+- t
+- /
+- P
+- E
+- t
+- a
+- b
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+-  
+- v
+- a
+- l
+- i
+- d
+- a
+- t
+- e
+- d
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- s
+- p
+- e
+- c
+- t
+- r
+- u
+- m
+- )
+- .
+-  
+- (
+- 2
+- )
+-  
+- T
+- h
+- e
+-  
+- '
+- a
+- d
+- -
+- h
+- o
+- c
+-  
+- f
+- o
+- r
+- w
+- a
+- r
+- d
+- -
+- s
+- e
+- n
+- s
+- i
+- t
+- i
+- v
+- i
+- t
+- y
+-  
+- c
+- o
+- d
+- e
+-  
+- w
+- o
+- u
+- l
+- d
+-  
+- O
+- O
+- M
+- /
+- t
+- i
+- m
+- e
+-  
+- o
+- u
+- t
+- '
+-  
+- f
+- r
+- a
+- m
+- i
+- n
+- g
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+-  
+- A
+- l
+- z
+- h
+- e
+- i
+- m
+- e
+- r
+- '
+- s
+-  
+- Q
+- S
+- P
+-  
+- m
+- o
+- d
+- e
+- l
+-  
+- i
+- s
+-  
+- M
+- Y
+-  
+- s
+- y
+- n
+- t
+- h
+- e
+- s
+- i
+- s
+- ,
+-  
+- n
+- o
+- t
+-  
+- a
+-  
+- v
+- e
+- r
+- i
+- f
+- i
+- e
+- d
+-  
+- s
+- o
+- u
+- r
+- c
+- e
+-  
+- c
+- l
+- a
+- i
+- m
+-  
+- —
+-  
+- t
+- h
+- e
+-  
+- l
+- e
+- v
+- e
+- r
+- a
+- g
+- e
+-  
+- c
+- o
+- m
+- e
+- s
+-  
+- f
+- r
+- o
+- m
+-  
+- n
+- o
+- n
+- l
+- i
+- n
+- e
+- a
+- r
+- -
+- m
+- i
+- x
+- e
+- d
+- -
+- e
+- f
+- f
+- e
+- c
+- t
+- s
+-  
+- f
+- i
+- t
+- t
+- i
+- n
+- g
+-  
+- w
+- h
+- e
+- r
+- e
+-  
+- e
+- f
+- f
+- e
+- c
+- t
+- i
+- v
+- e
+-  
+- p
+- a
+- r
+- a
+- m
+- e
+- t
+- e
+- r
+-  
+- c
+- o
+- u
+- n
+- t
+-  
+- s
+- c
+- a
+- l
+- e
+- s
+-  
+- w
+- i
+- t
+- h
+-  
+- 4
+- ,
+- 0
+- 5
+- 6
+-  
+- s
+- u
+- b
+- j
+- e
+- c
+- t
+- s
+-  
+- a
+- n
+- d
+-  
+- 3
+- 2
+-  
+- r
+- a
+- n
+- d
+- o
+- m
+- -
+- e
+- f
+- f
+- e
+- c
+- t
+-  
+- p
+- a
+- r
+- a
+- m
+- e
+- t
+- e
+- r
+- s
+- ,
+-  
+- n
+- o
+- t
+-  
+- f
+- r
+- o
+- m
+-  
+- a
+-  
+- l
+- a
+- r
+- g
+- e
+-  
+- f
+- i
+- x
+- e
+- d
+-  
+- p
+- a
+- r
+- a
+- m
+- e
+- t
+- e
+- r
+-  
+- v
+- e
+- c
+- t
+- o
+- r
+-  
+- (
+- 7
+- 4
+-  
+- p
+- a
+- r
+- a
+- m
+- s
+-  
+- a
+- l
+- o
+- n
+- e
+-  
+- w
+- o
+- u
+- l
+- d
+-  
+- n
+- o
+- t
+-  
+- d
+- e
+- f
+- e
+- a
+- t
+-  
+- f
+- o
+- r
+- w
+- a
+- r
+- d
+-  
+- s
+- e
+- n
+- s
+- i
+- t
+- i
+- v
+- i
+- t
+- y
+- )
+- .
+-  
+- V
+- e
+- r
+- i
+- f
+- y
+-  
+- t
+- h
+- e
+-  
+- f
+- i
+- t
+- t
+- i
+- n
+- g
+-  
+- c
+- o
+- s
+- t
+-  
+- e
+- m
+- p
+- i
+- r
+- i
+- c
+- a
+- l
+- l
+- y
+-  
+- b
+- e
+- f
+- o
+- r
+- e
+-  
+- c
+- l
+- a
+- i
+- m
+- i
+- n
+- g
+-  
+- i
+- t
+- .
+-  
+- (
+- 3
+- )
+-  
+- T
+- h
+- e
+-  
+- p
+- r
+- e
+- c
+- i
+- s
+- e
+-  
+- s
+- c
+- a
+- l
+- i
+- n
+- g
+-  
+- s
+- t
+- a
+- t
+- e
+- m
+- e
+- n
+- t
+-  
+- '
+- a
+- d
+- j
+- o
+- i
+- n
+- t
+-  
+- s
+- e
+- n
+- s
+- i
+- t
+- i
+- v
+- i
+- t
+- y
+-  
+- c
+- o
+- s
+- t
+-  
+- i
+- s
+-  
+- i
+- n
+- d
+- e
+- p
+- e
+- n
+- d
+- e
+- n
+- t
+-  
+- o
+- f
+-  
+- p
+- a
+- r
+- a
+- m
+- e
+- t
+- e
+- r
+-  
+- c
+- o
+- u
+- n
+- t
+-  
+- w
+- h
+- i
+- l
+- e
+-  
+- f
+- o
+- r
+- w
+- a
+- r
+- d
+-  
+- s
+- c
+- a
+- l
+- e
+- s
+-  
+- w
+- i
+- t
+- h
+-  
+- i
+- t
+- '
+-  
+- i
+- s
+-  
+- s
+- t
+- a
+- n
+- d
+- a
+- r
+- d
+-  
+- i
+- n
+-  
+- t
+- h
+- e
+-  
+- A
+- M
+- I
+- C
+- I
+- /
+- F
+- r
+- o
+- e
+- h
+- l
+- i
+- c
+- h
+- -
+- H
+- a
+- s
+- e
+- n
+- a
+- u
+- e
+- r
+-  
+- l
+- i
+- t
+- e
+- r
+- a
+- t
+- u
+- r
+- e
+-  
+- a
+- n
+- d
+-  
+- i
+- s
+-  
+- t
+- h
+- e
+-  
+- d
+- e
+- s
+- i
+- g
+- n
+-  
+- r
+- a
+- t
+- i
+- o
+- n
+- a
+- l
+- e
+-  
+- o
+- f
+-  
+- t
+- h
+- e
+-  
+- 4
+- 2
+- 3
+- 1
+- -
+- p
+- a
+- r
+- a
+- m
+-  
+- b
+- e
+- n
+- c
+- h
+- m
+- a
+- r
+- k
+- ,
+-  
+- b
+- u
+- t
+-  
+- t
+- h
+- e
+-  
+- s
+- u
+- r
+- v
+- i
+- v
+- i
+- n
+- g
+-  
+- v
+- e
+- r
+- i
+- f
+- i
+- e
+- d
+-  
+- c
+- l
+- a
+- i
+- m
+- s
+-  
+- o
+- n
+- l
+- y
+-  
+- c
+- o
+- n
+- f
+- i
+- r
+- m
+- e
+- d
+-  
+- t
+- h
+- e
+-  
+- w
+- e
+- a
+- k
+- e
+- r
+-  
+- '
+- c
+- o
+- s
+- t
+-  
+- i
+- s
+-  
+- l
+- i
+- m
+- i
+- t
+- i
+- n
+- g
+-  
+- f
+- o
+- r
+-  
+- l
+- a
+- r
+- g
+- e
+-  
+- m
+- o
+- d
+- e
+- l
+- s
+- '
+-  
+- m
+- o
+- t
+- i
+- v
+- a
+- t
+- i
+- o
+- n
+-  
+- —
+-  
+- c
+- i
+- t
+- e
+-  
+- F
+- r
+- o
+- e
+- h
+- l
+- i
+- c
+- h
+-  
+- C
+- e
+- l
+- l
+- S
+- y
+- s
+- t
+- e
+- m
+- s
+-  
+- 2
+- 0
+- 1
+- 8
+-  
+- a
+- n
+- d
+-  
+- t
+- h
+- e
+-  
+- A
+- M
+- I
+- C
+- I
+-  
+- m
+- e
+- t
+- h
+- o
+- d
+- s
+-  
+- p
+- a
+- p
+- e
+- r
+-  
+- f
+- o
+- r
+-  
+- t
+- h
+- e
+-  
+- s
+- t
+- r
+- o
+- n
+- g
+-  
+- s
+- c
+- a
+- l
+- i
+- n
+- g
+-  
+- c
+- l
+- a
+- i
+- m
+- .
+-  
+- (
+- 4
+- )
+-  
+- O
+- n
+- e
+-  
+- c
+- l
+- a
+- i
+- m
+-  
+- (
+- [
+- 1
+- 0
+- ]
+- )
+-  
+- s
+- p
+- l
+- i
+- t
+-  
+- 2
+- -
+- 1
+-  
+- o
+- n
+-  
+- d
+- e
+- s
+- c
+- r
+- i
+- p
+- t
+- i
+- v
+- e
+-  
+- d
+- e
+- t
+- a
+- i
+- l
+-  
+- (
+- 4
+- 2
+- 6
+-  
+- v
+- s
+-  
+- 1
+- 1
+- 6
+-  
+- r
+- e
+- g
+- i
+- o
+- n
+- s
+- )
+-  
+- b
+- u
+- t
+-  
+- t
+- h
+- e
+-  
+- l
+- o
+- a
+- d
+- -
+- b
+- e
+- a
+- r
+- i
+- n
+- g
+-  
+- c
+- o
+- n
+- c
+- l
+- u
+- s
+- i
+- o
+- n
+-  
+- (
+- p
+- o
+- o
+- r
+-  
+- c
+- a
+- n
+- d
+- i
+- d
+- a
+- t
+- e
+- )
+-  
+- w
+- a
+- s
+-  
+- u
+- n
+- a
+- n
+- i
+- m
+- o
+- u
+- s
+- .
+-  
+- (
+- 5
+- )
+-  
+- A
+-  
+- f
+- e
+- w
+-  
+- s
+- o
+- u
+- r
+- c
+- e
+- s
+-  
+- w
+- e
+- r
+- e
+-  
+- R
+- e
+- s
+- e
+- a
+- r
+- c
+- h
+- G
+- a
+- t
+- e
+- /
+- p
+- a
+- y
+- w
+- a
+- l
+- l
+- e
+- d
+-  
+- (
+- S
+- 0
+- 0
+- 2
+- 5
+- 5
+- 5
+- 6
+- 4
+- 1
+- 6
+- 3
+- 0
+- 2
+- 6
+- 6
+- 8
+-  
+- v
+- i
+- a
+-  
+- S
+- c
+- i
+- e
+- n
+- c
+- e
+- D
+- i
+- r
+- e
+- c
+- t
+-  
+- 4
+- 0
+- 3
+- )
+- ;
+-  
+- t
+- h
+- o
+- s
+- e
+-  
+- w
+- e
+- r
+- e
+-  
+- c
+- o
+- r
+- r
+- o
+- b
+- o
+- r
+- a
+- t
+- e
+- d
+-  
+- t
+- h
+- r
+- o
+- u
+- g
+- h
+-  
+- o
+- p
+- e
+- n
+-  
+- p
+- r
+- e
+- p
+- r
+- i
+- n
+- t
+- s
+-  
+- (
+- a
+- r
+- X
+- i
+- v
+- :
+- 1
+- 4
+- 0
+- 3
+- .
+- 1
+- 4
+- 1
+- 7
+- ,
+-  
+- a
+- r
+- X
+- i
+- v
+- :
+- 2
+- 1
+- 0
+- 2
+- .
+- 0
+- 5
+- 1
+- 0
+- 0
+- )
+-  
+- a
+- n
+- d
+-  
+- i
+- n
+- d
+- e
+- p
+- e
+- n
+- d
+- e
+- n
+- t
+-  
+- p
+- r
+- i
+- m
+- a
+- r
+- y
+-  
+- l
+- i
+- t
+- e
+- r
+- a
+- t
+- u
+- r
+- e
+- .
+-  
+- (
+- 6
+- )
+-  
+- O
+- n
+- e
+-  
+- c
+- l
+- a
+- i
+- m
+-  
+- w
+- a
+- s
+-  
+- R
+- E
+- F
+- U
+- T
+- E
+- D
+-  
+- 0
+- -
+- 3
+- :
+-  
+- t
+- h
+- e
+-  
+- a
+- s
+- s
+- e
+- r
+- t
+- i
+- o
+- n
+-  
+- t
+- h
+- a
+- t
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- i
+- s
+-  
+- p
+- u
+- r
+- e
+- l
+- y
+-  
+- a
+-  
+- d
+- e
+- s
+- i
+- g
+- n
+-  
+- a
+- r
+- t
+- i
+- f
+- a
+- c
+- t
+-  
+- e
+- l
+- i
+- m
+- i
+- n
+- a
+- b
+- l
+- e
+-  
+- b
+- y
+-  
+- o
+- p
+- t
+- i
+- m
+- a
+- l
+-  
+- e
+- x
+- p
+- e
+- r
+- i
+- m
+- e
+- n
+- t
+- a
+- l
+-  
+- d
+- e
+- s
+- i
+- g
+- n
+-  
+- —
+-  
+- d
+- o
+-  
+- N
+- O
+- T
+-  
+- r
+- e
+- l
+- y
+-  
+- o
+- n
+-  
+- t
+- h
+- a
+- t
+- ;
+-  
+- t
+- h
+- e
+-  
+- c
+- o
+- n
+- s
+- e
+- n
+- s
+- u
+- s
+-  
+- i
+- s
+-  
+- s
+- l
+- o
+- p
+- p
+- i
+- n
+- e
+- s
+- s
+-  
+- i
+- s
+-  
+- b
+- r
+- o
+- a
+- d
+- l
+- y
+-  
+- (
+- G
+- u
+- t
+- e
+- n
+- k
+- u
+- n
+- s
+- t
+- :
+-  
+- u
+- n
+- i
+- v
+- e
+- r
+- s
+- a
+- l
+- l
+- y
+- )
+-  
+- p
+- r
+- e
+- s
+- e
+- n
+- t
+-  
+- b
+- u
+- t
+-  
+- d
+- i
+- s
+- t
+- i
+- n
+- c
+- t
+-  
+- f
+- r
+- o
+- m
+-  
+- i
+- d
+- e
+- n
+- t
+- i
+- f
+- i
+- a
+- b
+- i
+- l
+- i
+- t
+- y
+- .
