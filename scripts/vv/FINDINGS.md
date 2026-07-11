@@ -1601,6 +1601,20 @@ future work**. Consequence for the merge: the cloud fixes are **kept** (they clo
 shipped baseline); the Earn-Guard ships **opt-in** as the differential-class structural direction.
 Retiring the differential bands *behind* the Earn-Guard is the §4 migration, not this change.
 
+**Numerical caveat — the guard needs a CONVERGED null (MEASURED; surfaced by the automated-scientist
+eval, `design/automated_scientist/runs/000000003`).** The `earn` test only holds if the affine null
+is actually *optimized*. When the first `differential_robust` wiring defaulted to `steps=150`, a
+×2.0 multiplicative confound (`mechanism="none"`, seed 11) produced a **spurious `threshold-diff`,
+earn ≈ +42, cond ≈ 9437** — a confident-wrong. It is a numerical false positive, NOT a structural
+blind gap: at `steps=180` the same case gives `earn = −4.3` (abstains), and `steps=250` abstains
+across seeds 11–14 (earn −4.3…−7.5). Root cause: too few optimizer steps under-fit the affine null,
+so a knob spuriously out-explains it. **Fix:** the service/MCP `differential_robust` default is now
+`steps=250` (matching the banded `differential`); the 0/24 proof already used `steps=180`. Additive
+confounds are exactly in the null span and abstain even at 150 (earn −3.9…−6.3); only the
+multiplicative case is step-sensitive. Lesson: an under-optimized fail-safe can *manufacture* the
+very confident-wrong it exists to prevent — the abstention guarantee is conditional on convergence,
+now stated in the docstrings and defended by the default.
+
 
 ## P3 — design() safety gate absolute near-fold check (hardening loop, `NUDGE-LIM-013`)
 

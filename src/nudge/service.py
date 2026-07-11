@@ -1168,7 +1168,9 @@ def differential_robust_arrays(
     k: float = 1.0,
     basal: float = 0.2,
     k_modes: int = 2,
-    steps: int = 150,
+    steps: int = 250,  # >=~180 required: at ~150 the affine null under-fits and a multiplicative
+    # confound can spuriously "earn" a knob at some noise seeds (a MEASURED false positive that
+    # vanishes once the null is optimized; FINDINGS §EG). 250 matches the banded `differential`.
     earn_margin: float = 6.0,
     cond_max: float = 100.0,
     check_both: bool = True,
@@ -1184,10 +1186,13 @@ def differential_robust_arrays(
     ``(s, o)`` and returns a positive ``*-diff`` ONLY if the biological knob **earns** its BIC
     parameter over that affine null, in BOTH directions. Because the whole per-condition affine
     confound family lies inside the free-affine null's span, this abstains on it **continuously**
-    — one measured statistic, no calibrated bands, no blind gaps (proven **0/24 confident-wrong**
-    on the exact red-team P1/P4/P5 repros; ``scripts/vv/FINDINGS.md`` §EG). Slower than the banded
-    path (it fits a reference + two augmented models per direction); use it when robustness to a
-    perturbed-side technical confound matters more than latency.
+    — one measured statistic, no calibrated bands (proven **0/24 confident-wrong** at adequate
+    optimizer steps on the red-team P1/P4/P5 repros; ``scripts/vv/FINDINGS.md`` §EG). **Numerical
+    caveat (MEASURED):** the abstention relies on the affine null being *optimized* — at too few
+    ``steps`` (≲180) the null under-fits and a multiplicative confound can spuriously "earn" a knob
+    at some noise seeds; the default ``steps=250`` clears this (a false positive at 150 vanishes at
+    ≥180). Slower than the banded path (it fits a reference + two augmented models per direction);
+    use it when robustness to a perturbed-side technical confound matters more than latency.
     """
     import numpy as np
 
@@ -1229,7 +1234,9 @@ def differential_robust_file(
     k: float = 1.0,
     basal: float = 0.2,
     k_modes: int = 2,
-    steps: int = 150,
+    steps: int = 250,  # >=~180 required: at ~150 the affine null under-fits and a multiplicative
+    # confound can spuriously "earn" a knob at some noise seeds (a MEASURED false positive that
+    # vanishes once the null is optimized; FINDINGS §EG). 250 matches the banded `differential`.
     earn_margin: float = 6.0,
     cond_max: float = 100.0,
     check_both: bool = True,

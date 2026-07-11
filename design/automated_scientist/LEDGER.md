@@ -9,15 +9,20 @@ history (append new rows; correct forward).
 
 ## ▶ RESUME POINTER
 
-**Status: 2 cases run (4 arms), 0 confident-wrong. KEY FINDING below changes the next case design.**
+**Status: 3 cases run (6 arms), 0 confident-wrong. The confound case (000000003) ran — the control
+was NOT baited (it caught the technical scale unaided), so the money-shot still did not land.**
 
-- **Next:** build a **confounded** blind case — the money-shot the clean cases can't produce (see
-  "Key finding"). Concretely: a `differential`-surface case with a per-condition **affine technical
-  nuisance** on the perturbed cells (the P1/P4/P5 family we just hardened), where a careful generic
-  analysis is *genuinely baited* into calling a `ceiling`/`gain` change but NUDGE's guard abstains.
-  Requires a new `@register("differential")` builder in `blind_harness.py` that injects the confound
-  + holds out "truth = no-difference".
-- Then re-run the ablation on that case and record it as `runs/000000003-*`.
+- **What the confound case taught us:** even a per-condition ×2.0 confound built to bait did not fool
+  Opus 4.8 — the control spotted that the scale also doubled the OFF-population noise (an instrument
+  gain, not biology). It also (a) surfaced a REAL NUDGE bug — `differential_robust` defaulted to too
+  few optimizer steps (150) and spuriously "earned" a `threshold-diff` at seed 11; **fixed to 250**
+  (FINDINGS §EG) — and (b) showed the with-nudge agent *catching that NUDGE false positive* via the
+  cond number NUDGE reports (transparency working as intended).
+- **Next (to actually move the OUTCOME, if that is the goal):** the demonstration that NUDGE *changes
+  the answer* needs a **less-calibrated scientist** (a smaller/older model as the headless agent —
+  the runner's `--model` flag) and/or a **subtler confound** the model does not independently decode.
+  Alternatively, reframe the demo around NUDGE's *shown* value: grounding + a cross-checkable second
+  opinion + transparency, rather than outcome-changing rescue. **Open design call for the human.**
 
 ---
 
@@ -27,8 +32,9 @@ history (append new rows; correct forward).
 |---|------|---------|--------------|------------|---------------|-------------|
 | 000000001 | `blind_threshold` | attribute | threshold K×1.6 (below detection here) | correct-abstention (no-effect) | correct-abstention (no-effect) | no (near-null) |
 | 000000002 | `dose_truncated` | dose-response | switch, truncated below inflection | correct-abstention (unresolved/LIM-007) | correct-abstention (extend range) | no (control didn't bite) |
+| 000000003 | `blind_differential` | differential | no-difference + ×2.0 confound on B-perturbed | correct-abstention (caught NUDGE's own FP) | correct-abstention (spotted the technical gain) | no (control caught the confound) |
 
-**Tally so far: 4 arms, 4 PASS (all correct-abstention), 0 confident-wrong.**
+**Tally so far: 6 arms, 6 PASS (all correct-abstention), 0 confident-wrong.**
 
 ## The ablation — what these runs actually show
 
@@ -40,22 +46,33 @@ history (append new rows; correct forward).
 
 So on these cases NUDGE's value is **grounding / standardization / speed**, not outcome-changing.
 
-## KEY FINDING (drives the next case)
+## KEY FINDING (revised after the confound case, 000000003)
 
-**Opus 4.8 is already well-calibrated on clean synthetic abstention cases — it abstains correctly
-*without* NUDGE.** Across a below-detection threshold shift and a truncated dose curve (a *designed*
-switch-over-fit trap), the control arm never committed a confident-wrong; it built its own rigorous
-identifiability analysis and abstained. Therefore the "NUDGE prevents a confident-wrong the control
-commits" demonstration **cannot come from a clean case** — the control is too careful.
+**Opus 4.8 is well-calibrated across ALL THREE case types — a below-detection threshold shift, a
+truncated-dose over-fit trap, AND a per-condition ×2.0 technical confound built to bait it.** In
+every one, the control arm reached the honest abstention *without* NUDGE — on the confound it even
+rediscovered the specialized tell (the scale also doubles the OFF-population noise → an instrument
+gain, not biology). So the "NUDGE prevents a confident-wrong the model would commit" money-shot did
+**not** materialize on any case: the model is simply too careful to bait with a clean synthetic
+confound.
 
-**Where NUDGE's UNIQUE value lives (the next case):** a **confound** a careful generic analysis does
-not know to check for — a per-condition **affine technical nuisance** (scale/offset on the perturbed
-cells only) that *aliases onto a real mechanism* (a scale looks like a ceiling `v_max` change; an
-offset shifts modes → threshold/gain). A generic analyst sees a cleanly shifted/scaled distribution
-and calls the apparent mechanism (a confident-wrong); NUDGE's engineered guards (differential gates
-4b/4c, the opt-in Earn-Guard — the exact P1/P4/P5 hardening just merged to `main`) recognize the
-affine confound and **abstain**. That is the outcome-changing money-shot, and it ties the demo
-directly to the depth-of-execution hardening work.
+**What NUDGE's value actually IS on these runs (measured, not hoped):**
+1. **Grounding / standardization / speed** — a quantified verdict tied to a documented limitation
+   (LIM-004 / LIM-007 / the affine-confound gate) in one tool call, vs a bespoke from-scratch
+   analysis each time.
+2. **A cross-checkable second opinion** — in 000000003 the with-nudge agent used the banded tool's
+   abstention *plus* its own analysis to adjudicate.
+3. **Transparency that catches even NUDGE's own errors** — the robust tool emitted a spurious
+   `threshold-diff` (a step-count bug, now fixed), and the agent discounted it *using the cond number
+   NUDGE reports*. A fail-safe that publishes its own uncertainty diagnostics let the user catch its
+   misfire. On-thesis, if unplanned.
+
+**To move the OUTCOME (if that is the demo goal):** use a **less-calibrated scientist** (run the
+headless agent on a smaller/older model via the runner's `--model`) and/or a **subtler confound** the
+model can't independently decode. Until then, the honest demo story is #1–#3 above — grounding,
+second opinion, transparency — not "NUDGE rescues a careless model." (An under-optimized NUDGE guard
+even *manufactured* a confident-wrong once — the fail-safe's guarantee is conditional on convergence;
+FINDINGS §EG.)
 
 ## Case-calibration notes (honest, so the next case is better)
 

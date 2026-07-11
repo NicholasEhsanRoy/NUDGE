@@ -489,7 +489,7 @@ def build_server() -> Any:
         vmax: float = 2.5,
         k: float = 1.0,
         basal: float = 0.2,
-        steps: int = 150,
+        steps: int = 250,
     ) -> dict[str, Any]:
         """ROBUST differential attribution — hardened against a per-condition technical confound.
 
@@ -507,9 +507,11 @@ def build_server() -> Any:
         knob **earns** its BIC parameter over that affine null, in both directions — otherwise it
         abstains (`no-difference` / `unresolved`). Because the whole affine confound family lies
         inside the free-affine null's span, it abstains on it **continuously** (no calibrated
-        bands, no blind gaps; proven 0/24 confident-wrong on the exact red-team P1/P4/P5 repros).
-        Slower than `differential` (fits a reference + two augmented models per direction). Returns
-        the verdict, the knob it screened, the `earn` (profiled ΔBIC), and the fitted nuisance
+        bands; proven 0/24 confident-wrong on the red-team P1/P4/P5 repros AT ADEQUATE `steps`).
+        The abstention needs the null to be *optimized*: at too few `steps` (≲180) it can spuriously
+        "earn" a knob on a multiplicative confound at some seeds — the default `steps=250` clears
+        this. Slower than `differential` (fits a reference + two augmented models per direction).
+        Returns the verdict, the knob it screened, the `earn` (profiled ΔBIC), and the nuisance
         `(s, o)`.
         """
         from nudge.service import differential_robust_file
