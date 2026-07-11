@@ -8,16 +8,20 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000017-redteam-finalsweep.md`. That immutable record is the source of truth;
+`runs/000000018-audit-P5-FAIL.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3/P1/P4/P2 CLOSED/BOUNDED + merged. The FINAL full sweep
-(`runs/000000017`) returned **HOLES_FOUND: 1** → NOT a STOP: a NEW hole **P5** (differential
-SMALL multiplicative confound, `c≈1.15–1.25`, slips the P4 gate 4c's ceiling-scoping +
-`(1.18,1.30]` blind gap). The fix loop resumes on P5.
+**Status: RUNNING — P5 fix FAILED audit, back to the fixer.** P3/P1/P4/P2 CLOSED/BOUNDED +
+merged. P5 (differential small multiplicative confound) is still **OPEN**: the first fix
+attempt (`779fc3a`) **FAILED audit** (`runs/000000018`) — it validated on only 2 seeds while
+the repro's default is 4, at which the hole still yields 3 confident-wrong; its "gap
+[1.184, 1.231]" claim was independently falsified (confident confounds at off_scale
+1.13–1.18), and the 1.20 cut is too loose for the default red-team regime (genuine-ceiling
+max ~1.104 there). The failed fix is **NOT merged**.
 
-- **Next agent:** `nudge-uq-fixer` on **P5** (completes the P4 gate; must also correct the
-  now-falsified P4 "INFLATION CLOSED" claim), then `nudge-audit` → merge → `nudge-red-team`.
+- **Next agent:** `nudge-uq-fixer` on **P5 again** — tighten the cut to a measured margin
+  above the genuine-increase max (regime-aware: 1.104 RT vs 1.184 TEST), ABSTAIN across the
+  confounded band rather than resolve, retract the falsified numbers, re-validate ≥4 seeds.
 - **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
@@ -84,6 +88,7 @@ last; never edit a past row):
 | 000000015 | `runs/000000015-audit-P2.md` | audit | P2 fix | **AUDIT: PASS** — hole gone (seeds 0,1,2), genuine ceiling resolves 4/4, near-zero-floor bound narrow+honest, frozen core untouched |
 | 000000016 | `runs/000000016-orchestrator-P2-merge.md` | orchestrator | P2 merge | independently re-verified + merged → `1d091c1` (2 additive doc conflicts resolved); P2 CLOSED/BOUNDED; queue now EMPTY |
 | 000000017 | `runs/000000017-redteam-finalsweep.md` | redteam | FINAL full sweep | **HOLES_FOUND: 1** — NOT a STOP: NEW hole **P5** (differential small mult confound slips P4 gate 4c); 4 fixes held jointly; report `FAILSAFE_REDTEAM_5.md`; commit `6a1c774` |
+| 000000018 | `runs/000000018-audit-P5-FAIL.md` | audit | P5 fix (`779fc3a`) | **AUDIT: FAIL** — hole NOT closed (HOLES: 3 at the repro's default 4 seeds; fixer validated only 2); "gap [1.184,1.231]" claim falsified; cut 1.20 too loose (RT genuine max ~1.104). NOT merged → back to fixer |
 
 ---
 
