@@ -1027,8 +1027,9 @@ anomalies:
       the exact path. (3) above dense_below (or explicit method='iterative') the smallest end is
       probed by INVERSE ITERATION (shift-invert via CG, _smallest_eig_null_probe): it AMPLIFIES
       the FIM's smallest eigenvalue (a null is the strictly dominant eigenpair of (FIM+εI)⁻¹) and
-      reliably CATCHES the isolated null eigsh('SA') misses (MEASURED: Rayleigh quotient → ~1e-19
-      ≤ rank floor on the P6 models where eigsh returned ~1661; 0 false nulls on well-conditioned
+      reliably CATCHES the isolated null eigsh('SA') misses (MEASURED: Rayleigh quotient ~1e-12–1e-10,
+      orders of magnitude below the rank floor rank_rtol^2*lam_max (~3e-10), on the P6 models
+      where eigsh returned ~1661; 0 false nulls on well-conditioned
       + sloppy controls; ~150–800 matvecs, <0.3 s). A residual-verified near-null ⇒ unidentifiable
       naming the null direction; if NO null is found the full smallest spectrum is still not
       certifiable matrix-free (the probe is one-sided — a low Rayleigh quotient PROVES a null, but

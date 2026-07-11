@@ -695,8 +695,8 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   DEFERS to the exact dense-via-matvec reconstruction up to `dense_below=2048` (raised from 256;
   measured affordable — ~18 s / 0.7 GB at n=2048, recovering the exact null at every size
   256–4096); (2) above that, an INVERSE-ITERATION null probe (shift-invert `(FIM+εI)⁻¹` via CG)
-  reliably CATCHES the isolated null `eigsh('SA')` misses (measured: Rayleigh quotient → ~1e-19
-  where `eigsh` returned ~1e3; 0 false nulls on well-conditioned + sloppy controls), else the
+  reliably CATCHES the isolated null `eigsh('SA')` misses (measured: Rayleigh quotient ~1e-12–1e-10,
+  ≤ the rank floor, where `eigsh` returned ~1e3; 0 false nulls on well-conditioned + sloppy controls), else the
   path ABSTAINS (`unidentifiable`, "cannot certify the smallest eigenvalue"). **CLOSED:** 0/6
   confident-wrong; positive controls (`well-constrained`, `sloppy-but-predictive`) still resolve
   via the dense path (no over-abstention); dense==auto agreement preserved. **BOUNDED:** above

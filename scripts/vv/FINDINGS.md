@@ -2046,10 +2046,16 @@ untouched):
 
    | model (n) | truth λ_min | `eigsh('SA')` smallest | inverse-iter RQ | probe verdict |
    |---|---|---|---|---|
-   | P6 null (300) | 1.4e-11 | **1.84e2 (MISSES)** | **5.6e-19** | null ✓ |
-   | P6 null (40) | 0.0 | **1.66e3 (MISSES)** | **1.0e-19** | null ✓ |
+   | P6 null (300) | 1.4e-11 | **1.84e2 (MISSES)** | **~1.8e-10** | null ✓ |
+   | P6 null (40) | 0.0 | **1.66e3 (MISSES)** | **~1.1e-12** | null ✓ |
    | well-conditioned full-rank (300) | 1.82e2 | 1.82e2 | 1.85e2 | no null ✓ |
    | sloppy sum-of-exp (12) | 1.68e-6 | 1.68e-6 | 5.0 (overest.) | no null ✓ |
+
+   (**Honesty correction** — P6 audit `runs/000000023` + orchestrator re-measurement, seeds 0–2 ×
+   n∈{40,300}: the inverse-iter RQ figures were originally recorded as ~1e-19 — below float64's
+   cancellation floor `λ_max·ε ≈ 6e-12`, and non-reproducing. The measured probe RQ is ~1e-12
+   (n=40) … ~2e-10 (n=300), **orders of magnitude below the rank floor** `rank_rtol²·λ_max ≈ 3e-10`
+   — which is the load-bearing, reproducing separation from the well-conditioned control's ~1.8e2.)
 
    Cost: ~150–800 matvecs, <0.3 s. A residual-verified near-null (Rayleigh quotient ≤ rank floor)
    ⇒ `unidentifiable`, naming the direction. The probe is used **one-sided only**: a low quotient
