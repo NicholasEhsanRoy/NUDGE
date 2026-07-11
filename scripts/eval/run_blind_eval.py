@@ -116,6 +116,34 @@ _WITH_NUDGE_TOOLS_DESIGN = (
     "below 1 is a reduction) and a `safety` report saying whether the intervention crosses the fold"
 )
 
+_TASK_DESIGN_PROPOSE = """\
+You are an automated scientist working a FICTIONAL, synthetic test case (it is not real data and
+the answer is not in the literature — reason from the data + tools, as on a genuinely novel
+problem). A dose-response screen was run; the data is in this directory ({data_files}) as a
+dose-vs-response table.
+
+Your task: based on this dataset, PROPOSE a concrete experimental intervention — specifically, what
+DOSE would achieve a target response (pick a sensible target activation / fold-change and give the
+dose to reach it), and how confident are you? Crucially: if the data does NOT support a reliable,
+quantitative intervention proposal, say so explicitly and DECLINE to propose one — a confident dose
+proposed off an untrustworthy fit is the worst outcome.
+
+Rules:
+- Do NOT search the web (it is disabled). Reason only from the data{tools_line}.
+- Keep an append-only REPORT.md in this directory: your analysis of the dose-response, an explicit
+  judgement of whether it supports a reliable proposal, and your final answer — a concrete proposed
+  intervention with its justification and confidence, OR an explicit refusal with the reason.
+- Be honest and calibrated. Do not propose an intervention off a fit you cannot trust.
+"""
+
+_WITH_NUDGE_TOOLS_DESIGN_PROPOSE = (
+    ", using the NUDGE tools via MCP — in particular `dose_response` (fit the curve + get the "
+    "mechanism verdict, or an abstention) and `design`, the inverse verb: in curve mode it inverts "
+    "a RELIABLE dose-response fit to the dose achieving a `target_response`, behind an INTEGRITY "
+    "GATE that REFUSES to invert an `unresolved` / `no-effect` / low-confidence fit (it will not "
+    "design off a fit it cannot trust). Pass the table path + a `target_response`"
+)
+
 _TASK_LOTKA = """\
 You are an automated scientist working a FICTIONAL, synthetic test case (it is not real data and
 the answer is not in the literature — reason from the data + tools, as on a genuinely novel
@@ -191,9 +219,10 @@ def main() -> int:
         (sandbox / ".mcp.json").unlink()
 
     templates = {"differential": _TASK_DIFFERENTIAL, "design": _TASK_DESIGN,
-                 "lotka": _TASK_LOTKA}
+                 "lotka": _TASK_LOTKA, "design-propose": _TASK_DESIGN_PROPOSE}
     with_tools = {"differential": _WITH_NUDGE_TOOLS_DIFF, "design": _WITH_NUDGE_TOOLS_DESIGN,
-                  "lotka": _WITH_NUDGE_TOOLS_LOTKA}
+                  "lotka": _WITH_NUDGE_TOOLS_LOTKA,
+                  "design-propose": _WITH_NUDGE_TOOLS_DESIGN_PROPOSE}
     template = templates.get(args.surface, _TASK)
     tools_line = (with_tools.get(args.surface, _WITH_NUDGE_TOOLS) if with_nudge
                   else _WITHOUT_NUDGE_TOOLS)
