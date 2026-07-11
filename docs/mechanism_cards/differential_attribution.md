@@ -5,7 +5,7 @@ role: attribution-method
 registry_name: DifferentialAttribution
 vulnerable_to_decoys: []
 documented_limitation: [NUDGE-LIM-006, NUDGE-LIM-016]
-validated_in_regime: {min_cells_per_context: 300, requires: "a per-context control + an approximately-correct shared switch topology", notes: "Fits the SAME perturbation in TWO contexts (drug-resistant vs sensitive line; donor A vs B; disease vs healthy) JOINTLY with a shared-vs-per-context parameter structure and BIC-selects which SINGLE knob differs — threshold (K) / gain (n) / ceiling (v_max) — or abstains (no-difference / unresolved). Reuses the shipped LNA Gaussian-mixture forward model (mode means + Lyapunov covariances) and the BIC parsimony pattern; depth/noise is pinned PER CONTEXT from each context's OWN control (calibrate_from_wt). Confound guard (NUDGE-LIM-016): a depth/batch shift aligned with the context axis is degenerate with a ceiling difference (scale⇄vmax), so when the per-context depths (pinned from each control) differ beyond a ratio NUDGE ABSTAINS — unless the winner is a cleanly-resolved threshold/gain difference (orthogonal to a global scale). A second channel (P1): a constant additive/ambient offset on ONE context's PERTURBED cells only (control clean) is invisible to the control-keyed depth ratio yet fakes a confident gain-diff; a MEASURED one-sided OFF-baseline-inflation guard (gate 4b, off_shift_max=2.5, separating confident-wrong offset off_shift >= 2.99 from genuine <= 1.96, FINDINGS P1) abstains on it, with a residual bound on the deflating direction. A third channel (P4): a constant MULTIPLICATIVE factor on ONE context's PERTURBED cells (control clean) aliases a ceiling-diff 1:1 and slips past both gate 4 and gate 4b; a MEASURED ceiling-scoped OFF-cluster-SCALE guard (gate 4c, band [0.80, 1.30] on off_scale = the OFF-cluster spread ratio perturbed-vs-control, FINDINGS P4) abstains on it — the INFLATING scale CLOSED (clean gap: genuine ceiling <= 1.18, confound >= 1.43), the DEFLATING scale BOUNDED (a genuine ceiling reduction is degenerate with a deflating scale, so both abstain). Validated on synthetic ground truth: a Δv_max / Δn pair recovers WHICH knob differs, a no-difference pair reads no-difference, a ΔK threshold pair recovers-or-abstains (threshold is the hardest from a bistable snapshot, FINDINGS §2), and both a depth-aligned-with-context confound AND an additive perturbed-offset confound abstain unresolved — never a spurious mechanism-difference call, 0 confident-wrong across seeds. Reported Δ estimates are APPARENT population parameters, not molecular constants (NUDGE-LIM-006)."}
+validated_in_regime: {min_cells_per_context: 300, requires: "a per-context control + an approximately-correct shared switch topology", notes: "Fits the SAME perturbation in TWO contexts (drug-resistant vs sensitive line; donor A vs B; disease vs healthy) JOINTLY with a shared-vs-per-context parameter structure and BIC-selects which SINGLE knob differs — threshold (K) / gain (n) / ceiling (v_max) — or abstains (no-difference / unresolved). Reuses the shipped LNA Gaussian-mixture forward model (mode means + Lyapunov covariances) and the BIC parsimony pattern; depth/noise is pinned PER CONTEXT from each context's OWN control (calibrate_from_wt). Confound guard (NUDGE-LIM-016): a depth/batch shift aligned with the context axis is degenerate with a ceiling difference (scale⇄vmax), so when the per-context depths (pinned from each control) differ beyond a ratio NUDGE ABSTAINS — unless the winner is a cleanly-resolved threshold/gain difference (orthogonal to a global scale). A second channel (P1): a constant additive/ambient offset on ONE context's PERTURBED cells only (control clean) is invisible to the control-keyed depth ratio yet fakes a confident gain-diff; a MEASURED one-sided OFF-baseline-inflation guard (gate 4b, off_shift_max=2.5, separating confident-wrong offset off_shift >= 2.99 from genuine <= 1.96, FINDINGS P1) abstains on it, with a residual bound on the deflating direction. A third channel (P4): a constant MULTIPLICATIVE factor on ONE context's PERTURBED cells (control clean) aliases a ceiling-diff 1:1 and slips past both gate 4 and gate 4b; a MEASURED ceiling-scoped OFF-cluster-SCALE guard (gate 4c, band [0.80, 1.30] on off_scale = the OFF-cluster spread ratio perturbed-vs-control, FINDINGS P4) abstains on it — the LARGE-factor inflation (c >= 1.5) CLOSED (clean gap: genuine ceiling <= 1.18, confound >= 1.43), the DEFLATING scale BOUNDED (a genuine ceiling reduction is degenerate with a deflating scale, so both abstain). A FOURTH channel (P5, final sweep) exposed gate 4c's blind gap: a SMALL multiplicative scale (c approximately 1.15-1.25) is BIC-assigned to the gain (n) channel gate 4c never checks, and its off_scale approximately 1.14-1.29 lands in gate 4c's (1.18, 1.30] blind gap, faking a confident gain-diff/ceiling-diff (verified 8/4 seeds, 3/2 through the shipped path). P1/P4/P5 are ONE class (a per-condition affine y=s*x+o on one context's perturbed cells); rather than a fourth band, gate 4d adds the affine (s,o) as a FREE nuisance on the perturbed context and abstains before any *-diff unless the winning knob EARNS its parameter over a pure-affine null (profiled ΔBIC earn, both directions, ALL winners) — measured earn <= -2.1 for the whole uniform-affine confound family vs +59..+616 genuine (margin 6.0, FINDINGS P5). This CLOSES the whole uniform per-condition affine class (P1/P4/P5), 0 confident-wrong, no blind gap; the residual is a non-uniform (above-median-only) scale that needs an inert-feature anchor. Validated on synthetic ground truth: a Δv_max / Δn pair recovers WHICH knob differs, a no-difference pair reads no-difference, a ΔK threshold pair recovers-or-abstains (threshold is the hardest from a bistable snapshot, FINDINGS §2), and both a depth-aligned-with-context confound AND an additive perturbed-offset confound abstain unresolved — never a spurious mechanism-difference call, 0 confident-wrong across seeds. Reported Δ estimates are APPARENT population parameters, not molecular constants (NUDGE-LIM-006)."}
 references: [Das2009, HuangFerrell1996, ElfEhrenberg2003]
 ---
 
@@ -98,14 +98,36 @@ around nominal) so it cannot run off to the LNA variance-collapse likelihood spi
    `depth_ratio` ≈ 1) and gate 4b (a factor scales the near-zero OFF baseline to near-zero, so
    `off_shift` ≈ 1). Its fingerprint is the OFF-cluster **spread**: a factor multiplies it by `c`
    (`off_scale` ≈ `c`), while a genuine `v_max` difference leaves it at basal (`off_scale` ≈ 1).
-   NUDGE **abstains** when `off_scale` leaves the measured band `[0.80, 1.30]`. **INFLATION is
-   CLOSED** — genuine ceiling ×1.4–×4 ≤ 1.18, every inflating confound ≥ 1.43 (`FINDINGS` §P4).
-   **DEFLATION is BOUNDED** — a genuine ceiling *reduction* shrinks the OFF cluster into the same
+   NUDGE **abstains** when `off_scale` leaves the measured band `[0.80, 1.30]`. This catches the
+   **LARGE**-factor inflation it was calibrated on (genuine ceiling ×1.4–×4 ≤ 1.18, every inflating
+   confound `c ≥ 1.5` ≥ 1.43; `FINDINGS` §P4) but is a per-magnitude BAND with a measured **blind
+   gap** on the small-factor interior (see 4d): ceiling-scoped (silent on a gain winner) and its
+   upper cut 1.30 sits *above* the genuine-ceiling max 1.18, so a small `c` in `(1.18, 1.30]` slips
+   it. **DEFLATION is BOUNDED** — a genuine ceiling *reduction* shrinks the OFF cluster into the same
    band as a deflating scale, so the lower guard abstains on both (sacrificing a strong genuine
-   ceiling reduction; the honest price). Ceiling-scoped, so gain/threshold are untouched.
+   ceiling reduction; the honest price). Ceiling-scoped, so gain/threshold are untouched; kept only
+   as a cheap first line + the P4 regression lock.
+4d. **unresolved / no-difference — the free per-condition AFFINE nuisance guard (`NUDGE-LIM-016`,
+   P5) — the load-bearing, ALL-winner, no-blind-gap backstop.** P1 (additive), P4 (large
+   multiplicative) and P5 (SMALL multiplicative, `c ≈ 1.15–1.25`) are ONE class: a per-condition
+   affine `y = s·x + o` on one context's *perturbed* cells. The per-magnitude bands (4b/4c) each
+   leave the next magnitude a blind gap — P5 slipped 4c's `(1.18, 1.30]` interval AND its
+   ceiling-only scoping (at small `c` the BIC winner is often **gain (n)**, which 4c never checks →
+   a confident spurious `gain-diff`). Per the STATE.md principle ("guard the identifiability, not
+   the confound — never a calibrated band"), before ANY positive `*-diff` NUDGE adds the affine
+   `(s, o)` as a **free nuisance** on the perturbed context and abstains unless the BIC-winning knob
+   still **EARNS** its parameter over a pure-affine null (the profiled ΔBIC `earn`, min over both
+   directions). The confound family is by construction inside the null's span, so no `(s, o)` lets
+   the knob earn (measured earn ≤ −2.1 across the uniform-affine sweep incl. P5's interior vs +59 …
+   +616 genuine; margin 6.0, `FINDINGS` §P5). The refit runs only for a candidate-positive winner.
+   `earn < 0` → `no-difference`; `0 ≤ earn < margin` → `unresolved`. This **CLOSES the whole
+   uniform per-condition affine class** (P1/P4/P5), 0 confident-wrong, every positive preserved, no
+   blind gap. Residual BOUND: a **non-uniform** (above-median-only) scale is identical to a genuine
+   ceiling → needs an inert-feature anchor (`design/PERTURBED_CONFOUND_STRATEGY.md`).
 5. **threshold-diff / gain-diff / ceiling-diff.** The winning Δ model earns its parameter
-   over the shared null and beats the other Δ models (and the ceiling channel is only
-   called when the per-context depths match).
+   over the shared null, beats the other Δ models, and (the load-bearing check) **earns its
+   parameter over a free per-condition affine** on the perturbed context (gate 4d) — a real,
+   technically-robust difference, not an absorbable per-condition scale/offset.
 
 ## Assumptions & simplifications
 
@@ -131,7 +153,8 @@ around nominal) so it cannot run off to the LNA variance-collapse likelihood spi
 |---|---|---|
 | A depth/batch shift aligned with the context axis faking a ceiling difference | per-context depth pinning + the depth-ratio abstention → `unresolved` (`tests/inference/test_differential.py::test_confound_depth_aligned_with_context_abstains`) | `NUDGE-LIM-016` |
 | An additive/ambient offset on ONE context's *perturbed* cells (control clean) faking a `gain-diff` (P1) | the one-sided OFF-baseline-inflation guard (gate 4b) → `unresolved` (`tests/inference/test_differential.py::test_decoy_additive_perturbed_offset_abstains`) | `NUDGE-LIM-016` |
-| A multiplicative scale on ONE context's *perturbed* cells (control clean) faking a `ceiling-diff` (P4, inflating or deflating) | the ceiling-scoped OFF-cluster-scale guard (gate 4c, band `[0.80, 1.30]`) → `unresolved` (`test_decoy_multiplicative_perturbed_scale_abstains`); inflation CLOSED, deflation BOUNDED | `NUDGE-LIM-016` |
+| A LARGE multiplicative scale on ONE context's *perturbed* cells (control clean) faking a `ceiling-diff` (P4, inflating or deflating) | the ceiling-scoped OFF-cluster-scale guard (gate 4c, band `[0.80, 1.30]`) → `unresolved` (`test_decoy_multiplicative_perturbed_scale_abstains`); large-factor inflation CLOSED, deflation BOUNDED | `NUDGE-LIM-016` |
+| A SMALL multiplicative scale (`c ≈ 1.15–1.25`) on ONE context's *perturbed* cells faking a `gain-diff` / `ceiling-diff` (P5, the interior gate 4c misses) | the free per-condition affine "earn" guard (gate 4d, ALL winners) → `no-difference` / `unresolved` (`test_decoy_small_multiplicative_perturbed_scale_abstains`); the whole uniform affine class CLOSED, no over-abstention (`test_genuine_ceiling_earns_over_the_affine_nuisance` / `..._gain_...`) | `NUDGE-LIM-016` |
 | Gain vs threshold not separable from a bistable snapshot | the Δ-model tie gate → `unresolved` (`test_fail_safe_never_confident_wrong`) | `NUDGE-LIM-016` |
 | An underpowered / near-bifurcation context | the `lna_reliable` + `min_cells` gate → `unresolved` (`test_underpowered_context_abstains`) | `NUDGE-LIM-016` |
 | A nonlinear readout faking ultrasensitivity | the affine-readout bound shared with all attribution | `NUDGE-LIM-006` |
@@ -139,9 +162,11 @@ around nominal) so it cannot run off to the LNA variance-collapse likelihood spi
 There is **no entry in the count-model decoy battery yet** (`vulnerable_to_decoys: []`) — the
 differential confound decoys live as `slow` tests instead: the depth-aligned-with-context
 test, the P1 additive-perturbed-offset test (`test_decoy_additive_perturbed_offset_abstains`),
-*and* the P4 multiplicative-perturbed-scale test (`test_decoy_multiplicative_perturbed_scale_abstains`,
-inflating + deflating) are the context-level decoys NUDGE must resist; a broader synthetic decoy
-battery is future work.
+the P4 multiplicative-perturbed-scale test (`test_decoy_multiplicative_perturbed_scale_abstains`,
+inflating + deflating), *and* the P5 small-multiplicative-scale test
+(`test_decoy_small_multiplicative_perturbed_scale_abstains`, the interior gate 4c missed, now caught
+by the free-affine earn guard gate 4d) are the context-level decoys NUDGE must resist; a broader
+synthetic decoy battery is future work.
 
 ## Identifiability regime
 

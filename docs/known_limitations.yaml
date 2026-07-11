@@ -575,19 +575,55 @@ anomalies:
       CEILING-SCOPED (only a v_max winner — a global scale is degenerate with v_max
       specifically, so a genuine gain/threshold difference reshapes the distribution and is
       untouched, no over-abstention there) and abstains when off_scale leaves the measured band
-      [0.80, 1.30]. RESIDUAL BOUND (honest — the INFLATING scale is CLOSED, the DEFLATING scale
-      is BOUNDED): measured separation (FINDINGS P4, both the red-team basal=0.05 and test
-      basal=0.2 regimes, 3 seeds) puts every inflating confound (c at least 1.5) at off_scale at
-      least 1.43 and the strongest genuine ceiling (up to times 4) at most 1.18, a clean gap
-      whose midpoint 1.30 is the upper guard. But on the DEFLATION side a genuine ceiling
-      REDUCTION collapses the switch toward monostable and shrinks the OFF cluster (off_scale
-      0.61-0.69) into the SAME band as a deflating scale (c 0.5-0.7 gives 0.48-0.75) — they are
-      FUNDAMENTALLY DEGENERATE without an independent depth anchor, so the lower guard (0.80)
-      abstains on BOTH, correctly killing the deflating confound at the honest cost of no longer
-      resolving a strong genuine ceiling reduction. In short: a per-context multiplicative
-      perturbed-only scale (either direction) can never be certified as mechanistic against a
-      ceiling change from a single steady-state snapshot; NUDGE abstains rather than emit a
-      confident ceiling-diff. NUDGE also abstains when
+      [0.80, 1.30]. GATE 4C SCOPE (corrected by P5, below — do NOT read as "all inflation
+      closed"): gate 4c catches only the LARGE-factor inflation it was calibrated on — measured
+      separation (FINDINGS P4, both the red-team basal=0.05 and test basal=0.2 regimes, 3 seeds)
+      puts every inflating confound at c at least 1.5 at off_scale at least 1.43 and the strongest
+      genuine ceiling (up to times 4) at most 1.18, a clean gap whose midpoint 1.30 is the upper
+      guard. It is a per-magnitude BAND with a measured blind gap on the small-factor interior
+      (P5): being ceiling-scoped it is silent on a gain winner, and its upper cut 1.30 sits ABOVE
+      the genuine-ceiling maximum 1.18, so a small c in (1.18, 1.30] slips it. On the DEFLATION
+      side a genuine ceiling REDUCTION collapses the switch toward monostable and shrinks the OFF
+      cluster (off_scale 0.61-0.69) into the SAME band as a deflating scale (c 0.5-0.7 gives
+      0.48-0.75) — they are FUNDAMENTALLY DEGENERATE without an independent depth anchor, so the
+      lower guard (0.80) abstains on BOTH, correctly killing the deflating confound at the honest
+      cost of no longer resolving a strong genuine ceiling reduction. A FOURTH confound channel
+      (P5, hardening loop final sweep) exposed gate 4c's blind gap and drove the systemic fix. A
+      SMALL uniform multiplicative factor c approximately 1.15-1.25 on ONE context's PERTURBED
+      cells (control clean) slips gate 4c two ways: at small c the joint LNA-BIC assigns the scale
+      to the GAIN (n) channel (it compresses the modes' relative separation), which the
+      ceiling-scoped gate 4c never checks, so a confident spurious gain-diff is emitted with
+      off_shift approximately 1 (gate 4b blind) and off_scale approximately 1.14-1.29 never
+      consulted; and when the scale does win the ceiling channel its off_scale lands in the
+      (1.18, 1.30] blind gap between the genuine-ceiling maximum and gate 4c's upper cut
+      (verified 8 confident-wrong across 4 seeds, 3 confident-wrong reproduced through the shipped
+      path at 2 seeds, scripts/redteam/differential_small_mult_gain_hole.py +
+      scripts/vv/p5_measure.py, truth = no-difference). P1 (additive), P4 (large multiplicative)
+      and P5 (small multiplicative) are ONE class: a per-condition AFFINE nuisance y = s*x + o on
+      one context's perturbed cells. Rather than add a fourth per-magnitude band (which would
+      leave the next magnitude a blind gap — whack-a-mole), NUDGE adds the measured, threshold-free
+      guard the STATE.md principle mandates ("guard the identifiability, not the confound — never a
+      calibrated band"): gate 4d adds the affine (s, o) as a FREE nuisance on the perturbed context
+      and, before ANY positive *-diff, abstains unless the BIC-winning knob still EARNS its
+      parameter over a pure-affine null (the profiled ΔBIC earn, min over both directions). The
+      confound family is BY CONSTRUCTION inside the free-affine null's span, so no (s, o) lets the
+      bio knob earn: measured earn is at most -2.1 across the uniform-affine sweep (incl. P5's
+      interior AND the (1.18,1.30] gap) while a genuine gain/threshold/ceiling reshapes the
+      distribution the affine cannot match and earns +59 to +616 (FINDINGS §P5); the margin 6.0 (a
+      BIC strong threshold) sits in the plateau. The refit runs only for a candidate-positive
+      winner (abstentions stay cheap). This CLOSES the whole UNIFORM per-condition affine class
+      (P1/P4/P5): 0 confident-wrong across the sweep, every positive control preserved, no blind
+      gap. RESIDUAL BOUNDs (honest, documented — not "solved"): (1) a NON-uniform perturbed-side
+      scale (confined strictly to above-median / ON cells) is observationally IDENTICAL to a
+      genuine ceiling and cannot be separated by any readout-only method — it needs an independent
+      INERT-FEATURE anchor (housekeeping / spike-in) that estimates (s, o) directly
+      (design/PERTURBED_CONFOUND_STRATEGY.md); without one NUDGE abstains on both a genuine ceiling
+      and such a scale (the conservative outcome). (2) The gate-4c DEFLATION ceiling-reduction
+      sacrifice is unchanged. In short: a per-context multiplicative perturbed-only scale (either
+      direction) can never be certified as mechanistic against a ceiling change from a single
+      steady-state snapshot; NUDGE abstains rather than emit a confident ceiling-diff, and the
+      free-affine earn guard extends that abstention across the whole uniform affine class and
+      every winner. NUDGE also abstains when
       either context is underpowered (too few cells)
       or its linear-noise Gaussian is untrustworthy (lna_reliable — low depth / near a
       bifurcation / monostable). VERIFIED on
@@ -599,7 +635,14 @@ anomalies:
       never a spurious mechanism-difference call, 0 confident-wrong across seeds. Reported
       Δ estimates are APPARENT population parameters (with bootstrap CIs), not molecular
       constants, and inherit the readout-nonlinearity bound (NUDGE-LIM-006). Guarded by the
-      confound + fail-safe tests (tests/inference/test_differential.py).
+      confound + fail-safe tests, the per-channel decoys (P1 additive
+      test_decoy_additive_perturbed_offset_abstains, P4 large-multiplicative
+      test_decoy_multiplicative_perturbed_scale_abstains, P5 small-multiplicative
+      test_decoy_small_multiplicative_perturbed_scale_abstains), the gate-4d earn contract tests
+      (test_classify_gain_winner_absorbed_by_affine_abstains and siblings, which replaced the
+      now-falsified ceiling-scoping lock), and the no-over-abstention locks
+      (test_genuine_ceiling_earns_over_the_affine_nuisance /
+      test_genuine_gain_earns_over_the_affine_nuisance) (tests/inference/test_differential.py).
     severity: major
     safety_relevance: safety_relevant
     safety_relevance_rationale: >-
@@ -622,7 +665,15 @@ anomalies:
       gain-diff — so the one-sided OFF-baseline-inflation abstention (gate 4b,
       off_shift_max = 2.5, a measured separator) is now part of the same guarantee; removing
       or raising it above the measured genuine ceiling (about 1.96) resurrects that false
-      positive.
+      positive. The P4/P5 multiplicative channels are the same class again, and their
+      per-magnitude OFF-cluster bands (gates 4b/4c) each left a blind gap the next magnitude slips
+      (P5 verified this — a confident gain-diff/ceiling-diff in the small-factor interior gate 4c
+      never sampled). The load-bearing systemic guard is therefore gate 4d: a FREE per-condition
+      affine null against which the winning knob must EARN its BIC parameter, which covers the
+      whole uniform-affine confound class continuously (no band, no blind gap) and every winner.
+      Removing gate 4d, or reverting to per-magnitude bands as the sole defense, resurrects the
+      P5 (and the next magnitude's) false positive; the residual is a NON-uniform perturbed-side
+      scale that only an independent inert-feature anchor can separate from a genuine ceiling.
 
   - anomaly_id: NUDGE-LIM-017
     title: A near-fold operating point corrupts the multi-point joint fit — lna_reliable

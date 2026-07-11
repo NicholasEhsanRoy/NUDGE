@@ -100,12 +100,16 @@ Highlights so far:
   abstains. The honesty crux (`NUDGE-LIM-016`): a depth/batch shift aligned with the context
   axis mimics a ceiling difference, so depth is pinned **per context** from each control and
   NUDGE **abstains** when the two contexts' depths differ beyond a ratio; a red-team-found
-  **additive offset on one context's *perturbed* cells** (invisible to the control-keyed depth
-  ratio, faking a `gain-diff`) is caught by a measured one-sided OFF-baseline-inflation guard; and
-  a **multiplicative scale on one context's *perturbed* cells** (which aliases a `ceiling-diff` 1:1
-  and slips past *both* the depth ratio and the additive guard) is caught by a measured
-  ceiling-scoped OFF-cluster-scale guard — the inflating scale **closed**, the deflating one an
-  honest **bound** (it is degenerate with a genuine ceiling reduction). Never a spurious mechanism
+  red-team-found **per-condition affine confound on one context's *perturbed* cells** — an additive
+  offset (P1), a large multiplicative scale (P4), or a **small** multiplicative scale (P5,
+  `c ≈ 1.15–1.25`, which per-magnitude OFF-cluster bands miss) — is one class, and all of it is
+  caught by the load-bearing **free-affine "earn" guard**: before any positive call NUDGE refits the
+  perturbed context with the affine `(s, o)` as a **free nuisance** and abstains unless the winning
+  knob still **earns** its BIC parameter over that null (the whole confound family is inside the
+  null's span, so it cannot; a genuine mechanism reshapes the distribution and earns ≫ margin). This
+  **closes the whole uniform affine class** — 0 confident-wrong, positives preserved; the honest
+  residual is a *non-uniform* perturbed-side scale (identical to a genuine ceiling), which needs an
+  independent inert-feature anchor. Never a spurious mechanism
   from an artifact (`nudge differential`) — see
   [`notebooks/Differential.ipynb`](notebooks/Differential.ipynb).
 - **Constitutive-reporter calibration control** (`NUDGE-METHOD-011`) — removes a known

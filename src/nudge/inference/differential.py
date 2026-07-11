@@ -66,22 +66,49 @@ control-keyed ``depth_ratio`` stays ≈ 1 (gate 2 blind), and a factor scales th
 fingerprint: it multiplies the OFF-cluster **spread** by ``c`` too (``off_scale`` ≈ ``c``),
 whereas a genuine ``v_max`` difference leaves the OFF mode's spread anchored at basal
 (``off_scale`` ≈ 1). So before a ``ceiling-diff`` call NUDGE **abstains** when the perturbed
-OFF-cluster scale departs from its control beyond a MEASURED band (gate 4c). **INFLATION is
-CLOSED** against a *uniform* or *smoothly content-dependent* inflating scale — a clean
-measured gap (genuine ceiling ×1.4–×4 left ``off_scale`` ≤ 1.18; every such inflating confound
-``c`` ≥ 1.5 drove it ≥ 1.43; ``FINDINGS`` §P4). (A pathological scale confined *strictly* to
-above-median cells leaves the OFF cluster untouched and so evades this fingerprint — but it is
-then observationally *identical* to a genuine ceiling change, i.e. not a distinguishable
-confident-wrong, and has no plausible physical generator; red-team `runs/000000013`.)
-**DEFLATION is BOUNDED, not
+OFF-cluster scale departs from its control beyond a MEASURED band (gate 4c). Gate 4c catches the
+**LARGE**-factor inflation it was calibrated on — a clean measured gap (genuine ceiling ×1.4–×4
+left ``off_scale`` ≤ 1.18; every inflating confound ``c`` ≥ 1.5 drove it ≥ 1.43; ``FINDINGS``
+§P4) — but it is a per-magnitude BAND with a measured **blind gap** on the small-factor interior
+(P5, below): it is ceiling-scoped (silent on a gain winner) and its upper cut (1.30) sits *above*
+the genuine-ceiling maximum (1.18), so a small ``c`` landing in ``(1.18, 1.30]`` slips it. Gate
+4c is therefore kept only as a cheap first line (and the P4 regression lock); the load-bearing
+guard for the whole class is **gate 4d** (below). **DEFLATION is BOUNDED, not
 closed:** a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
 OFF cluster into the same band as a deflating scale (both ``off_scale`` ≈ 0.5–0.75) — they are
 INDISTINGUISHABLE, so the lower guard abstains on both, correctly killing the deflating confound
 at the cost of no longer resolving a strong genuine ceiling *reduction* (the honest price; a
 per-context multiplicative scale without an independent depth anchor is fundamentally degenerate
-with a ceiling change). The guard is **ceiling-scoped** (only a ``v_max`` winner) since a global
+with a ceiling change). Gate 4c is **ceiling-scoped** (only a ``v_max`` winner) since a global
 scale is degenerate with ``v_max`` specifically — a genuine gain/threshold difference reshapes
 the distribution and is untouched.
+
+**The unifying guard — a FREE per-condition affine nuisance (``NUDGE-LIM-016`` P4→P5, gate 4d).**
+P1 (additive), P4 (large multiplicative) and P5 (SMALL multiplicative, ``c`` ≈ 1.15–1.25) are
+ONE thing: a per-condition **affine** ``y = s·x + o`` on ONE context's perturbed cells (its
+control clean). The per-magnitude OFF-cluster bands (4b/4c) each fix ONE magnitude and leave the
+next as a blind gap — P5 slipped gate 4c's ``(1.18, 1.30]`` interval AND its ceiling-only scoping
+(at small ``c`` the joint BIC assigns the scale to the **gain (n)** channel, which 4c never
+checks → a confident spurious ``gain-diff`` with ``off_shift`` ≈ 1 and ``off_scale`` ≈ 1.14–1.29;
+verified 8 confident-wrong / 4 seeds, ``scripts/redteam/differential_small_mult_gain_hole.py``).
+So before ANY positive ``*-diff`` NUDGE now applies the **measured, threshold-free** guard the
+``design/STATE.md`` principle mandates ("guard the identifiability, not the confound — never a
+calibrated band"): it adds ``(s, o)`` as a **free nuisance** on the perturbed context and asks
+whether the BIC-winning knob still **EARNS** its parameter over a pure-affine null (the profiled
+ΔBIC ``earn``, ``classify_differential`` gate 4d). The whole affine confound family is BY
+CONSTRUCTION inside that null's span, so for ANY ``(s, o)`` the bio knob cannot earn (measured
+earn ≤ 0 across the uniform-affine sweep incl. P5's interior AND the ``(1.18, 1.30]`` gap), while
+a genuine gain/threshold/ceiling reshapes the distribution the affine cannot match and earns
+≫ margin (+33 … +616; ``FINDINGS`` §P5). This CLOSES the whole **uniform** per-condition affine
+class (P1/P4/P5) — 0 confident-wrong, every positive control preserved — with **no** blind gap.
+The refit runs only for a candidate-positive winner (abstentions stay cheap). **Residual BOUND
+(honest):** the earn test is a readout-only method, so a **non-uniform** perturbed-side scale
+(confined strictly to above-median / ON cells) is observationally *identical* to a genuine
+ceiling and CANNOT be separated without an independent anchor — an inert-feature (housekeeping /
+spike-in) block estimates ``(s, o)`` and buys the ceiling call back
+(``design/PERTURBED_CONFOUND_STRATEGY.md``); without one, NUDGE abstains on both a genuine
+ceiling and such a scale (the honest conservative outcome). The gate-4c deflation ceiling-
+reduction sacrifice is unchanged.
 """
 
 from __future__ import annotations
@@ -193,6 +220,17 @@ class DifferentialFit:
     # genuine v_max difference leaves it ≈ 1. Drives the ceiling-channel gate 4c (P4).
     off_scale_a: float = 1.0
     off_scale_b: float = 1.0
+    # gate 4d (NUDGE-LIM-016 P5) — the free per-condition AFFINE nuisance "earn": the
+    # profiled ΔBIC by which the BIC-winning knob out-explains a free affine (s, o) on the
+    # perturbed context, taken as the MIN over both directions (the most conservative). NaN =
+    # not computed (only candidate-positive calls pay for it). < earn_margin ⇒ the apparent
+    # difference is absorbable by a per-condition technical affine ⇒ abstain. Measured
+    # separation: the whole uniform-affine confound family (incl. P1/P4/P5) earns < 0, a
+    # genuine gain/threshold/ceiling earns ≫ margin (FINDINGS §P5).
+    earn: float = float("nan")
+    earn_side: str = ""  # which context's affine most absorbs the difference ("A"/"B")
+    nuisance_s: float = float("nan")  # that absorbing affine's fitted scale (reported)
+    nuisance_o: float = float("nan")  # that absorbing affine's fitted offset (reported)
     ci_log2: tuple[float, float] = (float("nan"), float("nan"))
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -499,6 +537,271 @@ def _off_mode_scale_ratio(data: np.ndarray, control: np.ndarray) -> float:
     return float("nan")
 
 
+# --------------------------------------------------------------------------- #
+# gate 4d — the free per-condition AFFINE nuisance "earn" guard (NUDGE-LIM-016 P5)
+# --------------------------------------------------------------------------- #
+# The systemic differential confound (P1 additive, P4 multiplicative, P5 SMALL
+# multiplicative) is ONE thing: a per-condition affine ``y = s·x + o`` on ONE context's
+# PERTURBED cells (its control clean, so the control-keyed depth guard, gate 2, is blind).
+# The per-confound OFF-cluster BANDS (gates 4b/4c) each fix ONE magnitude and leave the next
+# as a blind gap — P5 slips gate 4c's ``(1.18, 1.30]`` interval AND its ceiling-only scoping.
+# This guard closes the CLASS continuously (``design/PERTURBED_CONFOUND_STRATEGY.md``; the
+# ``design/STATE.md`` principle "guard the identifiability, not the confound — never a
+# calibrated band"). It adds the affine ``(s, o)`` as a FREE nuisance on the perturbed
+# context and asks ONE measured, threshold-free question: does the BIC-winning knob still
+# EARN its parameter over a pure-affine null (the profiled ΔBIC ``earn``)? The entire
+# confound family is BY CONSTRUCTION inside the free-affine null's span, so for ANY ``(s, o)``
+# the bio knob provably cannot earn (measured earn ≈ [−7.6, −6.1] across the uniform-affine
+# sweep incl. P5's interior AND the ``(1.18, 1.30]`` gap), while a genuine gain / threshold /
+# ceiling RESHAPES the distribution the affine cannot match and earns hugely (+33 … +96;
+# FINDINGS §P5). No band, no blind gap; checked in BOTH directions (we do not know a priori
+# which context carries the confound). Ported from the measured prototype
+# ``nudge.inference._proto_nuisance`` (guard B), reduced to the decision signal (``earn``);
+# the local Fisher/Laplace curvature is NOT discriminative here (it saturates on the unit
+# mismatch between the count-unit offset and the log-scale knob) — the degeneracy that matters
+# is the GLOBAL goodness-of-fit answered by the integrated profiled ΔBIC (``_proto_nuisance``
+# §3.5). Reuses the LNA primitives already imported; touches neither ``fit.py`` nor ``core/``.
+
+#: |log| excursion cap for a free knob under the affine (matches the differential ``_BOUND``).
+_NUISANCE_BOUND = 1.1
+
+#: BIC "strong" margin: the winning knob must out-explain a free per-condition affine null by
+#: at least this to be certified mechanistic. MEASURED (FINDINGS §P5, ``_proto_nuisance`` §3):
+#: the uniform-affine confound family earns ≤ −6.0 while every genuine gain/ceiling earns
+#: ≥ +33 — a wide plateau; 6.0 (a BIC "strong" threshold) sits squarely in it. This is a
+#: single margin on a global goodness-of-fit statistic, NOT a per-confound calibrated band.
+_NUISANCE_EARN_MARGIN = 6.0
+
+
+def _fit_nuisance_ref_knobs(
+    data: np.ndarray,
+    circuit: Circuit,
+    scale: float,
+    obs_sd: float,
+    *,
+    k_modes: int,
+    steps: int,
+    learning_rate: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit the REFERENCE context's three knobs (n, K, vmax); return ``(log_knobs, roots)``.
+
+    The reference context is assumed clean; its kinetics anchor the affine-null test on the
+    perturbed context. Mirrors the differential's own bounded-``tanh`` per-knob fit.
+    """
+    base = circuit.base_params()
+    free = [("edge", 0, p) for p in _KNOBS]
+    nominal = np.array([_param_value(circuit, f) for f in free], dtype=float)
+    log_nom = jnp.asarray(np.log(nominal), dtype=jnp.float32)
+    y = jnp.asarray(np.asarray(data, dtype=np.float32))
+    eye = jnp.eye(circuit.n_species)
+    theta = jnp.zeros(3 + k_modes, dtype=jnp.float32)
+
+    def kin(vec: Array) -> Array:
+        return jnp.exp(log_nom + _NUISANCE_BOUND * jnp.tanh(vec[:3]))
+
+    def nll(vec: Array, roots: Array) -> Array:
+        roots = jax.lax.stop_gradient(roots)
+        params = _apply_free(base, free, kin(vec))
+        w = jax.nn.log_softmax(vec[3:])
+        comps = []
+        for k in range(k_modes):
+            mu = _mode_mean(circuit, params, roots[k])
+            cov = _mode_cov(circuit, params, mu)
+            cov_obs = scale**2 * cov + obs_sd**2 * eye
+            comps.append(w[k] + _mvn_logpdf(y, scale * mu, cov_obs))
+        return -jnp.mean(jax.scipy.special.logsumexp(jnp.stack(comps), axis=0))
+
+    opt = optax.adam(learning_rate)
+    st = opt.init(theta)
+
+    @jax.jit
+    def step(vec: Array, st: optax.OptState, roots: Array) -> tuple[Array, optax.OptState, Array]:
+        loss, g = jax.value_and_grad(nll)(vec, roots)
+        u, st = opt.update(g, st)
+        return jnp.asarray(optax.apply_updates(vec, u)), st, loss
+
+    def seeds(vec: Array) -> np.ndarray | None:
+        vals = np.exp(np.log(nominal) + _NUISANCE_BOUND * np.tanh(np.asarray(vec[:3])))
+        r = _stable_roots(circuit, free, vals)
+        r = sorted(r, key=lambda x: tuple(float(v) for v in x))
+        return None if len(r) != k_modes else np.stack(r)
+
+    last = seeds(theta)
+    if last is None:
+        raise ValueError("reference context is not bistable at nominal kinetics")
+    for s in range(steps):
+        if s % _ROOT_REFRESH == 0:
+            cur = seeds(theta)
+            if cur is None:
+                break
+            last = cur
+        theta, st, _ = step(theta, st, jnp.asarray(last))
+    log_knobs = np.log(nominal) + _NUISANCE_BOUND * np.tanh(np.asarray(theta[:3], dtype=float))
+    roots = seeds(theta)
+    if roots is None:
+        roots = last
+    return log_knobs, roots
+
+
+def _affine_nll(
+    data: np.ndarray,
+    circuit: Circuit,
+    log_shared: np.ndarray,
+    knob: str,
+    scale: float,
+    obs_sd: float,
+    roots: np.ndarray,
+    *,
+    free_knob: bool,
+):
+    """Mean-NLL of the perturbed context under one bio knob + a free affine ``(s, o)``.
+
+    Parameter vector ``z``: ``[log θ_knob, log s, o]`` if ``free_knob`` else ``[log s, o]``
+    (the pure-nuisance null). The perturbed model is ``mean_k = s·(depth·μ_k(θ)) + o`` with
+    ``cov_k = (s·depth)²·Σ_k(θ) + obs_sd²·I`` — the affine applied to the LNA mixture; depth
+    and ``obs_sd`` stay pinned from the context's own control. Uniform mixture weights (the
+    shape signal is in the covariances). Returns a ``loss(z)`` closure.
+    """
+    base = circuit.base_params()
+    free = [("edge", 0, p) for p in _KNOBS]
+    y = jnp.asarray(np.asarray(data, dtype=np.float32))
+    roots_j = jnp.asarray(np.asarray(roots, dtype=np.float32))
+    k_modes = roots_j.shape[0]
+    eye = jnp.eye(circuit.n_species)
+    log_shared_j = jnp.asarray(log_shared, dtype=jnp.float32)
+    ki = _KNOBS.index(knob)
+
+    def loss(z: Array) -> Array:
+        if free_knob:
+            log_vals = log_shared_j.at[ki].set(z[0])
+            log_s, o = z[1], z[2]
+        else:
+            log_vals = log_shared_j
+            log_s, o = z[0], z[1]
+        s = jnp.exp(log_s)
+        params = _apply_free(base, free, jnp.exp(log_vals))
+        comps = []
+        for k in range(k_modes):
+            mu = _mode_mean(circuit, params, roots_j[k])
+            cov = _mode_cov(circuit, params, mu)
+            mean_obs = s * (scale * mu) + o
+            cov_obs = (s * scale) ** 2 * cov + obs_sd**2 * eye
+            comps.append(_mvn_logpdf(y, mean_obs, cov_obs))
+        ll = jax.scipy.special.logsumexp(jnp.stack(comps), axis=0) - jnp.log(k_modes)
+        return -jnp.mean(ll)
+
+    return loss
+
+
+def _adam_min(loss, z0: np.ndarray, *, steps: int, learning_rate: float) -> np.ndarray:
+    """Minimize a scalar ``loss(z)`` from ``z0`` with Adam; return the fitted ``z``."""
+    z = jnp.asarray(z0, dtype=jnp.float32)
+    opt = optax.adam(learning_rate)
+    st = opt.init(z)
+
+    @jax.jit
+    def step(z: Array, st: optax.OptState) -> tuple[Array, optax.OptState, Array]:
+        v, g = jax.value_and_grad(loss)(z)
+        u, st = opt.update(g, st)
+        return jnp.asarray(optax.apply_updates(z, u)), st, v
+
+    for _ in range(steps):
+        z, st, _ = step(z, st)
+    return np.asarray(z, dtype=float)
+
+
+def _affine_earn_side(
+    ref_data: np.ndarray,
+    pert_data: np.ndarray,
+    ref_ctrl: np.ndarray,
+    pert_ctrl: np.ndarray,
+    circuit: Circuit,
+    knob: str,
+    *,
+    k_modes: int,
+    steps: int,
+    learning_rate: float,
+    seed: int,
+) -> tuple[float, float, float]:
+    """Does the perturbed context's apparent ``knob`` difference reduce to an affine on ITS
+    cells? Returns ``(earn, s_hat, o_hat)`` where ``earn = BIC(affine-null) − BIC(affine +
+    knob)`` — the profiled ΔBIC by which the bio knob out-explains a pure per-condition
+    affine ``(s, o)``. ``earn < margin`` ⇒ the difference is absorbable ⇒ abstain. Fails
+    SAFE: if the reference cannot be modeled as bistable, returns ``earn = −inf``.
+    """
+    scale_r, obs_r = calibrate_from_wt(ref_ctrl, circuit, k_modes=k_modes, seed=seed)
+    scale_p, obs_p = calibrate_from_wt(pert_ctrl, circuit, k_modes=k_modes, seed=seed)
+    try:
+        log_shared, _roots_r = _fit_nuisance_ref_knobs(
+            ref_data, circuit, scale_r, obs_r,
+            k_modes=k_modes, steps=steps, learning_rate=learning_rate,
+        )
+    except ValueError:
+        return float("-inf"), float("nan"), float("nan")
+    vals0 = np.exp(log_shared)
+    r = _stable_roots(circuit, [("edge", 0, p) for p in _KNOBS], vals0)
+    r = sorted(r, key=lambda x: tuple(float(v) for v in x))
+    if len(r) != k_modes:
+        return float("-inf"), float("nan"), float("nan")  # cannot model perturbed bistable
+    roots_p = np.stack(r)
+
+    n_p = int(np.asarray(pert_data).shape[0])
+    log_n = float(np.log(max(n_p, 1)))
+
+    # (i) pure-affine null (2 params).
+    loss0 = _affine_nll(pert_data, circuit, log_shared, knob, scale_p, obs_p,
+                        roots_p, free_knob=False)
+    z0 = _adam_min(loss0, np.array([0.0, 0.0]), steps=steps, learning_rate=learning_rate)
+    nll0 = float(loss0(jnp.asarray(z0)))
+    bic0 = 2.0 * log_n + 2.0 * n_p * nll0
+
+    # (ii) affine + the free bio knob (3 params), warm-started from the null's affine.
+    loss1 = _affine_nll(pert_data, circuit, log_shared, knob, scale_p, obs_p,
+                        roots_p, free_knob=True)
+    z1 = _adam_min(loss1, np.array([log_shared[_KNOBS.index(knob)], z0[0], z0[1]]),
+                   steps=steps, learning_rate=learning_rate)
+    nll1 = float(loss1(jnp.asarray(z1)))
+    bic1 = 3.0 * log_n + 2.0 * n_p * nll1
+
+    earn = bic0 - bic1  # > margin ⇒ the bio knob earns its parameter over the affine null
+    if not np.isfinite(earn):
+        return float("-inf"), float("nan"), float("nan")
+    return float(earn), float(np.exp(z1[1])), float(z1[2])
+
+
+def _affine_nuisance_earn(
+    context_a: Context,
+    context_b: Context,
+    circuit: Circuit,
+    knob: str,
+    *,
+    k_modes: int,
+    steps: int,
+    learning_rate: float,
+    seed: int,
+) -> tuple[float, str, float, float]:
+    """Run the affine-earn test in BOTH directions and return the MOST-ABSORBING one.
+
+    We do not know a priori which context carries the per-condition technical affine, so we
+    test "is B's apparent difference an affine on B (A clean)?" AND "is A's difference an
+    affine on A (B clean)?" and take the MINIMUM ``earn`` (the side that most absorbs the
+    difference) — abstaining if EITHER side can. Returns ``(earn_min, side, s_hat, o_hat)``.
+    """
+    da, db = np.asarray(context_a.data, float), np.asarray(context_b.data, float)
+    ca, cb = np.asarray(context_a.control, float), np.asarray(context_b.control, float)
+    earn_b, sb, ob = _affine_earn_side(
+        da, db, ca, cb, circuit, knob,
+        k_modes=k_modes, steps=steps, learning_rate=learning_rate, seed=seed,
+    )
+    earn_a, sa, oa = _affine_earn_side(
+        db, da, cb, ca, circuit, knob,
+        k_modes=k_modes, steps=steps, learning_rate=learning_rate, seed=seed,
+    )
+    if earn_a < earn_b:
+        return earn_a, "A", sa, oa
+    return earn_b, "B", sb, ob
+
+
 def fit_differential(
     context_a: Context,
     context_b: Context,
@@ -683,6 +986,7 @@ def classify_differential(
     off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
     off_scale_inflation_max: float = _OFF_SCALE_INFLATION_MAX,
     off_scale_deflation_min: float = _OFF_SCALE_DEFLATION_MIN,
+    earn_margin: float = _NUISANCE_EARN_MARGIN,
 ) -> tuple[str, str]:
     """Turn a joint fit into a conservative verdict — the fail-safe classifier.
 
@@ -718,10 +1022,30 @@ def classify_differential(
        ``c`` on one context's perturbed cells aliases a genuine ceiling difference 1:1 and slips
        past gates 2 and 4b, but multiplies that context's OFF-cluster **spread** by ``c`` too.
        When the perturbed OFF-cluster scale departs from its own control beyond the measured
-       band ``[off_scale_deflation_min, off_scale_inflation_max]`` NUDGE abstains. INFLATION is
-       CLOSED (a clean measured gap); DEFLATION is BOUNDED — a genuine ceiling reduction and a
-       deflating scale both shrink the OFF cluster and are indistinguishable, so the lower guard
-       abstains on both (sacrificing a strong genuine ceiling reduction, the honest price).
+       band ``[off_scale_deflation_min, off_scale_inflation_max]`` NUDGE abstains. This catches
+       the LARGE-factor inflation it was calibrated on (a clean measured gap, ``c ≥ 1.5``); the
+       SMALL-factor interior slips its ``(1.18, 1.30]`` gap + ceiling-only scoping — that is P5,
+       caught by gate 4d. DEFLATION is BOUNDED — a genuine ceiling reduction and a deflating scale
+       both shrink the OFF cluster and are indistinguishable, so the lower guard abstains on both
+       (sacrificing a strong genuine ceiling reduction, the honest price).
+    4d. **the free per-condition AFFINE nuisance guard (``NUDGE-LIM-016``, P5) — ALL winners,
+       no blind gap.** Before ANY positive ``*-diff``, if the winning knob's ``earn`` (the
+       profiled ΔBIC by which it out-explains a FREE per-condition affine ``(s, o)`` on the
+       perturbed context, min over both directions) is below ``earn_margin``, abstain: the
+       apparent difference is absorbable by a per-condition technical affine (batch / depth /
+       ambient / library scale on one context's perturbed cells), which is degenerate with the
+       knob it was BIC-assigned to. This is the load-bearing, measured, threshold-free guard for
+       the WHOLE affine confound family (P1 additive, P4 multiplicative, P5 small multiplicative)
+       — it supersedes the per-magnitude OFF-cluster bands (4b/4c, kept as a cheap first line +
+       their locked P1/P4 regression), which each leave a blind gap the next magnitude slips
+       (P5 slipped 4c's ``(1.18, 1.30]`` interval and its ceiling-only scoping). ``earn`` is only
+       computed for a candidate-positive winner (abstentions stay cheap). ``earn < 0`` ⇒
+       ``no-difference`` (the affine strictly out-explains the knob); ``0 ≤ earn < margin`` ⇒
+       ``unresolved`` (half-earns — genuinely ambiguous). A ``nan`` ``earn`` (not computed)
+       leaves this gate inactive. Because a per-context scale is exactly degenerate with
+       ``v_max`` and an offset shifts the modes, this abstains on a genuine ceiling under a
+       *non-uniform* scale too — the honest identifiability limit an inert-feature anchor buys
+       back (``design/PERTURBED_CONFOUND_STRATEGY.md``).
     5. **threshold-diff / gain-diff / ceiling-diff.** The winning Δ model earns its
        parameter over the shared null AND beats the other Δ models. Returns
        ``(call, reason)``.
@@ -833,11 +1157,14 @@ def classify_differential(
     # MEASURED band [off_scale_deflation_min, off_scale_inflation_max], NUDGE ABSTAINS. Only the
     # ceiling channel is gated (a global scale is degenerate with v_max specifically; a genuine
     # gain/threshold difference reshapes the distribution and is untouched — no over-abstention
-    # there). INFLATION is CLOSED (genuine ceiling ×1.4–×4 ≤ 1.18, every inflating confound
-    # ≥ 1.43 — FINDINGS §P4). DEFLATION is BOUNDED: a genuine ceiling reduction shrinks the OFF
-    # cluster into the same band as a deflating scale (indistinguishable), so the lower guard
-    # abstains on both — killing the deflating confound at the cost of a strong genuine ceiling
-    # reduction (the honest residual, NUDGE-LIM-016 P4).
+    # there). This catches the LARGE-factor inflation it was calibrated on (genuine ceiling
+    # ×1.4–×4 ≤ 1.18, every inflating confound c ≥ 1.5 ≥ 1.43 — FINDINGS §P4); the SMALL-factor
+    # interior slips its (1.18,1.30] gap + ceiling-only scoping (that is P5 — caught by gate 4d,
+    # the free-affine earn guard below). DEFLATION is BOUNDED: a genuine ceiling reduction shrinks
+    # the OFF cluster into the same band as a deflating scale (indistinguishable), so the lower
+    # guard abstains on both — killing the deflating confound at the cost of a strong genuine
+    # ceiling reduction (the honest residual, NUDGE-LIM-016 P4). Gate 4c is kept as a cheap first
+    # line + the P4 regression lock; the whole affine class is closed by gate 4d.
     if fit.best_diff == "vmax":
         cand = [
             (v, ctx)
@@ -870,6 +1197,57 @@ def classify_differential(
                     "the apparent ceiling difference is mechanistic rather than a masked "
                     f"perturbed-condition scale, so it abstains (NUDGE-LIM-016 P4). ({extra}.)"
                 )
+
+    # 4d. the free per-condition AFFINE nuisance guard (NUDGE-LIM-016, P5) — the load-bearing,
+    # measured, ALL-winner backstop that closes the affine confound CLASS continuously (P1
+    # additive, P4 multiplicative, P5 SMALL multiplicative are ONE thing: a per-condition affine
+    # y = s·x + o on one context's PERTURBED cells, its control clean). The OFF-cluster bands
+    # above (4b/4c) each fix ONE magnitude and leave the next as a blind gap — P5 slips gate 4c's
+    # (1.18,1.30] interval AND its ceiling-only scoping (at small c the BIC winner is often gain
+    # (n), which 4c never checks). So before ANY positive *-diff, if the winning knob's `earn`
+    # (the profiled ΔBIC by which it out-explains a FREE per-condition affine (s,o) on the
+    # perturbed context, min over both directions) is below `earn_margin`, NUDGE ABSTAINS: the
+    # apparent difference is absorbable by a per-condition technical affine, which is exactly
+    # degenerate with whatever single knob BIC assigned it to. Measured (FINDINGS §P5): the
+    # entire uniform-affine confound family (incl. P5's interior + the (1.18,1.30] gap) earns
+    # < 0, while a genuine gain/threshold/ceiling reshapes the distribution the affine cannot
+    # match and earns ≫ margin. `earn` is nan (this gate inactive) unless a candidate-positive
+    # winner triggered the affine refit in attribute_differential — so abstentions stay cheap
+    # and classify_differential stays a pure function of the fit. NOTE the guard fires whenever
+    # earn was COMPUTED (not nan) and falls below the margin — including a NON-finite earn (a
+    # context the affine null could not model as bistable), which is a fail-safe ABSTENTION, not
+    # a pass-through: `not np.isnan` distinguishes "computed" (fire) from "not computed" (skip).
+    if not np.isnan(fit.earn) and fit.earn < earn_margin:
+        side = fit.earn_side or "?"
+        aff = ""
+        if np.isfinite(fit.nuisance_s) and np.isfinite(fit.nuisance_o):
+            aff = f" (s={fit.nuisance_s:.3f}, o={fit.nuisance_o:+.3f})"
+        if not np.isfinite(fit.earn):
+            return "unresolved", (
+                f"the free per-condition affine nuisance guard (gate 4d) could not model a "
+                f"context as bistable at shared kinetics, so NUDGE cannot certify the apparent "
+                f"{_CALL_OF[fit.best_diff]} is a mechanism rather than a per-condition technical "
+                "affine — it abstains (NUDGE-LIM-016 P5)"
+            )
+        if fit.earn < 0.0:
+            return "no-difference", (
+                f"a free per-condition affine{aff} on context {side} strictly out-explains the "
+                f"apparent {_CALL_OF[fit.best_diff]} (its {fit.best_diff} does NOT earn its "
+                f"parameter over a pure-affine null, ΔBIC={fit.earn:.1f} < 0) — the difference "
+                "is consistent with a per-condition technical affine (batch / depth / ambient / "
+                "library scale on one context's PERTURBED cells only, its control clean), NOT a "
+                "mechanism. This is the load-bearing guard for the whole affine confound family "
+                "(P1 additive, P4 multiplicative, P5 small multiplicative); the per-magnitude "
+                "OFF-cluster bands (gates 4b/4c) leave a blind gap it slips (NUDGE-LIM-016 P5)"
+            )
+        return "unresolved", (
+            f"the apparent {_CALL_OF[fit.best_diff]} only partly out-explains a free "
+            f"per-condition affine{aff} on context {side} (ΔBIC={fit.earn:.1f} < "
+            f"{earn_margin:g}) — NUDGE cannot certify the difference is mechanistic rather than "
+            "a per-condition technical affine (a batch / depth / ambient / library scale on one "
+            "context's PERTURBED cells), so it abstains (NUDGE-LIM-016 P5). An inert-feature "
+            "anchor resolves it when available (design/PERTURBED_CONFOUND_STRATEGY.md)"
+        )
 
     # 5. a resolved mechanistic difference.
     lo, hi = fit.ci_log2
@@ -912,6 +1290,8 @@ def attribute_differential(
     off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
     off_scale_inflation_max: float = _OFF_SCALE_INFLATION_MAX,
     off_scale_deflation_min: float = _OFF_SCALE_DEFLATION_MIN,
+    earn_margin: float = _NUISANCE_EARN_MARGIN,
+    nuisance_guard: bool = True,
 ) -> DifferentialResult:
     """Fit + classify a two-context differential in one call — the CLI / MCP entry point.
 
@@ -919,7 +1299,14 @@ def attribute_differential(
     **threshold** (``K``), **gain** (``n``), or **ceiling** (``v_max``) — a decision
     linear differential expression cannot make — or abstains (``no-difference`` /
     ``unresolved``). The depth/batch confound is guarded by per-context depth pinning +
-    the global-rescale ceiling guard (``NUDGE-LIM-016``).
+    the OFF-cluster bands (``NUDGE-LIM-016`` P1/P4) and — the load-bearing, all-winner
+    backstop — the **free per-condition affine nuisance guard** (gate 4d, ``NUDGE-LIM-016``
+    P5): before emitting ANY positive ``*-diff`` NUDGE refits the perturbed context with the
+    technical affine ``(s, o)`` as a FREE nuisance and abstains unless the winning knob still
+    EARNS its BIC parameter over that affine null. The affine refit runs ONLY for a
+    candidate-positive winner (abstentions stay cheap); set ``nuisance_guard=False`` to skip
+    it (NOT recommended — it is the guard that closes the whole per-condition affine confound
+    class). ``earn_margin`` is the BIC "strong" margin the knob must clear.
     """
     fit = fit_differential(
         context_a,
@@ -932,16 +1319,48 @@ def attribute_differential(
         seed=seed,
         n_boot=n_boot,
     )
-    call, reason = classify_differential(
-        fit,
-        bic_margin=bic_margin,
-        resolve_margin=resolve_margin,
-        min_cells=min_cells,
-        depth_ratio_max=depth_ratio_max,
-        off_shift_max=off_shift_max,
-        off_scale_inflation_max=off_scale_inflation_max,
-        off_scale_deflation_min=off_scale_deflation_min,
-    )
+    def _classify(f: DifferentialFit) -> tuple[str, str]:
+        return classify_differential(
+            f,
+            bic_margin=bic_margin,
+            resolve_margin=resolve_margin,
+            min_cells=min_cells,
+            depth_ratio_max=depth_ratio_max,
+            off_shift_max=off_shift_max,
+            off_scale_inflation_max=off_scale_inflation_max,
+            off_scale_deflation_min=off_scale_deflation_min,
+            earn_margin=earn_margin,
+        )
+
+    call, reason = _classify(fit)
+    # Gate 4d (NUDGE-LIM-016 P5): only a candidate-positive winner pays for the affine refit.
+    # The free-affine "earn" test then decides whether that apparent difference is a genuine
+    # mechanism or an absorbable per-condition technical affine — the all-winner backstop the
+    # per-magnitude OFF-cluster bands (4b/4c) cannot be (they leave a blind gap the next
+    # magnitude slips). Purely additive-abstention: it can only turn a positive into an
+    # abstention, never the reverse.
+    if nuisance_guard and call in {"threshold-diff", "gain-diff", "ceiling-diff"}:
+        try:
+            earn, side, s_hat, o_hat = _affine_nuisance_earn(
+                context_a, context_b, circuit, fit.best_diff,
+                k_modes=k_modes, steps=steps, learning_rate=learning_rate, seed=seed,
+            )
+        except Exception:  # noqa: BLE001 — fail-safe: cannot evaluate the guard ⇒ abstain
+            # If the nuisance refit cannot be evaluated (diverged fit, unmodelable context),
+            # NUDGE cannot certify the apparent difference is not a per-condition technical
+            # affine, so it abstains rather than emit a possibly-confounded positive.
+            return DifferentialResult(
+                fit=replace(fit, earn=float("nan"), earn_side=""),
+                call="unresolved",
+                reason=(
+                    f"the free per-condition affine nuisance guard (gate 4d) could not be "
+                    f"evaluated for the apparent {call}, so NUDGE cannot certify it is a "
+                    "mechanism rather than a per-condition technical affine — it abstains "
+                    "(NUDGE-LIM-016 P5)"
+                ),
+            )
+        fit = replace(fit, earn=earn, earn_side=side, nuisance_s=s_hat, nuisance_o=o_hat)
+        call, reason = _classify(fit)
     return DifferentialResult(fit=fit, call=call, reason=reason)
 
 

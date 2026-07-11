@@ -9,6 +9,43 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team FINAL-SWEEP — P5: a SMALL multiplicative perturbed-scale confound in
+  `differential` FIXED; the free-affine EARN guard closes the whole affine confound class
+  (`NUDGE-LIM-016` sharpened).** The final full sweep found the P4 gate 4c's measured blind gap: a
+  **SMALL** uniform multiplicative factor `c ≈ 1.15–1.25` on ONE context's PERTURBED cells (its
+  control clean) fakes a confident **`gain-diff` / `ceiling-diff`** where the truth is
+  `no-difference`, slipping gate 4c two ways — at small `c` the joint BIC assigns the scale to the
+  **gain (n)** channel (which the ceiling-scoped gate 4c never checks), and when it wins the
+  ceiling channel its `off_scale` ≈ 1.14–1.29 lands in the **`(1.18, 1.30]` blind gap** between the
+  genuine-ceiling maximum (1.18) and gate 4c's upper cut (1.30). Verified 8 confident-wrong / 4
+  seeds (`scripts/redteam/differential_small_mult_gain_hole.py`), 3 confident-wrong reproduced
+  through the shipped path at 2 seeds (`scripts/vv/p5_measure.py`). **Root cause + fix (measured,
+  the STATE.md principle "guard the identifiability, not the confound — never a calibrated band"):**
+  P1 (additive), P4 (large multiplicative) and P5 (small multiplicative) are ONE class — a
+  per-condition **affine** `y = s·x + o` on one context's perturbed cells — and per-magnitude
+  OFF-cluster bands each leave the next magnitude a blind gap. Rather than a fourth band, a new
+  classifier gate (**4d**) adds the affine `(s, o)` as a **FREE nuisance** on the perturbed context
+  and, before ANY positive `*-diff`, abstains unless the BIC-winning knob still **EARNS** its
+  parameter over a pure-affine null (the profiled ΔBIC `earn`, min over both directions, ALL
+  winners). The confound family is by construction inside the free-affine null's span, so no
+  `(s, o)` lets the knob earn: **measured earn ≤ −2.1** across the uniform-affine sweep (incl. P5's
+  interior AND the `(1.18, 1.30]` gap) vs **+59 … +616** for a genuine gain/ceiling; margin 6.0
+  (`FINDINGS` §P5). The refit runs only for a candidate-positive winner (abstentions stay cheap);
+  purely additive-abstention (can only turn a positive into an abstention). **CLOSED the whole
+  UNIFORM per-condition affine class (P1/P4/P5)** — 0 confident-wrong, every positive control
+  preserved (genuine `ceiling-diff` ×1.4/×2.0 earn +116/+616, `gain-diff` ×0.55 earn +59), no blind
+  gap. **Honest residual BOUNDs:** a **non-uniform** (above-median-only) perturbed-side scale is
+  observationally identical to a genuine ceiling and needs an independent inert-feature anchor
+  (`design/PERTURBED_CONFOUND_STRATEGY.md`); the gate-4c deflation ceiling-reduction sacrifice is
+  unchanged. Ported from the measured prototype `_proto_nuisance` (guard B). Regression-locked by
+  the P5 decoy (`test_decoy_small_multiplicative_perturbed_scale_abstains`, the 3 exact
+  confident-wrong cases + the factor-1 control), the gate-4d contract tests (which **replaced** the
+  now-falsified `test_classify_off_scale_guard_is_ceiling_scoped`), and the no-over-abstention locks
+  (`test_genuine_ceiling_earns_over_the_affine_nuisance` / `..._gain_...`). The P4 "INFLATION is
+  CLOSED" wording is corrected everywhere (it was measured only on `c ≥ 1.5`) in the module
+  docstring, `FINDINGS` §P4, `NUDGE-LIM-016`, `design/STATE.md`, and below. Frozen core untouched
+  (`fit.py` / `core/` unchanged).
+
 - **Matrix-free identifiability / sloppiness diagnostic — scales past the dense-`jacfwd` OOM
   (`NUDGE-LIM-023`).** The sloppiness diagnostic (FIM = `JᵀJ/σ²` eigenspectrum →
   `well-constrained` / `sloppy-but-predictive` / `unidentifiable`) gains a **matrix-free** path
@@ -109,8 +146,10 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   (`off_scale` ≈ `c`) while a genuine `v_max` difference leaves it anchored at basal. The guard is
   **ceiling-scoped** (a global scale is degenerate with `v_max` specifically), so a genuine
   gain/threshold difference reshapes the distribution and is **untouched** (no over-abstention).
-  **INFLATION is CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 ≤ 1.18; every inflating
-  confound `c` ≥ 1.5 ≥ 1.43; midpoint 1.30 is the upper guard; `FINDINGS` §P4). **DEFLATION is
+  **INFLATION is CLOSED for LARGE factors** (`c ≥ 1.5`; the small-factor interior slips gate 4c —
+  that is P5, closed by the free-affine gate 4d, see the P5 entry above) — a clean measured gap
+  (genuine ceiling ×1.4–×4 ≤ 1.18; every inflating confound `c` ≥ 1.5 ≥ 1.43; midpoint 1.30 is the
+  upper guard; `FINDINGS` §P4). **DEFLATION is
   BOUNDED** — a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
   OFF cluster into the same band as a deflating scale (indistinguishable), so the lower guard abstains
   on both, killing the deflating confound at the honest cost of no longer resolving a strong genuine
