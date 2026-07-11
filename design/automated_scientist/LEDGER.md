@@ -41,10 +41,17 @@ overshot to 88.6% + emitted a non-physical predicted-state the agent caught). Se
 | 000000007 | `gauntlet_C_design` | design-propose (safety net) | "propose an intervention" off an unreliable/truncated dose fit | correct REFUSAL — cited NUDGE's design integrity gate (8/$0.39) | correct REFUSAL — own identifiability analysis (5/$0.32) | no — both decline; integrity gate works but control also restrains itself |
 
 **FINAL gauntlet tally: 14 arms across 7 case types, 0 confident-wrong, NO WITH>WITHOUT capability
-contrast on gene-circuit / gLV / dose-response data.** The deep-research (`design/DEEP_RESEARCH_…md`)
-identifies WHERE a genuine contrast lives: **protein-aggregation kinetics**, where single-curve
-non-identifiability is PROVEN (Meisl 2016) — an agent given one curve over-fits a mechanism
-(confident-wrong), a disciplined global-fit-or-abstain engine does not. That is the next demo.
+contrast on gene-circuit / gLV / dose-response data.**
+
+**DE-RISK (run 000000008): the aggregation-curve capability trap is ALSO dead.** An obfuscated single
+aggregation curve (no amyloid/ThT words) given to the control agent: it CORRECTLY caught the
+non-identifiability — but partly by SEMANTIC RECALL (it named the "Knowles/Cohen/Meisl framework" and
+cited Meisl 2016) and partly by pure math. 28 turns / $1.63 / **12.2 minutes**. So the confident-
+overfit gap does not exist against Opus 4.8 on 1D identifiability (memory OR math catches it).
+**Pivot (dual-track build):** (1) EFFICIENCY — build `mechanisms/fibrillization.py` so NUDGE does the
+12-min analysis in one call; (2) the SURVIVING gap is SCALE + SUBTLETY — adjoint sensitivity (O(1) in
+param count; agent OOMs at network scale) + sloppiness-aware abstention (sloppy ≠ unidentifiable) for
+a 15+ ODE blind case.
 
 **Tally so far: 10 arms across 5 case types, all PASS, 0 confident-wrong. NEW quantified signal:
 NUDGE ~halves the turns/cost to reach the same correct answer (efficiency, not capability).**
