@@ -9,6 +9,105 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team ROUND 3 (design safety gate) + fix (`design/FAILSAFE_REDTEAM_3.md`,
+  HOLE 3 → `NUDGE-LIM-013`).** A third adversarial pass found that `design()`'s bifurcation
+  **safety gate** flagged `high_risk_of_instability` on a *relative* proximity rise only
+  (`delta > margin`, default 0.15) and **never** checked the **absolute** `proximity_after`
+  against the shipped near-fold cut `bifurcation.NEAR_FOLD = 0.55`. So an intervention that
+  pushed a robust switch (proximity 0.500) **across** 0.55 into the near-fold regime by a
+  **sub-margin** increment (→ 0.589) was cleared "safety: OK, stays away from the fold" — a
+  confident-wrong SAFETY label on a **proposal** (the highest-harm output), contradicting
+  `classify_robustness` on the identical circuit. **FIXED (additive, `design/invert.py`;
+  frozen core untouched):** the gate now fires on `delta > margin` **OR** `proximity_after
+  >= NEAR_FOLD` (an absolute check reusing the *existing* `NEAR_FOLD` constant, so the safety
+  gate and `classify_robustness` never disagree; recorded as `SafetyReport.near_fold`), routes
+  the near-fold case through wording that agrees with `classify_robustness`, and — closing the
+  aggravating factor — carries the one-sided-LOWER-bound caveat (`NUDGE-LIM-012`) on the SAFE
+  ("OK") reason branch too. Measured: the hole case now flags near-fold high-risk (0
+  confident-wrong); a positive control (a genuinely-robust intervention below `NEAR_FOLD`) is
+  still cleared "OK" (no over-abstention). Regression-locked by three `tests/design/
+  test_invert.py` cases; the deterministic repro
+  (`scripts/redteam/design_safety_gate_absolute_proximity.py`) now exits "no hole".
+- **Fail-safe red-team P1-RESCAN — P4: the MULTIPLICATIVE perturbed-condition scale confound in
+  `differential` FIXED (`NUDGE-LIM-016` sharpened).** A re-scan of the P1 fix found the sharpest
+  differential confound yet: a constant **multiplicative factor `c` on ONE context's PERTURBED
+  cells only** (its control clean) aliases a genuine **ceiling (`v_max`) difference 1:1** (both
+  multiply the ON mode) and slips past **both** earlier guards — the control-keyed `depth_ratio`
+  stays ≈ 1 (gate 2 blind) **and** a factor scales the near-zero OFF *baseline* to near-zero, so the
+  additive `off_shift` stays ≈ 1 (gate 4b blind). Result: a confident spurious **`ceiling-diff`**
+  where the truth is `no-difference`, both inflating and deflating (verified,
+  `scripts/redteam/differential_multiplicative_confound.py`, **9 confident-wrong across 2 seeds**).
+  **Fix (measured, ceiling-scoped):** a new classifier gate (4c) abstains (`unresolved`) before a
+  `ceiling-diff` when either context's perturbed **OFF-cluster SCALE** (`off_scale` = the
+  median-absolute-deviation of the below-median-activity cells, perturbed vs its own control) leaves
+  the measured band `[0.80, 1.30]` — a multiplicative factor dilates the OFF-cluster spread by `c`
+  (`off_scale` ≈ `c`) while a genuine `v_max` difference leaves it anchored at basal. The guard is
+  **ceiling-scoped** (a global scale is degenerate with `v_max` specifically), so a genuine
+  gain/threshold difference reshapes the distribution and is **untouched** (no over-abstention).
+  **INFLATION is CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 ≤ 1.18; every inflating
+  confound `c` ≥ 1.5 ≥ 1.43; midpoint 1.30 is the upper guard; `FINDINGS` §P4). **DEFLATION is
+  BOUNDED** — a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
+  OFF cluster into the same band as a deflating scale (indistinguishable), so the lower guard abstains
+  on both, killing the deflating confound at the honest cost of no longer resolving a strong genuine
+  ceiling reduction (a per-context multiplicative scale without an independent depth anchor cannot be
+  separated from a ceiling change). Re-validated through the shipped path: **0 confident-wrong across
+  2 seeds** (inflating + deflating), and every positive control still resolves (genuine
+  `ceiling-diff` ×1.4/×2.0, `gain-diff`, `no-difference`, the additive P1 confound still caught by
+  gate 4b). Regression-locked by a decoy (`test_decoy_multiplicative_perturbed_scale_abstains`, 8
+  cases + the factor-1 positive control + a genuine-ceiling positive control + a **strict-xfail bound
+  lock** for the sacrificed genuine ceiling reduction) and 4 fast unit tests; the module docstring,
+  the Mechanism Card, `design/STATE.md`, `README.md`, and `NUDGE-LIM-016` all name the multiplicative
+  channel so nothing implies differential's perturbed-side confounds are all closed. Frozen core
+  untouched (`fit.py` / `core/` unchanged).
+- **Fail-safe red-team ROUND 3 hardening — P1: the additive perturbed-condition offset
+  confound in `differential` FIXED (`NUDGE-LIM-016` sharpened; `design/FAILSAFE_REDTEAM_3.md`
+  HOLE 1).** The differential depth guard keys `depth_ratio` on the two **controls**, so it was
+  structurally blind to a constant **additive / ambient offset on ONE context's PERTURBED cells
+  only** (its control left clean): `depth_ratio` stays ≈ 1 and the depth gate never engages, yet
+  the offset shifts that context's perturbed modes and *compresses* their separation, which the
+  joint LNA-BIC misreads as reduced cooperativity — a confident spurious **`gain-diff`** where the
+  truth is `no-difference` (verified, `scripts/redteam/differential_additive_confound.py`, **3
+  confident-wrong across 2 seeds**). **Fix (measured, one-sided):** a new classifier gate (4b)
+  abstains (`unresolved`) before any positive call when either context's perturbed OFF baseline is
+  inflated above its own control beyond `off_shift_max = 2.5` — the fingerprint of an additive
+  offset (it TRANSLATES the OFF baseline up), a **measured separator** (every confident-wrong offset
+  had `off_shift ≥ 2.99`, the strongest genuine gain/ceiling/threshold difference only `≤ 1.96`;
+  `FINDINGS` §P1). This promotes the previously non-load-bearing `off_shift` diagnostic to
+  **one-sided load-bearing** on its inflation side. **CLOSED for the demonstrated (inflating) offset,
+  BOUNDED in general** — a *deflating* perturbed-only offset (dropout-like) aliases with a genuine
+  knob reduction and stays an unguarded, documented residual. Regression-locked by a decoy
+  (`tests/inference/test_differential.py::test_decoy_additive_perturbed_offset_abstains` + the
+  offset-0 positive control + 3 one-sided-guard unit tests); the module docstring, the Mechanism
+  Card, and `NUDGE-LIM-016` are corrected (the OFF-baseline is no longer described as
+  non-load-bearing). Frozen core untouched (`fit.py` / `core/` unchanged).
+- **Fail-safe red-team ROUND 3, P2 fix — the multi-reporter per-condition batch/depth scale
+  (`NUDGE-LIM-014`; `scripts/redteam/multi_reporter_batch_confound.py`).** A uniform
+  multiplicative scale `c` on the whole PERTURBED reporter panel (a batch / sequencing-depth /
+  instrument-gain difference between the control-condition and perturbed-condition measurement)
+  is invisible to the control-only consistency guard and the module applied no per-condition
+  depth normalization, so it aliased 1:1 onto a shared latent-ceiling change `A = c` — a
+  confident `ceiling` (CI excludes 0, margins ≫ thresholds) where the truth is **no-effect**
+  (reproduced 6/6 across 2 seeds × 3 factors, robust to realistic floors).
+  - **CLOSED (measurable floors) by a ceiling-scoped FLOOR-CONSISTENCY gate.** A *genuine*
+    ceiling scales only the ON term `gain·A·f` and leaves each reporter's OFF baseline (floor,
+    dose→0) **fixed**; a *batch* scales the whole perturbed signal so every reporter's floor is
+    rescaled by `c`. NUDGE now measures `off_on_coupling = log(perturbed/control OFF baseline) /
+    log(A)` — ≈ 0 for a genuine ceiling, ≈ 1 for a batch — and abstains `unresolved` before a
+    `ceiling` call when `off_on_coupling > 0.5` (the physical midpoint). Measured median
+    separation: genuine ceiling 0.00–0.10 vs batch 0.67–1.00, at BOTH tiny (0.0,0.02) and
+    realistic (0.2,0.6) floors. Additive (`multi_reporter.py` only; frozen core untouched); the
+    genuine `ceiling`/`threshold`/`gain` positive controls, `no-effect`, `off-model`, and
+    single-reporter abstentions are all preserved (0 confident-wrong, no over-abstention on the
+    positive controls).
+  - **Residual BOUND (locked, not closed).** On a (near-)ZERO-floor panel the perturbed OFF
+    doses are pure ON-leakage, which a batch and a genuine ceiling scale identically — genuinely
+    inseparable. NUDGE detects this (`floor_measurability < 0.6`) and abstains `unresolved` on
+    BOTH (never a confident-wrong, at the cost of over-abstaining a real floorless ceiling);
+    separating them needs an independent depth anchor (spike-in / housekeeping / no-response
+    reporter) NUDGE does not yet ingest. `NUDGE-LIM-014` sharpened; measured in
+    `scripts/vv/FINDINGS.md` (P2); regression-locked by a batch-scale decoy + the
+    genuine-ceiling positive control + a strict-xfail floorless-bound marker
+    (`tests/inference/test_multi_reporter.py`).
 - **Fail-safe red-team ROUND 2 (core engine) + two fixes (`design/FAILSAFE_REDTEAM_2.md`).**
   A second adversarial pass targeting the core engine found **2 more verified confident-wrong
   holes** — both in work shipped the same day — and both are now fixed:

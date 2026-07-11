@@ -153,6 +153,110 @@ def test_safe_intervention_stays_away_from_the_fold() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# (4b) REGRESSION LOCK (NUDGE-LIM-013 / FAILSAFE_REDTEAM_3 HOLE 3) — the safety gate
+# must fire on an ABSOLUTE near-fold landing, not only a relative delta > margin.
+# Red-team repro: scripts/redteam/design_safety_gate_absolute_proximity.py.
+# --------------------------------------------------------------------------- #
+def test_safety_gate_flags_sub_margin_push_across_near_fold() -> None:
+    """A sub-margin proximity rise that lands the switch AT/ABOVE ``NEAR_FOLD`` must be
+    flagged high-risk (absolute check) — never "OK, stays away from the fold" — and must
+    AGREE with ``classify_robustness`` on the identical intervened circuit.
+
+    The deterministic red-team construction: base ``ras_switch_1node(n=2, vmax=3, K=1.5)``
+    (proximity ~0.500, robust); the reachable inversion scales K to ~1.0 to hit the ON
+    level, landing at proximity ~0.589 (near-fold) — a rise of only ~0.089 < margin 0.15.
+    """
+    from nudge.design.invert import _rebuild
+    from nudge.inference.bifurcation import (
+        NEAR_FOLD,
+        bifurcation_proximity,
+        classify_robustness,
+    )
+
+    base = ras_switch_1node(n=2.0, vmax=3.0, K=1.5, basal=0.05)
+    near_variant = ras_switch_1node(n=2.0, vmax=3.0, K=1.0, basal=0.05)
+    target = flip_target(near_variant, to="high")
+
+    fit = CircuitFit(circuit=base, free=[("edge", 0, "K")], is_reliable=True)
+    plan = design(
+        fit, target, free=[("edge", 0, "K")], start="high", steps=400,
+        l1=1e-3, tol=0.3, margin=0.15,
+    )
+    assert isinstance(plan, InterventionPlan)
+    assert plan.safety is not None
+    # The delta stayed BELOW the relative margin (that is the whole point of the hole).
+    assert plan.safety.delta is not None and plan.safety.delta < 0.15
+    # ...yet the ABSOLUTE landing is in the near-fold regime → high risk, NOT "safe".
+    assert plan.safety.proximity_after is not None
+    assert plan.safety.proximity_after >= NEAR_FOLD
+    assert plan.safety.near_fold is True
+    assert plan.safety.high_risk_of_instability is True
+    assert "HIGH RISK OF INSTABILITY" in plan.reason
+    assert "near-fold" in plan.reason
+    assert "stays away from the fold" not in plan.reason
+
+    # The safety gate now AGREES with classify_robustness on the same circuit.
+    vals = np.array([1.5 * plan.deltas[0][2]]) if plan.deltas else np.array([1.5])
+    after_circuit = _rebuild(base, [("edge", 0, "K")], vals)
+    after_call, _ = classify_robustness(bifurcation_proximity(after_circuit))
+    assert after_call == "near-fold"
+
+
+def test_positive_control_robust_intervention_below_near_fold_stays_ok() -> None:
+    """POSITIVE CONTROL (no over-abstention): a reachable intervention whose intervened
+    proximity stays BELOW ``NEAR_FOLD`` must still be cleared "OK, stays away from the
+    fold" — the absolute gate must not fire on a genuinely-robust switch.
+
+    Same base (K=1.5, proximity ~0.500); target the ON level of the K=1.2 variant
+    (proximity ~0.498 < 0.55) — a robust-side move near, but below, the near-fold cut.
+    """
+    from nudge.inference.bifurcation import NEAR_FOLD
+
+    base = ras_switch_1node(n=2.0, vmax=3.0, K=1.5, basal=0.05)
+    robust_variant = ras_switch_1node(n=2.0, vmax=3.0, K=1.2, basal=0.05)
+    target = flip_target(robust_variant, to="high")
+
+    fit = CircuitFit(circuit=base, free=[("edge", 0, "K")], is_reliable=True)
+    plan = design(
+        fit, target, free=[("edge", 0, "K")], start="high", steps=400,
+        l1=1e-3, tol=0.3, margin=0.15,
+    )
+    assert isinstance(plan, InterventionPlan)
+    assert plan.safety is not None
+    assert plan.safety.proximity_after is not None
+    assert plan.safety.proximity_after < NEAR_FOLD  # genuinely robust
+    assert plan.safety.near_fold is False
+    assert plan.safety.high_risk_of_instability is False
+    assert plan.safety.crosses_fold is False
+    assert "stays away from the fold" in plan.reason
+
+
+def test_safe_branch_carries_one_sided_lower_bound_caveat() -> None:
+    """The "OK" reason must carry the one-sided-lower-bound caveat whenever
+    ``proximity_after`` is a lower bound (``one_sided``) — the aggravating factor from
+    HOLE 3: the falsely-reassuring number must not be presented as a point estimate.
+
+    Unit-level: build a SAFE ``SafetyReport`` (below near-fold, not high-risk) that IS
+    one-sided and confirm ``_circuit_reason`` hedges it (NUDGE-LIM-012).
+    """
+    from nudge.design.invert import SafetyReport, _circuit_reason
+
+    safe_one_sided = SafetyReport(
+        proximity_before=0.20,
+        proximity_after=0.40,
+        delta=0.20,
+        one_sided=True,
+        high_risk_of_instability=False,
+        crosses_fold=False,
+        near_fold=False,
+    )
+    reason = _circuit_reason([(("edge", 0, "vmax"), 0.1, 1.1)], 0.0, safe_one_sided)
+    assert "stays away from the fold" in reason
+    assert "one-sided LOWER bound" in reason
+    assert "may be higher" in reason
+
+
+# --------------------------------------------------------------------------- #
 # (5) curve-level — closed-form Hill inversion + reachability abstain.
 # --------------------------------------------------------------------------- #
 def test_curve_inversion_round_trips_to_a_dose() -> None:

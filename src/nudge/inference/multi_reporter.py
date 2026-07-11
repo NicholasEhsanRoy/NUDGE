@@ -27,16 +27,41 @@ Fisher information, the degeneracy breaks. This is the multi-reporter analogue o
 second-operating-point ×16 result (``FINDINGS`` "Covariance attribution" M3): more
 *reporters* of one latent, instead of more *conditions*.
 
-**Fail-safe — this capability STRENGTHENS the guarantee.** A spurious mechanism must
-now be consistent across ALL reporters, which is much harder to fake. And the honest new
-gate is the **consistency guard**: if the reporters cannot be explained by one shared
-latent (a reporter secretly reads a *different* latent — a hidden node / wrong panel),
-the joint residual is large and NUDGE **abstains** (``off-model``) — "the panel is not
-consistent with a single latent switch" — rather than silently average an inconsistent
-panel into a confident call (``NUDGE-LIM-014``). With a single reporter (``M == 1``) the
-consistency of the pinned gain cannot be checked, so the affine is *not* pinned and the
-ceiling↔gain degeneracy remains — NUDGE returns ``unresolved``, exactly the abstention
-the panel is built to break.
+**Fail-safe — this capability STRENGTHENS the guarantee (against a confound that breaks
+the shared latent).** A spurious mechanism must now be consistent across ALL reporters,
+which is much harder to fake. And the honest new gate is the **consistency guard**: if the
+reporters cannot be explained by one shared latent (a reporter secretly reads a *different*
+latent — a hidden node / wrong panel), the joint residual is large and NUDGE **abstains**
+(``off-model``) — "the panel is not consistent with a single latent switch" — rather than
+silently average an inconsistent panel into a confident call (``NUDGE-LIM-014``). With a
+single reporter (``M == 1``) the consistency of the pinned gain cannot be checked, so the
+affine is *not* pinned and the ceiling↔gain degeneracy remains — NUDGE returns
+``unresolved``, exactly the abstention the panel is built to break.
+
+**The per-condition batch/depth blind spot the consistency guard CANNOT see — and the
+floor-consistency gate that closes it (``NUDGE-LIM-014``).** The consistency guard above is
+computed on the **control** curves; it validates the reporters share one latent, but it is
+*blind to a technical confound applied to the perturbed condition only*. A uniform
+multiplicative scale ``c`` on the whole perturbed panel — a batch / sequencing-depth /
+instrument-gain difference between the control-condition and perturbed-condition measurement
+— is **consistent with** the shared latent (it scales every reporter by the same fraction),
+so it sails past the consistency guard and aliases 1:1 onto a shared latent-ceiling change
+``A = c`` (the exact ``ceiling`` signature). The discriminator is the **OFF baseline /
+floor** (dose→0, latent OFF): a *genuine* ceiling change scales only the ON term
+``gain·A·f`` and leaves each reporter's floor **unchanged**, whereas a per-condition batch
+scale ``c`` multiplies the *whole* perturbed signal, so **every reporter's floor is rescaled
+by ``c``** off its pinned control floor. So before a ``ceiling`` call NUDGE measures a
+**floor-consistency statistic** (``off_on_coupling`` = how much the OFF baseline moved *with*
+the recovered ON scale ``A``: ≈0 for a genuine ceiling, ≈1 for a batch) and abstains
+(``unresolved``) when the floor is rescaled in lockstep with the ceiling. **The irreducible
+residual (a BOUND, not a full close).** When the panel's floors are (near-)zero — no
+measurable OFF baseline to anchor on — a batch and a genuine ceiling are *genuinely
+inseparable* (both scale the pure ON-leakage identically), so NUDGE also abstains when the
+floors are unmeasurable (``floor_measurability`` low). Separating a per-condition
+multiplicative scale from a real ceiling on a (near-)zero-floor panel requires an
+**independent depth anchor** (a spike-in, a housekeeping reporter, or a designated
+no-response reporter) that NUDGE does not yet ingest — documented and locked in
+``NUDGE-LIM-014``.
 """
 
 from __future__ import annotations
@@ -103,6 +128,16 @@ class MultiReporterFit:
     The ``ci_*`` are bootstrap CIs on the shared perturbation (log2 ratios; a CI that
     excludes 0 means the knob moved). ``panel_r2`` / ``worst_reporter_r2`` /
     ``consistency_ratio`` drive the one-shared-latent consistency guard.
+
+    ``floor_measurability`` / ``floor_ratio`` / ``off_on_coupling`` drive the ceiling-scoped
+    floor-consistency gate (``NUDGE-LIM-014``): whether the perturbed OFF baseline moved with
+    the recovered ON scale ``A`` (a per-condition batch/depth confound) or stayed put (a
+    genuine ceiling), and whether the floors are even measurable enough to tell.
+    ``floor_measurability`` ∈ (−∞, 1] is the panel-median fraction of the OFF baseline that is
+    genuine floor (vs residual ON-leakage) — low means no usable depth anchor.
+    ``floor_ratio`` is the panel-median perturbed/control OFF baseline; ``off_on_coupling`` =
+    ``log(floor_ratio) / log(A)`` is ≈0 for a genuine ceiling (floor fixed) and ≈1 for a
+    uniform batch scale (floor moves fully with the "ceiling").
     """
 
     direction: str
@@ -128,6 +163,9 @@ class MultiReporterFit:
     worst_reporter_r2: float
     worst_reporter_independent_r2: float
     consistency_ratio: float  # shared-latent RSS / independent-fit RSS (>1 worse)
+    floor_measurability: float  # panel-median OFF-baseline floor fraction (low = no anchor)
+    floor_ratio: float  # panel-median perturbed/control OFF baseline (batch: =A; ceiling: =1)
+    off_on_coupling: float  # log(floor_ratio)/log(A): ~0 genuine ceiling, ~1 batch scale
     n_points_total: int
     reporters: tuple[ReporterFit, ...] = ()
     extras: dict[str, Any] = field(default_factory=dict)
@@ -378,6 +416,68 @@ def _independent_r2(o: ReporterObservation, direction: str) -> float:
     return float(1.0 - np.sum((pred - y) ** 2) / tss)
 
 
+def _floor_consistency(
+    obs: list[ReporterObservation],
+    direction: str,
+    k_wt: float,
+    n_wt: float,
+    affine: list[tuple[float, float]],
+    ceiling_ratio: float,
+    *,
+    off_frac_max: float = 0.02,
+) -> tuple[float, float, float]:
+    """Measure whether the perturbed OFF baseline moved WITH the recovered ON scale ``A``.
+
+    The physical discriminator between a genuine latent-ceiling change and a per-condition
+    multiplicative batch/depth confound (``NUDGE-LIM-014``). A ceiling scales only the ON
+    term ``gain·A·f`` and leaves each reporter's floor UNCHANGED; a batch scale ``c``
+    multiplies the WHOLE perturbed signal, so every reporter's OFF baseline is rescaled by
+    ``c`` off its pinned control floor. For each reporter we take the doses where the shared
+    latent is OFF (``f < off_frac_max``) and compute:
+
+    - ``floor_frac_j = floor / (floor + max ON-leakage over OFF doses)`` — the fraction of
+      the OFF baseline that is genuine floor (which a batch scales, a ceiling does not) vs
+      residual ON-leakage (which BOTH scale). Low ⇒ the OFF baseline is leakage, not a floor,
+      so it cannot anchor the discrimination (a (near-)zero-floor panel).
+    - ``floor_ratio_j = mean(perturbed_OFF) / mean(control_OFF)`` — the OFF-baseline shift.
+
+    Returns the panel-robust ``(floor_measurability, floor_ratio, off_on_coupling)`` where
+    ``off_on_coupling = log(median floor_ratio) / log(A)`` — ≈0 when the OFF baseline stayed
+    put (genuine ceiling) and ≈1 when it moved fully with ``A`` (a uniform batch scale).
+    Direction-agnostic: ``_frac`` already returns the latent activity (small = OFF) for both
+    ``activate`` and ``repress``, so the OFF doses are the reporter's floor either way.
+    """
+    m = len(obs)
+    fracs: list[float] = []
+    ratios: list[float] = []
+    for j in range(m):
+        o = obs[j]
+        dose = np.asarray(o.dose, dtype=float)
+        ctrl = np.asarray(o.control, dtype=float)
+        pert = np.asarray(o.perturbed, dtype=float)
+        f = _frac(dose, k_wt, n_wt, direction)
+        floor_pin, gain_pin = affine[j]
+        off_mask = f < off_frac_max
+        if not np.any(off_mask):  # no OFF doses (never OFF): no floor to measure
+            fracs.append(0.0)
+            continue
+        max_leak = float(np.max(gain_pin * f[off_mask]))
+        fracs.append(float(floor_pin) / max(float(floor_pin) + max_leak, 1e-12))
+        ctrl_off = float(np.mean(ctrl[off_mask]))
+        pert_off = float(np.mean(pert[off_mask]))
+        if abs(ctrl_off) > 1e-9:
+            ratios.append(pert_off / ctrl_off)
+    measurability = float(np.median(fracs)) if fracs else 0.0
+    floor_ratio = float(np.median(ratios)) if ratios else float("nan")
+    log_a = np.log(max(abs(ceiling_ratio), 1e-9))
+    if not np.isfinite(floor_ratio) or floor_ratio <= 0.0 or abs(log_a) < 1e-3:
+        # A ≈ 1 (no ceiling to confound) or an unmeasurable OFF baseline.
+        coupling = float("nan")
+    else:
+        coupling = float(np.log(floor_ratio) / log_a)
+    return measurability, floor_ratio, coupling
+
+
 def fit_multi_reporter(
     reporters: Sequence[ReporterObservation],
     *,
@@ -459,6 +559,11 @@ def fit_multi_reporter(
     p_a, loss_a = score("A")
     p_full, loss_full = score("full")
 
+    ceiling_ratio = float(p_a["A"])
+    floor_measurability, floor_ratio, off_on_coupling = _floor_consistency(
+        obs, direction, k_wt, n_wt, affine, ceiling_ratio
+    )
+
     knob_losses = {"threshold": loss_k, "gain": loss_n, "ceiling": loss_a}
     ordered = sorted(knob_losses.items(), key=lambda kv: kv[1])
     winner, best_loss = ordered[0]
@@ -522,7 +627,7 @@ def fit_multi_reporter(
         effect_margin=effect_margin,
         k_ratio=float(p_k["K"] / max(k_wt, 1e-9)),
         n_ratio=float(p_n["n"] / max(n_wt, 1e-9)),
-        ceiling_ratio=float(p_a["A"]),
+        ceiling_ratio=ceiling_ratio,
         ci_log2_k=ci(boot_log2k),
         ci_log2_n=ci(boot_log2n),
         ci_log2_ceiling=ci(boot_log2a),
@@ -530,6 +635,9 @@ def fit_multi_reporter(
         worst_reporter_r2=worst_r2,
         worst_reporter_independent_r2=worst_indep,
         consistency_ratio=float(consistency_ratio),
+        floor_measurability=float(floor_measurability),
+        floor_ratio=float(floor_ratio),
+        off_on_coupling=float(off_on_coupling),
         n_points_total=n_points,
         reporters=tuple(reporter_fits),
         extras={"p_full": p_full},
@@ -552,6 +660,8 @@ def classify_multi_reporter(
     min_panel_r2: float = 0.5,
     inconsistent_reporter_r2: float = 0.6,
     clean_reporter_r2: float = 0.75,
+    min_floor_measurability: float = 0.6,
+    max_off_on_coupling: float = 0.5,
 ) -> tuple[str, str]:
     """Turn a joint fit into a conservative verdict — the fail-safe classifier.
 
@@ -570,7 +680,15 @@ def classify_multi_reporter(
        (``effect_margin`` small): the perturbation did not move the latent.
     4. **threshold / gain / ceiling** — the winning knob beats the runner-up by
        ``knob_margin`` *and* the WT null by ``effect_margin`` *and* its bootstrap CI
-       excludes 0. Returns ``(call, reason)``.
+       excludes 0.
+    4c. **the ceiling-scoped floor-consistency gate (``NUDGE-LIM-014``)** — a ``ceiling``
+       win is additionally checked against a per-condition batch/depth confound, which
+       aliases 1:1 onto a shared ceiling change. If the panel's floors are unmeasurable
+       (``floor_measurability`` < ``min_floor_measurability`` — a (near-)zero-floor panel with
+       no depth anchor) NUDGE abstains ``unresolved``; if the perturbed OFF baseline is
+       rescaled in lockstep with the recovered ON scale (``off_on_coupling`` >
+       ``max_off_on_coupling`` — the batch fingerprint, not a genuine ceiling) NUDGE abstains
+       ``unresolved``. Returns ``(call, reason)``.
     """
     # 1. consistency guard — is the panel really ONE latent switch?
     inconsistent = (
@@ -637,6 +755,32 @@ def classify_multi_reporter(
             "noise; NUDGE abstains"
         )
 
+    # 4c. ceiling-scoped floor-consistency gate — is the "ceiling" a per-condition batch
+    # scale in disguise (NUDGE-LIM-014)? A uniform multiplicative scale on the perturbed
+    # panel aliases 1:1 onto a shared ceiling change; the OFF baseline (floor) separates
+    # them — a genuine ceiling leaves it fixed, a batch rescales it with the ON amplitude.
+    if fit.winner == "ceiling":
+        if fit.floor_measurability < min_floor_measurability:
+            return "unresolved", (
+                f"a ceiling win, but the panel's OFF baselines are unmeasurable "
+                f"(floor measurability {fit.floor_measurability:.2f} < "
+                f"{min_floor_measurability:g}) — with (near-)zero floors a genuine latent-"
+                "ceiling change and a per-condition multiplicative batch/depth scale on the "
+                "perturbed panel are indistinguishable (both scale the pure ON-leakage "
+                "identically). Separating them needs an independent depth anchor (spike-in / "
+                "housekeeping / no-response reporter); NUDGE abstains (NUDGE-LIM-014)"
+            )
+        if np.isfinite(fit.off_on_coupling) and fit.off_on_coupling > max_off_on_coupling:
+            return "unresolved", (
+                f"a ceiling win, but the perturbed OFF baseline is rescaled in lockstep with "
+                f"the recovered ON scale (off-on coupling {fit.off_on_coupling:.2f} > "
+                f"{max_off_on_coupling:g}; floor ratio {fit.floor_ratio:.2f} tracks "
+                f"A={fit.ceiling_ratio:.2f}) — the signature of a per-condition "
+                "batch/depth/instrument-gain scale on the whole perturbed panel, NOT a "
+                "latent-ceiling change (which leaves the floor fixed). NUDGE cannot separate "
+                "them without an independent depth anchor and abstains (NUDGE-LIM-014)"
+            )
+
     detail = {
         "threshold": (
             f"the shared threshold K shifts (K_perturbed/K_wt={fit.k_ratio:.2f}, log2 "
@@ -675,6 +819,8 @@ def attribute_multi_reporter(
     effect_margin: float = 1.4,
     consistency_ratio_max: float = 3.0,
     min_panel_r2: float = 0.5,
+    min_floor_measurability: float = 0.6,
+    max_off_on_coupling: float = 0.5,
 ) -> MultiReporterResult:
     """Fit + classify a reporter panel in one call — the CLI / MCP entry point."""
     fit = fit_multi_reporter(reporters, direction=direction, n_boot=n_boot, seed=seed)
@@ -684,6 +830,8 @@ def attribute_multi_reporter(
         effect_margin=effect_margin,
         consistency_ratio_max=consistency_ratio_max,
         min_panel_r2=min_panel_r2,
+        min_floor_measurability=min_floor_measurability,
+        max_off_on_coupling=max_off_on_coupling,
     )
     return MultiReporterResult(fit=fit, call=call, reason=reason)
 
