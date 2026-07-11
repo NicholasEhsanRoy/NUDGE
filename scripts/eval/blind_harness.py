@@ -64,11 +64,20 @@ def _build_attribute(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[st
     adata = generate_synthetic_perturbseq(
         circuit, [PerturbationSpec("treated", "edge", 0, param, args.factor)],
         readout=readout, n_cells_per_condition=args.n_cells, seed=args.seed,
+        realism_level=args.realism_level,
     )
     # Background genes so library-size normalization is meaningful (a 1-gene screen degenerates).
     rng = np.random.default_rng(args.seed + 20260710)
     bg = rng.poisson(args.bg_rate, size=(adata.n_obs, args.n_background)).astype(np.float32)
     x = np.hstack([np.asarray(adata.X, dtype=np.float32), bg])
+    # Optional HEAVY negative-binomial over-dispersion (the Challenge-B noise trap): resample every
+    # count as Gamma-Poisson with dispersion φ (var = μ + φ·μ²). Large φ swamps the naive Gaussian /
+    # raw-moment reading of the mode structure, tempting a confident-wrong gain call, while NUDGE's
+    # LNA attributes the excess variance to the observation process, not to a kinetic knob.
+    if args.overdisperse > 0.0:
+        r = 1.0 / args.overdisperse
+        mu = np.maximum(x, 1e-6)
+        x = rng.negative_binomial(r, r / (r + mu)).astype(np.float32)
     var = pd.DataFrame(index=[*adata.var_names, *(f"BG{i}" for i in range(args.n_background))])
     obs = pd.DataFrame(adata.obs).copy()
     # SCRUB: drop the leak columns/uns; neutralize condition labels.
@@ -298,6 +307,10 @@ def main() -> int:
     ap.add_argument("--depth-scale", type=float, default=150.0)
     ap.add_argument("--n-background", type=int, default=100)
     ap.add_argument("--bg-rate", type=float, default=2.0)
+    ap.add_argument("--realism-level", type=int, default=1, choices=[0, 1, 2, 3],
+                    help="synthetic count-noise preset (higher = more NB overdispersion)")
+    ap.add_argument("--overdisperse", type=float, default=0.0,
+                    help="extra heavy NB overdispersion φ injected post-hoc (var=μ+φ·μ²); 0=off")
     # dose-response
     ap.add_argument("--case", choices=["switch", "graded", "truncated"], default="switch")
     ap.add_argument("--n-doses", type=int, default=12)
