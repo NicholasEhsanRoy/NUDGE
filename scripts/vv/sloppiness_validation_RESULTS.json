@@ -1,0 +1,60 @@
+{
+  "n_correct": 3,
+  "n_total": 3,
+  "naive_wrong": [
+    "SLOPPY sum-of-exponentials"
+  ],
+  "rows": [
+    {
+      "name": "SLOPPY sum-of-exponentials",
+      "expected": "sloppy-but-predictive",
+      "label": "sloppy-but-predictive",
+      "ok": true,
+      "naive_verdict": "unidentifiable",
+      "naive_is_wrong": true,
+      "cond_number": 44173112.57288599,
+      "spectral_span_decades": 7.645158002056733,
+      "n_null_dims": 0,
+      "predictive": true,
+      "relative_prediction_std": 0.01086007988171481,
+      "sloppy_prediction_variance_fraction": 0.5000000001836078,
+      "null_loadings": []
+    },
+    {
+      "name": "UNIDENTIFIABLE A\u00b7e^{-(k1+k2)t}",
+      "expected": "unidentifiable",
+      "label": "unidentifiable",
+      "ok": true,
+      "naive_verdict": "unidentifiable",
+      "naive_is_wrong": false,
+      "cond_number": Infinity,
+      "spectral_span_decades": Infinity,
+      "n_null_dims": 1,
+      "predictive": true,
+      "relative_prediction_std": 0.030390143899313018,
+      "sloppy_prediction_variance_fraction": 1.7075930269646922e-22,
+      "null_loadings": [
+        {
+          "A": -0.0,
+          "k1": 0.7893522173763263,
+          "k2": -0.6139406135149204
+        }
+      ]
+    },
+    {
+      "name": "WELL-CONSTRAINED linear",
+      "expected": "well-constrained",
+      "label": "well-constrained",
+      "ok": true,
+      "naive_verdict": "identifiable",
+      "naive_is_wrong": false,
+      "cond_number": 201.29008692379924,
+      "spectral_span_decades": 2.303822387405786,
+      "n_null_dims": 0,
+      "predictive": true,
+      "relative_prediction_std": 0.0003241087971758277,
+      "sloppy_prediction_variance_fraction": 0.0,
+      "null_loadings": []
+    }
+  ]
+}
