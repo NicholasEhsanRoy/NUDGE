@@ -68,6 +68,7 @@ __all__ = [
     "GLVDataset",
     "GLVFit",
     "GLVResult",
+    "DegeneracyDirection",
     "glv_vector_field",
     "simulate_glv",
     "simulate_glv_perturbseq",
@@ -78,6 +79,7 @@ __all__ = [
     "classify_glv",
     "attribute_glv",
     "alpha_beta_identifiability",
+    "degeneracy_direction_from_posterior",
 ]
 
 #: The three attributable knobs, in a fixed order, and the verdict each names.
@@ -664,6 +666,118 @@ def alpha_beta_identifiability(
 
 
 # --------------------------------------------------------------------------- #
+# directional abstention — turn UNRESOLVED into an ACTIONABLE null-space direction
+# --------------------------------------------------------------------------- #
+#: A parameter loads "substantially" on the flat direction above this magnitude (the
+#: eigenvector is unit-norm). A genuinely axis-aligned flat direction has ~0 load on the
+#: OTHER axis; a confounded pair (|corr|→1) has the flat direction on the diagonal, where
+#: even a tilted direction keeps both loads non-trivial. ~0.2 (≈4% of the direction's power
+#: on that axis, ≳11° off-axis) cleanly separates "both confounded" from "one flat".
+_LOAD_TOL = 0.2
+
+
+@dataclass(frozen=True)
+class DegeneracyDirection:
+    """The **null-space direction** the α⇄βᵢᵢ degeneracy lives along — the actionable half
+    of an ``unresolved`` abstention (``NUDGE-LIM-020``).
+
+    When the Laplace/Fisher curvature on the confounded pair ``(αₜ, |βₜₜ|)`` is
+    near-singular, the fit cannot move *along its flat eigenvector* without changing the
+    likelihood — that eigenvector is exactly the combination of parameters the data does
+    not constrain. Exposing it converts a bare "cannot tell" into "cannot tell **these two
+    things apart, in this direction** — here is the experiment that would."
+
+    - ``names`` — the confounded parameters, in vector order (``("alpha_t", "abs_beta_tt")``).
+    - ``vector`` — the **unit null eigenvector** (smallest-eigenvalue direction) of the
+      already-computed Hessian, in the **log**-parameter space of ``names`` (sign-canonical:
+      the dominant component is positive).
+    - ``eigenvalue`` — its (near-zero) curvature; ``cond_number`` — the pair's condition
+      number (∞ when a direction is perfectly flat).
+    - ``hint`` — the null direction mapped to a plain-language phrase.
+    """
+
+    names: tuple[str, ...]
+    vector: np.ndarray
+    eigenvalue: float
+    cond_number: float
+    hint: str
+
+
+def _degeneracy_hint(alpha_load: float, beta_load: float) -> str:
+    """Map the null eigenvector's (α, β) loadings to a human-readable phrase.
+
+    ``alpha_load`` / ``beta_load`` are the null direction's components on ``log αₜ`` and
+    ``log |βₜₜ|`` (sign already canonicalized). Both substantial → the classic confound
+    ("cannot separate growth from interaction"); one axis dominant → that single knob is
+    the unidentifiable one.
+    """
+    a, b = abs(float(alpha_load)), abs(float(beta_load))
+    both = a >= _LOAD_TOL and b >= _LOAD_TOL
+    if both:
+        together = float(alpha_load) * float(beta_load) > 0.0
+        how = (
+            "raises growth αₜ and self-limitation |βₜₜ| together, leaving the carrying "
+            "capacity Kₜ=−αₜ/βₜₜ (hence the steady state) unchanged"
+            if together
+            else "trades growth αₜ against self-limitation |βₜₜ| at fixed steady state"
+        )
+        return (
+            "Cannot separate Growth (α) from Interaction (β): the fit's flat direction "
+            f"{how}, so this sampling cannot tell an intrinsic-growth change from a "
+            "carrying-capacity / interaction change. Resolve it by sampling the growth "
+            "TRANSIENT (denser observations while the community is still climbing to "
+            "equilibrium), which breaks the Kₜ=−αₜ/βₜₜ tie (NUDGE-LIM-020)."
+        )
+    if a > b:
+        return (
+            "Growth (α) is not identifiable here: the flat direction lies almost entirely "
+            "along αₜ while self-limitation |βₜₜ| is comparatively constrained — the growth "
+            "rate is under-determined by this sampling (NUDGE-LIM-020)."
+        )
+    return (
+        "Interaction / self-limitation (βₜₜ) is not identifiable here: the flat direction "
+        "lies almost entirely along |βₜₜ| while growth αₜ is comparatively constrained — "
+        "the carrying capacity is under-determined by this sampling (NUDGE-LIM-020)."
+    )
+
+
+def degeneracy_direction_from_posterior(
+    post: LaplacePosterior,
+) -> DegeneracyDirection:
+    """Extract the α⇄βᵢᵢ **null-space direction** from an ALREADY-COMPUTED Laplace posterior.
+
+    Reuses ``post.hessian`` (the Hessian :func:`alpha_beta_identifiability` already built —
+    this does **not** recompute the autodiff curvature); a cheap 2×2 ``eigh`` gives its
+    eigenvectors, and the **smallest-eigenvalue eigenvector** is the flat / unconstrained
+    direction. Names are read back from ``post.marginal_ci`` so the α and β axes are mapped
+    by name, not position. Returns a :class:`DegeneracyDirection` with the sign-canonical
+    unit vector, its curvature, and the human-readable hint.
+    """
+    names = tuple(ci.name for ci in post.marginal_ci)
+    evals, evecs = np.linalg.eigh(np.asarray(post.hessian, dtype=np.float64))
+    null = np.asarray(evecs[:, 0], dtype=np.float64)  # smallest-eigenvalue eigenvector
+    lam0 = float(evals[0])
+
+    # locate the α and β axes by name (robust to ordering); fall back to positional.
+    alpha_i = next((i for i, n in enumerate(names) if "alpha" in n.lower()), 0)
+    beta_i = next((i for i, n in enumerate(names) if "beta" in n.lower()), 1)
+
+    # sign-canonicalize: make the dominant component positive (a direction is ±-ambiguous).
+    dom = int(np.argmax(np.abs(null)))
+    if null[dom] < 0.0:
+        null = -null
+
+    hint = _degeneracy_hint(null[alpha_i], null[beta_i])
+    return DegeneracyDirection(
+        names=names,
+        vector=null,
+        eigenvalue=lam0,
+        cond_number=float(post.cond_number),
+        hint=hint,
+    )
+
+
+# --------------------------------------------------------------------------- #
 # result containers + the fail-safe classifier
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
@@ -686,6 +800,19 @@ class GLVFit:
     degenerate: bool  # the Laplace degeneracy verdict
     identifiability_reason: str
     extras: dict[str, Any] = field(default_factory=dict)
+    #: the α⇄βᵢᵢ null-space direction — populated iff the Laplace curvature is degenerate,
+    #: else ``None`` (a well-conditioned fit has no flat direction to report).
+    degeneracy: DegeneracyDirection | None = None
+
+
+#: the ``call`` → coarse ``status`` map (the abstentions get their own explicit states).
+_STATUS_OF: dict[str, str] = {
+    "growth": "RESOLVED",
+    "interaction": "RESOLVED",
+    "susceptibility": "RESOLVED",
+    "no-change": "NO_CHANGE",
+    "unresolved": "UNRESOLVED",
+}
 
 
 @dataclass(frozen=True)
@@ -700,6 +827,52 @@ class GLVResult:
     def is_reliable(self) -> bool:
         """A resolved single-knob attribution is trustworthy; the abstentions are not."""
         return self.call in _KNOBS
+
+    @property
+    def status(self) -> str:
+        """A coarse status enum — ``RESOLVED`` / ``NO_CHANGE`` / ``UNRESOLVED``."""
+        return _STATUS_OF.get(self.call, "UNRESOLVED")
+
+    @property
+    def _alpha_beta_abstention(self) -> bool:
+        """True iff the verdict is the **α⇄βᵢᵢ directional abstention** (classify gate 2):
+        an ``unresolved`` call whose best knob is growth/interaction AND the curvature is
+        degenerate. Only then is the null direction the *operative* reason to surface — a
+        cleanly-resolved ``susceptibility`` call can co-exist with a degenerate α⇄β pair
+        (ε is orthogonal to it), and there we must NOT cry "cannot separate growth from
+        interaction"."""
+        return (
+            self.call == "unresolved"
+            and self.fit.selected in ("growth", "interaction")
+            and self.fit.degeneracy is not None
+        )
+
+    @property
+    def degeneracy(self) -> DegeneracyDirection | None:
+        """The α⇄βᵢᵢ null-space direction **when it is the operative reason for the
+        abstention**, else ``None`` — the actionable half of ``NUDGE-LIM-020``.
+
+        On an ``UNRESOLVED`` α⇄βᵢᵢ verdict this exposes *which* combination of (growth,
+        interaction) the data cannot separate, not just that it cannot. A resolved fit, a
+        ``no-change`` fit, or a tie-driven ``unresolved`` reports ``None``. (The raw
+        curvature measurement, present whenever the pair is degenerate, lives on
+        :attr:`GLVFit.degeneracy`.)
+        """
+        return self.fit.degeneracy if self._alpha_beta_abstention else None
+
+    @property
+    def degeneracy_direction(self) -> np.ndarray | None:
+        """The unit null eigenvector in ``(alpha_t, abs_beta_tt)`` log-parameter space when
+        the α⇄βᵢᵢ abstention is operative, else ``None``. See :attr:`degeneracy`."""
+        d = self.degeneracy
+        return None if d is None else d.vector
+
+    @property
+    def human_readable_hint(self) -> str | None:
+        """The plain-language mapping of :attr:`degeneracy_direction` (e.g. *"Cannot
+        separate Growth (α) from Interaction (β)"*), or ``None`` when not operative."""
+        d = self.degeneracy
+        return None if d is None else d.hint
 
 
 def fit_glv_attribution(
@@ -762,6 +935,13 @@ def fit_glv_attribution(
     )
     corr = float(abs(post.correlation[0, 1])) if post.correlation.shape == (2, 2) else 0.0
 
+    # Directional abstention: when the α⇄βᵢᵢ curvature is degenerate, extract the flat
+    # null-space direction from the SAME Hessian (no recompute) so an UNRESOLVED verdict
+    # can say WHICH combination the data cannot separate (NUDGE-LIM-020).
+    degeneracy = (
+        degeneracy_direction_from_posterior(post) if bool(post.degenerate) else None
+    )
+
     return GLVFit(
         target=target,
         n_species=n_species,
@@ -777,6 +957,7 @@ def fit_glv_attribution(
         corr_alpha_beta=corr,
         degenerate=bool(post.degenerate),
         identifiability_reason=post.reason,
+        degeneracy=degeneracy,
     )
 
 

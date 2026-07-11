@@ -14,18 +14,38 @@ import numpy as np
 import pytest
 
 from nudge.inference.lotka_volterra import (
+    _LOAD_TOL,
+    DegeneracyDirection,
+    GLVFit,
     GLVParams,
+    GLVResult,
     _default_baseline,
     alpha_beta_identifiability,
     attribute_glv,
+    degeneracy_direction_from_posterior,
     generate_alpha_beta_confound_decoy,
     generate_no_perturbation_null,
     glv_vector_field,
     simulate_glv,
     simulate_glv_perturbseq,
 )
+from nudge.inference.uncertainty import laplace_posterior
 
 _POSITIVE = {"growth", "interaction", "susceptibility"}
+
+
+def _make_fit(*, selected: str, degenerate: bool,
+              degeneracy: DegeneracyDirection | None) -> GLVFit:
+    """A minimal GLVFit for exercising the result-level directional-abstention gating."""
+    base = GLVParams(alpha=np.array([0.8]), beta=np.array([[-0.5]]), eps=np.array([0.0]))
+    bic = {"null": 100.0, "growth": 80.0, "interaction": 82.0, "susceptibility": 90.0}
+    return GLVFit(
+        target=0, n_species=1, n_replicates=10, n_timepoints=8, baseline=base,
+        baseline_loss=0.0, bic=bic, rss={}, delta={}, selected=selected,
+        cond_number=(float("inf") if degenerate else 12.0),
+        corr_alpha_beta=(0.99 if degenerate else 0.3), degenerate=degenerate,
+        identifiability_reason="synthetic", degeneracy=degeneracy,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -95,6 +115,83 @@ def test_with_knob_moves_only_the_named_parameter() -> None:
     b = base.with_knob("interaction", 1, -0.3)
     assert np.isclose(b.beta[1, 1], base.beta[1, 1] - 0.3)
     assert np.allclose(b.alpha, base.alpha)
+
+
+# --------------------------------------------------------------------------- #
+# fast lane — directional abstention (the null-space extractor + result gating)
+# --------------------------------------------------------------------------- #
+def test_degeneracy_direction_extracts_null_eigenvector_and_hint() -> None:
+    # A synthetic near-singular curvature on (log αₜ, log |βₜₜ|): stiff along the (1,-1)
+    # "difference" axis (K=−α/β is well-determined), FLAT along the (1,1) "sum" axis (raise
+    # both → K unchanged). The extractor must return that (1,1) diagonal as the null
+    # direction and fire the "cannot separate growth from interaction" hint — reusing the
+    # ALREADY-computed Hessian, no re-solve.
+    def loss(th: np.ndarray) -> np.ndarray:
+        d = th[0] - th[1]
+        s = th[0] + th[1]
+        return 0.5 * (100.0 * d * d + 1e-3 * s * s)
+
+    post = laplace_posterior(
+        loss, [0.0, 0.0], names=["alpha_t", "abs_beta_tt"], cond_max=100.0
+    )
+    assert post.degenerate  # cond = 1e5, near-singular
+    dd = degeneracy_direction_from_posterior(post)
+    assert dd.names == ("alpha_t", "abs_beta_tt")
+    v = dd.vector
+    assert abs(np.linalg.norm(v) - 1.0) < 1e-6  # unit vector
+    assert v[0] * v[1] > 0  # both same sign → the α⇄β diagonal (K=−α/β confound)
+    assert abs(abs(v[0]) - abs(v[1])) < 0.05  # ≈ (1,1)/√2
+    assert "Cannot separate Growth" in dd.hint
+
+
+def test_degeneracy_direction_single_axis_hint() -> None:
+    # When only ONE parameter is flat (the null direction is axis-aligned, |corr|→0), the
+    # hint names that single unidentifiable knob — not the joint confound.
+    def loss(th: np.ndarray) -> np.ndarray:
+        # stiff in alpha_t (index 0), flat in abs_beta_tt (index 1).
+        return 0.5 * (100.0 * th[0] * th[0] + 1e-3 * th[1] * th[1])
+
+    post = laplace_posterior(
+        loss, [0.0, 0.0], names=["alpha_t", "abs_beta_tt"], cond_max=100.0
+    )
+    dd = degeneracy_direction_from_posterior(post)
+    assert abs(abs(dd.vector[1]) - 1.0) < 1e-3  # null direction ≈ the β axis
+    assert "Interaction" in dd.hint and "not identifiable" in dd.hint
+
+
+def test_result_surfaces_direction_only_when_operative() -> None:
+    # The α⇄β directional abstention is surfaced iff it is the OPERATIVE reason: an
+    # unresolved call whose best knob is growth/interaction AND the curvature is degenerate.
+    direction = DegeneracyDirection(
+        names=("alpha_t", "abs_beta_tt"),
+        vector=np.array([0.7071, 0.7071]), eigenvalue=1e-3, cond_number=float("inf"),
+        hint="Cannot separate Growth (α) from Interaction (β): ...",
+    )
+    # (a) operative → surfaced, status UNRESOLVED.
+    op = GLVResult(
+        fit=_make_fit(selected="growth", degenerate=True, degeneracy=direction),
+        call="unresolved", reason="",
+    )
+    assert op.status == "UNRESOLVED"
+    assert op.degeneracy_direction is not None
+    assert np.allclose(op.degeneracy_direction, direction.vector)
+    assert op.human_readable_hint is not None and "Cannot separate" in op.human_readable_hint
+
+    # (b) resolved susceptibility, α⇄β degenerate but NOT operative → NOT surfaced.
+    res = GLVResult(
+        fit=_make_fit(selected="susceptibility", degenerate=True, degeneracy=direction),
+        call="susceptibility", reason="",
+    )
+    assert res.status == "RESOLVED"
+    assert res.degeneracy_direction is None and res.human_readable_hint is None
+
+    # (c) well-conditioned resolved growth → no degeneracy at all.
+    well = GLVResult(
+        fit=_make_fit(selected="growth", degenerate=False, degeneracy=None),
+        call="growth", reason="",
+    )
+    assert well.status == "RESOLVED"
+    assert well.degeneracy_direction is None and well.human_readable_hint is None
 
 
 # --------------------------------------------------------------------------- #
@@ -182,6 +279,36 @@ def test_battery_has_zero_confident_wrong() -> None:
 # --------------------------------------------------------------------------- #
 # slow lane — identifiability is measured, not asserted
 # --------------------------------------------------------------------------- #
+@pytest.mark.slow
+@pytest.mark.decoy
+def test_directional_abstention_end_to_end() -> None:
+    # The actionable half of NUDGE-LIM-020, end to end: a near-equilibrium growth confound
+    # abstains AND exposes the null-space direction (points along α⇄β, hint fires); a
+    # transient-resolved growth fit surfaces NO direction. Recover-or-abstain — never
+    # mis-called, never a false-precise identifiability claim.
+    deg = generate_alpha_beta_confound_decoy(seed=0, n_species=2, n_replicates=40, n_obs=18)
+    res = attribute_glv(deg, steps=160, n_sim=26, seed=0)
+    assert res.call == "unresolved" and res.status == "UNRESOLVED", res.reason
+    v = res.degeneracy_direction
+    assert v is not None  # the actionable direction is exposed
+    assert v[0] * v[1] > 0  # both same sign → the α⇄β diagonal (K=−α/β confound)
+    # the flat direction is a genuinely joint confound (|corr|→1): both growth and self-
+    # limitation load on it (a tilted-but-diagonal null, not a single axis) → the joint hint.
+    assert min(abs(v[0]), abs(v[1])) > _LOAD_TOL
+    assert res.fit.corr_alpha_beta > 0.9
+    assert "Cannot separate Growth" in (res.human_readable_hint or "")
+
+    # a resolved fit must NOT surface a directional abstention (no flat direction to name).
+    ok = simulate_glv_perturbseq(
+        mechanism="growth", delta=0.6, dense_transient=True, n_species=2,
+        n_replicates=50, n_obs=30, seed=2,
+    )
+    res_ok = attribute_glv(ok, steps=200, n_sim=40, seed=0)
+    if res_ok.call == "growth":
+        assert res_ok.degeneracy_direction is None
+        assert res_ok.human_readable_hint is None
+
+
 @pytest.mark.slow
 @pytest.mark.verification
 def test_laplace_curvature_measures_the_alpha_beta_degeneracy() -> None:

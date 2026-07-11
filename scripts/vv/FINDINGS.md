@@ -1660,3 +1660,56 @@ and `test_safe_branch_carries_one_sided_lower_bound_caveat` (the SAFE reason hed
 one-sided proximity). All 10 design tests pass; the red-team repro now exits "no hole".
 Honesty record: `NUDGE-LIM-013` sharpened (the two-alarm rule + the safe-branch caveat).
 
+
+### Directional abstention + experimental-design sweep (NUDGE-LIM-020, made ACTIONABLE)
+
+**Directional abstention — the null-space, exposed.** When the α⇄βᵢᵢ Laplace/Fisher curvature
+is degenerate, NUDGE no longer just says `unresolved`; it eigendecomposes the SAME already-
+computed Hessian (`degeneracy_direction_from_posterior`, a 2×2 `eigh` — no re-solve) and returns
+the **null eigenvector** (smallest-eigenvalue direction) in `(log αₜ, log |βₜₜ|)` space plus a
+`human_readable_hint`. Additive to the result: `GLVResult.status` (`RESOLVED`/`NO_CHANGE`/
+`UNRESOLVED`), `GLVResult.degeneracy_direction`, `GLVResult.human_readable_hint`, and
+`GLVFit.degeneracy` (a `DegeneracyDirection`). Surfaced ONLY when the abstention is *operative*
+(an `unresolved` call whose best knob is growth/interaction AND the pair is degenerate) — a
+cleanly-resolved ε call co-existing with a degenerate α⇄β pair correctly reports `None`. On the
+synthetic near-equilibrium confound the null direction lies on the α⇄β diagonal (both loads
+same sign, |corr|→1) → the hint *"Cannot separate Growth (α) from Interaction (β)"*; a
+transient-resolved fit exposes no direction. `fit.py`/`core/` untouched.
+
+**Real Stein 2013 (`scripts/vv/stein_attribution.py`, k=3, measured — reconciled to the
+headless notebook run):** all three k=3 functional groups **abstain** (0 confident-wrong on real
+data). *Clostridium difficile* → `no-change` (best single-knob ΔBIC≈−3.2 < 10; no direct-kill ε —
+its bloom is interaction-mediated, published ε≈−0.31); the strongly-**suppressed** group →
+`no-change` (ΔBIC≈7.4 < 10 — even a large published effect does not earn a confident knob from this
+sampling). The strongly-**promoted** group → **`UNRESOLVED` with the directional abstention**
+(cond→∞, |corr(α,βᵢᵢ)|≈0.995). **Measured null direction ≈ [1.00, −0.01] over (log αₜ, log|βₜₜ|) —
+almost pure growth-α, NOT the 45° diagonal.** So the hint the data actually returns is *"Growth (α)
+is not identifiable here … the growth rate is under-determined by this sampling"* — NUDGE names
+growth-α as the un-pinnable coordinate (sample the growth transient to break the Kₜ=−αₜ/βₜₜ tie).
+*(The α⇄β diagonal "Cannot separate Growth from Interaction" hint is the SYNTHETIC near-equilibrium
+confound's result above; on real Stein the geometry is single-knob-dominated. The direction-aware
+`_degeneracy_hint` reports whichever the data shows.)*
+
+**Experimental-design sweep — "what would it take?" (`scripts/vv/glv_design_sweep.py`,
+synthetic; NO math change / NO regularization).** A known ε (antibiotic-susceptibility)
+perturbation in a (near-)decoupled community, sweeping the number of observations placed *inside*
+the antibiotic pulse — `0,1,2,4,8,16` — with the out-of-pulse backbone and total span held fixed.
+Measured (3 seeds, delta=−0.5):
+
+| in-pulse | resolve ε | median α⇄β cond | confident-wrong |
+|---|---|---|---|
+| 0 | 0.00 (all abstain) | 203 | 0 |
+| 1 | 0.67 | 242 | 0 |
+| 2 | **1.00** | 250 | 0 |
+| 4 | 1.00 | 162 | 0 |
+| 8 | 1.00 | 131 | 0 |
+| 16 | 1.00 | 102 | 0 |
+
+**Measured threshold: ≥ 2 in-pulse samples make ε identifiable** (the call flips abstain→confident
+`susceptibility` for all seeds; a single in-pulse sample already resolves 2/3). The α⇄βᵢᵢ
+condition number falls from ~250 toward the abstention threshold (cond_max=100) as in-pulse
+density rises (250→162→131→102 from n_pulse=2→16). **0 confident-wrong across the ENTIRE sweep**
+— resolve-correctly-or-abstain, never a mis-attribution. Demo: `notebooks/gLV_Experimental_Design.ipynb`
+(Part A real-Stein directional abstention, Part B the threshold curve). Real-data adapter reused
+read-only (`scripts/vv/stein_glv.py`).
+
