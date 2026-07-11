@@ -1887,6 +1887,116 @@ matvec path; the O(n_params) iterative path is the flat-memory option for enormo
 where the shape rank-deficiency carries the verdict. Guarded by
 `tests/inference/test_sloppiness_matrixfree.py` (fast: dense==matrix-free on the validated
 cases + the `fim_matvec` action; slow: the gLV shape-null + iterative fail-safe).
+
+> **Sharpened by P6 (below).** The claim above — that Rayleigh-residual verification (line 2)
+> keeps the iterative path "never confidently wrong" — held for a *data-driven* gLV null (many
+> near-null directions, where `eigsh` either finds a genuine small eigenvalue or fails to
+> converge → abstain) but **NOT for an ISOLATED exact null in an otherwise well-conditioned
+> spectrum**: there `eigsh('SA')` converges *past* the null to the well-conditioned cluster and
+> the pairs it returns are genuine eigenpairs, so they pass the Rayleigh residual — the check
+> verifies eigenpair-*ness*, not smallest-*ness*. See §P6 for the confident-wrong this exposed
+> and the measured fix.
+
+## §P6 — the isolated-null certification gap: `eigsh('SA')` verifies eigenpair-ness, not smallest-ness (`NUDGE-LIM-023`)
+
+**The confident-wrong (reproduced, 6/6).** On a well-conditioned linear map `y = M·θ` with the
+LAST column set equal to the FIRST (so `p0` and `p{last}` enter only via their sum — a provable
+Fisher-zero in the `(1,0,…,0,−1)` direction, `n_params ≤ n_obs` so the shape-null certificate
+does not apply), the **iterative** path — and `method="auto"` whenever `n_params > dense_below`
+— labelled the model `well-constrained` (`n_null=0`, *"every parameter individually
+identifiable"*), while `method="dense"` and the `jacfwd`-SVD oracle correctly returned
+`unidentifiable (n_null=1)`. This is the single most dangerous mislabel (unidentifiable →
+well-constrained), breaking the module's own stated fail-safe. Verified 6/6 across seeds at full
+float64 (x64 on — NOT the float32 caveat), via `method="auto"` (n=300) and `method="iterative"`
+(n=40):
+
+| case | before (shipped) | dense oracle |
+|---|---|---|
+| auto, n=300, seeds 0/1/2 | `well-constrained` n_null=0, λ_min≈1.8e2 | `unidentifiable` n_null=1 |
+| iterative, n=40, seeds 0/1/2 | `well-constrained` n_null=0, λ_min≈1.3–1.8e3 | `unidentifiable` n_null=1 |
+
+**Root cause.** `eigsh(which='SA')` uses a polynomial filter that de-emphasises the smallest
+end; on an isolated near-zero in an otherwise tight cluster it converges to the **cluster** and
+misses the zero. The returned pairs are *genuine* eigenpairs, so the Rayleigh residual
+(`‖FIM·v−λv‖/λ_max`) passes → the old `_verified_smallest_eigsh` reported `smallest_certified=
+True`, `λ_min` was set large/wrong, `computed_null=0`, verdict → `well-constrained`. The check
+verified the wrong property.
+
+**The fix, MEASURED on three lines** (`src/nudge/inference/sloppiness.py`, additive; frozen core
+untouched):
+
+1. **Shape-null** (unchanged): `n_params > n_obs` ⇒ rank-deficient by shape ⇒ `unidentifiable`.
+2. **`auto` defers to the EXACT dense-via-matvec reconstruction up to `dense_below=2048`**
+   (raised from 256). It rebuilds the `n×n` FIM from `n` matvecs and `eigh`'s it — still never
+   forming `J` or the `jacfwd` tangent fan-out (the OOM was the `n_obs·n_params` fan-out, not the
+   `n×n` FIM). MEASURED cost + exact-null recovery on the P6 family (structural-null linear map,
+   isolated subprocess peak RSS):
+
+   | n_params | wall (reconstruct+`eigh`) | peak RSS | `n×n` FIM bytes | `n_null` (truth 1) |
+   |---|---|---|---|---|
+   | 256 | 0.5 s | 324 MB | 0.5 MB | **1 ✓** |
+   | 1024 | 7.0 s | 445 MB | 8.4 MB | **1 ✓** |
+   | 2000 | 18.2 s | 722 MB | 32 MB | **1 ✓** |
+   | 3000 | 21.7 s | 1202 MB | 72 MB | **1 ✓** |
+   | 4096 | 42.2 s | 1973 MB | 134 MB | **1 ✓** |
+
+   The exact path recovers the null at **every** size. `dense_below=2048` is set from this
+   measurement: ~18 s / 0.7 GB peak — safe on a ~15 GB box with margin for a real ODE's larger
+   vmap fan-out, and 8× the old 256, so the whole realistic/default regime gets the exact verdict
+   (the repro's n=300 now routes to dense). Raise it (or use `method="dense"`) for n up to ~4096
+   (~42 s / 2 GB) when the memory/time is available.
+3. **Above `dense_below` (or explicit `method="iterative"`): an INVERSE-ITERATION null probe**
+   (`_smallest_eig_null_probe`, shift-invert `(FIM+εI)⁻¹` via CG, matrix-free). Inverse iteration
+   **amplifies** the FIM's smallest eigenvalue (a null is the strictly dominant eigenpair of the
+   inverse), so it reliably CATCHES the isolated null `eigsh('SA')` misses. MEASURED vs
+   `eigsh('SA')` and the exact `eigh`:
+
+   | model (n) | truth λ_min | `eigsh('SA')` smallest | inverse-iter RQ | probe verdict |
+   |---|---|---|---|---|
+   | P6 null (300) | 1.4e-11 | **1.84e2 (MISSES)** | **5.6e-19** | null ✓ |
+   | P6 null (40) | 0.0 | **1.66e3 (MISSES)** | **1.0e-19** | null ✓ |
+   | well-conditioned full-rank (300) | 1.82e2 | 1.82e2 | 1.85e2 | no null ✓ |
+   | sloppy sum-of-exp (12) | 1.68e-6 | 1.68e-6 | 5.0 (overest.) | no null ✓ |
+
+   Cost: ~150–800 matvecs, <0.3 s. A residual-verified near-null (Rayleigh quotient ≤ rank floor)
+   ⇒ `unidentifiable`, naming the direction. The probe is used **one-sided only**: a low quotient
+   PROVES a null (safe), but the sloppy row shows a large quotient does NOT prove identifiability
+   (inverse iteration overestimates λ_min on a dense small-end), so when no null is found the path
+   **ABSTAINS** (`unidentifiable`, "cannot certify the smallest eigenvalue") — never asserts a
+   positive verdict it cannot verify. **Trace-completeness** (`tr FIM = Σλ`) was evaluated and
+   **rejected**: a missed *zero* changes the trace by 0, so it is blind to the P6 case (MEASURED).
+
+**After the fix (0/6 confident-wrong).** Re-running the repro: all 6 cases → `unidentifiable`
+`n_null=1` (the probe catches the null, `λ_min ≈ 1e-12`), matching the dense oracle. Positive
+controls (no over-abstention): well-conditioned full-rank n=300 → `well-constrained`; canonical
+sloppy sum-of-exp → `sloppy-but-predictive`; both via the affordable dense path; dense==auto
+label agreement preserved.
+
+**CLOSED vs BOUNDED (honest).** **CLOSED:** the isolated-structural-null mislabel — 0/6
+confident-wrong via the DEFAULT `method="auto"` (n=300) and explicit `method="iterative"` (n=40,
+n=3000); positive controls resolve; dense==auto agreement holds. **BOUNDED (locked):** above
+`dense_below`, with no shape-null and no isolated null found, the iterative path CANNOT return a
+positive `well-constrained` / `sloppy-but-predictive` verdict — it **over-abstains**
+(`unidentifiable`); this is the fail-safe direction (never a confident-wrong), and the exact
+positive verdict is recoverable on demand via `method="dense"` or by raising `dense_below`
+(measured: well-conditioned n=3000 `auto`→abstain, `dense`→`well-constrained`). The probe reports
+ONE null direction even when the true null space is higher-dimensional (label correct; null
+*count* can be undercounted in the iterative path — exact counts need `method="dense"`).
+
+**Reproduce (for the audit).**
+```
+# hole closed — exits 1 ("holes: 0/6") after the fix (exit 0 = hole still present):
+uv run python scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py
+# regression + positive controls + strict-xfail decoy:
+uv run --extra ci pytest -q tests/inference/test_sloppiness_p6_structural_null.py \
+  tests/inference/test_sloppiness_matrixfree.py -m "x64 or slow or not slow"
+```
+
+Guarded by `tests/inference/test_sloppiness_p6_structural_null.py` (P6 null across seeds/sizes →
+`unidentifiable`; positive controls; a strict-xfail decoy locking the huge-regime over-abstention
+bound) and `tests/inference/test_sloppiness_matrixfree.py` (dense==matrix-free + iterative
+fail-safe).
+
 ## Optimal Experimental Design — the differentiability moat (`NUDGE-METHOD-014`, `NUDGE-LIM-024`)
 
 **The white-box advantage a black-box ODE solver cannot offer, MEASURED.** Everywhere else

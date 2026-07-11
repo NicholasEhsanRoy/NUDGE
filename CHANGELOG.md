@@ -25,14 +25,15 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   (`scripts/vv/sloppiness_scaling.py`, 77-state gLV): dense `jacfwd` OOMs at ~4000–6000 free
   params (systemd `MemoryMax=2.5 GB` cap; peak RSS grows ∝ n_params) while matrix-free stays
   **flat at ~0.42 GB, ~3 s to 6000 params** with the same verdict. **Honest bound
-  (`NUDGE-LIM-023`, fail-safe):** an iterative Krylov solver is reliable for the LARGEST FIM
-  eigenvalues but not the smallest (the sloppy/near-null direction) of an ill-conditioned FIM —
-  so the iterative path certifies `unidentifiable` via shape rank deficiency
-  (`n_params > n_obs`), Rayleigh-residual-verifies any smallest eigenpair, and **abstains rather
-  than assert identifiability it cannot verify**; the exact dense-via-matvec route
-  (`method="dense"`) is the definitive verdict for moderate `n_params`. Additive/opt-in — never
-  touches frozen `fit.py`/`core/`. `tests/inference/test_sloppiness_matrixfree.py`; FINDINGS
-  "Matrix-free identifiability".
+  (`NUDGE-LIM-023`, fail-safe; hardened by P6 — see Fixed below):** a matrix-free Krylov solver
+  cannot certify the SMALLEST FIM eigenvalue (the sloppy/near-null direction) of an
+  ill-conditioned FIM — so the iterative path certifies `unidentifiable` via shape rank
+  deficiency (`n_params > n_obs`), `auto` DEFERS to the exact dense-via-matvec reconstruction up
+  to `dense_below=2048`, and above that an inverse-iteration null probe catches an isolated null
+  while the path **abstains rather than assert identifiability it cannot verify**; the exact
+  dense-via-matvec route (`method="dense"`) is the definitive verdict for moderate `n_params`.
+  Additive/opt-in — never touches frozen `fit.py`/`core/`.
+  `tests/inference/test_sloppiness_matrixfree.py`; FINDINGS "Matrix-free identifiability".
 
 - **Gradient-based Optimal Experimental Design — the differentiability moat
   (`NUDGE-METHOD-014`, `NUDGE-LIM-024`).** The white-box advantage a black-box ODE solver
@@ -641,6 +642,29 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 - Traceability inherited from `maddening.compliance` (`NUDGE-*` ID prefixes) and CI
   validators (`check_anomalies`, `check_citations`, `check_impl_mapping`,
   `check_mechanism_cards`); PEP 561.
+
+### Fixed
+
+- **Matrix-free identifiability no longer mislabels an isolated structural null
+  `well-constrained` (P6; `NUDGE-LIM-023`).** On a model with an isolated exact Fisher-null in
+  an otherwise well-conditioned spectrum (`n_params ≤ n_obs`), `eigsh(which='SA')` converged
+  *past* the null to the well-conditioned cluster; its pairs passed the Rayleigh residual (which
+  verifies eigenpair-ness, not smallest-ness), so the iterative / `method="auto"`
+  (`n_params > dense_below`) path returned `well-constrained` (`n_null=0`) on a
+  provably-`unidentifiable` model — the single most dangerous mislabel (verified 6/6 across
+  seeds, float64). Fixed additively in `src/nudge/inference/sloppiness.py`: (1) `auto` now
+  DEFERS to the exact dense-via-matvec reconstruction up to `dense_below=2048` (raised from 256;
+  measured affordable — ~18 s / 0.7 GB at n=2048, recovering the exact null at every size
+  256–4096); (2) above that, an INVERSE-ITERATION null probe (shift-invert `(FIM+εI)⁻¹` via CG)
+  reliably CATCHES the isolated null `eigsh('SA')` misses (measured: Rayleigh quotient → ~1e-19
+  where `eigsh` returned ~1e3; 0 false nulls on well-conditioned + sloppy controls), else the
+  path ABSTAINS (`unidentifiable`, "cannot certify the smallest eigenvalue"). **CLOSED:** 0/6
+  confident-wrong; positive controls (`well-constrained`, `sloppy-but-predictive`) still resolve
+  via the dense path (no over-abstention); dense==auto agreement preserved. **BOUNDED:** above
+  `dense_below` a genuine well-constrained model over-abstains (fail-safe; use `method="dense"`
+  for the exact verdict). Frozen `fit.py`/`core/` untouched.
+  `tests/inference/test_sloppiness_p6_structural_null.py`;
+  `scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py`; FINDINGS §P6.
 
 ### Performance
 
