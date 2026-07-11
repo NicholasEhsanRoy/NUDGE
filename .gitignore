@@ -36,3 +36,11 @@ venv/
 .claude/scheduled_tasks.lock
 # Transient agent worktrees (hardening-loop subagents run isolated here)
 .claude/worktrees/
+
+# Automated-scientist blind-eval artifacts — NEVER commit. The answer keys must be
+# completely inaccessible to any test agent (which may have repo access), and the generated
+# blind_test.h5ad datasets are large + regenerable. Keys live outside the repo entirely.
+eval_cases/
+eval_keys/
+**/blind_test.h5ad
+**/*answer_key*.json
