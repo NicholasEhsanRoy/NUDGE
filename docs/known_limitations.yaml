@@ -588,7 +588,8 @@ anomalies:
       was unreliable because calibrate_from_wt returns an erratic obs_sd 0.01-2.44). (b)
       MAGNITUDE: when the OFF mode IS resolvable the scale reads as a magnitude-BOUNDED ceiling
       (the off_scale band caps its ON shift, so its faked absolute-log2-v_max-ratio stays at most
-      0.48 measured, both regimes, 4 seeds), while a confident gain-diff no longer occurs. NUDGE
+      about 0.50 measured - 0.48 at the repro factors, 0.498 at the wider c=1.35 the audit probed,
+      both regimes), while a confident gain-diff no longer occurs. NUDGE
       resolves a ceiling-diff only when its fitted absolute-log2-ratio is at least 0.60 (a LARGE,
       un-fakeable difference, at least about x1.5); a SMALL ceiling difference is the honest
       sacrifice. A resolvable gain-diff is trustworthy. (c) The GROSS-scale off_scale band

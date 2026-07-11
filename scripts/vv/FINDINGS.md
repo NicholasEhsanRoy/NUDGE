@@ -1455,9 +1455,11 @@ and its `n`-assignments naturally abstain on the runner-up tie).
    sacrifice is a genuine ceiling difference in a near-zero-basal regime.
 2. **CEILING-MAGNITUDE gate.** In the resolvable regime the scale reads as a magnitude-BOUNDED ceiling
    (the `off_scale` ≤ 1.30 band caps its ON shift), so its faked `|log2 v_max ratio|` stays small:
-   measured **≤ 0.48** for every escaping confound (`off_scale` ≤ 1.30) across both regimes, 4 seeds.
-   A genuine LARGE ceiling difference (×1.6 → 0.68, ×2 → 1.0, ×4 → 1.6) exceeds that reach. So NUDGE
-   resolves ceiling-diff only when `|log2 ratio| ≥ 0.60` (above the 0.48 confound max with margin,
+   measured **≤ ~0.50** for every escaping confound (`off_scale` ≤ 1.30) — 0.48 at the repro factors
+   {1.15,1.20,1.25}, and 0.498 at the wider `c=1.35` the audit (`runs/000000020`) additionally probed,
+   across both regimes. A genuine LARGE ceiling difference (×1.6 → 0.68, ×2 → 1.0, ×4 → 1.6) exceeds
+   that reach. So NUDGE resolves ceiling-diff only when `|log2 ratio| ≥ 0.60` (above the ~0.50 confound
+   max with a ~0.10 margin,
    below ×1.6); a SMALL genuine ceiling (< ~×1.5) is the honest sacrifice — inseparable from a bounded
    scale. A resolvable gain-diff is trustworthy (a resolvable-OFF confound assigned to `n` ties out on
    the runner-up, gate 4).
@@ -1468,7 +1470,7 @@ and its `n`-assignments naturally abstain on the runner-up tie).
 - **RT:** `differential_small_mult_gain_hole.py 4` → **HOLES: 0 across 0/4 seeds** (was 3). Every
   seed×factor abstains `unresolved`.
 - **TEST:** `differential_small_mult_testregime.py 4` → **HOLES: 0** (basal=0.2 regime; caught by the
-  magnitude gate, `|log2| ≤ 0.48 < 0.60`).
+  magnitude gate, escaping-confound `|log2| ≤ ~0.50 < 0.60`).
 - **No over-abstention beyond the degeneracy:** genuine LARGE ceiling ×2.0 still resolves ceiling-diff
   (`test_recovers_ceiling_difference`, `test_genuine_ceiling_inflation_still_resolves_past_gate_4c`,
   |log2| ≈ 1.0), genuine gain ×0.55 still resolves gain-diff (`test_recovers_gain_difference`,

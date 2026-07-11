@@ -79,7 +79,8 @@ scale is assigned to):
   **abstains** on both channels (a genuine gain difference does not resolve in that regime anyway;
   a genuine ceiling there is the honest sacrifice).
 - When the OFF mode *is* resolvable, the scale reads as a **magnitude-BOUNDED** ceiling difference
-  (``off_scale`` ≤ 1.30 caps its ON shift → faked ``|log2 v_max ratio|`` ≤ 0.48 measured), while a
+  (``off_scale`` ≤ 1.30 caps its ON shift → faked ``|log2 v_max ratio|`` ≤ ~0.50 measured — 0.48 at
+  the repro factors, 0.498 at a wider ``c``=1.35), while a
   confident ``gain-diff`` no longer occurs. NUDGE resolves a ``ceiling-diff`` only when its fitted
   ``|log2 ratio|`` clears ``ceiling_resolve_mag_min`` (a large, un-fakeable ceiling difference,
   ≳ ×1.5); a small ceiling difference is sacrificed. A resolvable ``gain-diff`` is trustworthy.
