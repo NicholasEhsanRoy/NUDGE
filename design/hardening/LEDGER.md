@@ -8,27 +8,30 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000021-orchestrator-P5-merge.md`. That immutable record is the source of truth;
+`runs/000000022-redteam-finalsweep2.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING — all five holes addressed; running the FINAL sweep.** P3/P1/P4/P2
-CLOSED/BOUNDED; **P5 BOUNDED + merged** (re-fix on the 2nd attempt — the 1st `779fc3a` FAILED
-audit `runs/000000018` for an under-powered 2-seed validation; the 2nd `1904b46` PASSED
-`runs/000000020` with 0 confident-wrong at ≥4+ seeds in BOTH regimes via measured resolvability
-+ ceiling-magnitude gates, honestly BOUNDED). The problem queue is **EMPTY** again.
+**Status: RUNNING.** P3/P1/P4/P2/P5 CLOSED/BOUNDED + merged. The 2nd FINAL full sweep
+(`runs/000000022`) RAN the previously-unreached LIM-017 lyapunov collusion probe and returned
+**HOLES_FOUND: 1** → NOT a STOP: a NEW hole **P6** (`attribute_lyapunov_multi` — a perturbed-only
+batch ×2.0 defeats the LIM-017 best-buffered-pair corroboration → confident bare `ceiling`; the
+same systemic class as P1/P2/P4/P5, now in the core multi-point breaker). The fix loop resumes.
 
-- **Next agent:** `nudge-red-team` — the FINAL FULL sweep across the hardened capabilities.
-- **STOP** when it reports `HOLES_FOUND: 0` after a genuine sweep. If it finds a NEW hole, that
-  hole is queued and the fix loop resumes (`[3 → 4 → 1]`).
+- **Next agent:** `nudge-uq-fixer` on **P6** (port the differential OFF-cluster/scale check into
+  `attribute_lyapunov_multi`; `lyapunov.py` is NOT frozen core), then `nudge-audit` → merge →
+  `nudge-red-team`.
+- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
 
 ---
 
-## Problem queue (found, not yet fixed) — **EMPTY** (all five holes closed/bounded; see "Closed problems")
+## Problem queue (found, not yet fixed)
 
-*(no OPEN rows — P3/P1/P4/P2/P5 are all in "Closed problems" below.)*
+| id | capability | LIM | summary | repro | status |
+|----|-----------|-----|---------|-------|--------|
+| **P6** | `lyapunov` (`attribute_lyapunov_multi`) | LIM-017 | **NEW (final sweep 2, `runs/000000022`).** A perturbed-only batch/depth scale ×2.0 (WT clean) on a genuine THRESHOLD (K×1.6) difference drives the multi-operating-point covariance breaker to a confident bare `ceiling` (truth = threshold). `calibrate_from_wt` pins depth from the clean WT; the free-`v_max` fit absorbs the batch into the ceiling. The LIM-017 best-buffered-pair CORROBORATION is defeated because a uniform batch corrupts every operating point identically (the two most-buffered agree). No OFF-cluster/`off_scale` analog exists in the lyapunov path. The same systemic class as P1/P2/P4/P5, now in the core multi-point breaker. Verified 3/4 (sweep) + 2/2 (focused, deterministic). | `scripts/redteam/lyapunov_perturbed_batch_ceiling_hole.py` | OPEN |
 
 Reported by red-team round 3 (`design/FAILSAFE_REDTEAM_3.md`); **pending independent UQ
 validation** (role 3 re-reproduces before fixing — status reflects that they are red-team
@@ -87,6 +90,7 @@ last; never edit a past row):
 | 000000019 | `runs/000000019-uq-fixer-P5-v2.md` | uq-fixer | P5 (LIM-016) attempt 2 | fix claim: measured resolvability gate (RT ≤0.136 vs TEST ≥0.374) + ceiling-magnitude gate (`|log2 vmax|≥0.60`); BOUNDED; 0 confident-wrong at 4 seeds both regimes; commit `1904b46` |
 | 000000020 | `runs/000000020-audit-P5-v2.md` | audit | P5 re-fix | **AUDIT: PASS** — hole gone both regimes at ≥4+ seeds + interior probe; separators genuine ~0.10-margin gaps; over-abstention narrow+documented; overclaims retracted |
 | 000000021 | `runs/000000021-orchestrator-P5-merge.md` | orchestrator | P5 merge | independently re-verified + fast-forward merged → `1904b46` + precision fix (≤0.48→≤~0.50); P5 BOUNDED; queue EMPTY |
+| 000000022 | `runs/000000022-redteam-finalsweep2.md` | redteam | FINAL full sweep #2 | **HOLES_FOUND: 1** — NOT a STOP: RAN the unreached LIM-017 lyapunov collusion probe → NEW hole **P6** (`attribute_lyapunov_multi`); 5 fixes held jointly; report `FAILSAFE_REDTEAM_6.md`; commit `fe0cb92` |
 
 ---
 
