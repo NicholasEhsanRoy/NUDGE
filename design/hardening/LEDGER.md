@@ -8,17 +8,23 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000017-redteam-finalsweep.md`. That immutable record is the source of truth;
+`runs/000000018-redteam-moat-fullsweep.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3/P1/P4/P2 CLOSED/BOUNDED + merged. The FINAL full sweep
-(`runs/000000017`) returned **HOLES_FOUND: 1** → NOT a STOP: a NEW hole **P5** (differential
-SMALL multiplicative confound, `c≈1.15–1.25`, slips the P4 gate 4c's ceiling-scoping +
-`(1.18,1.30]` blind gap). The fix loop resumes on P5.
+**Status: RUNNING (POST-MOAT hardening loop).** The freshly-merged differentiability moat
+(`oed.py`, `sloppiness.py` matrix-free, `adjoint.ode_identifiability`) had never been
+red-teamed. The moat-first full sweep (`runs/000000018`) returned **HOLES_FOUND: 1** → NOT a
+STOP: a NEW hole **P6** (matrix-free `sloppiness` iterative/`auto` path mislabels a
+structurally-UNIDENTIFIABLE model `well-constrained`, `LIM-023`). The pre-existing **P5**
+(differential small mult confound, `LIM-016`) is also in the fix loop.
 
-- **Next agent:** `nudge-uq-fixer` on **P5** (completes the P4 gate; must also correct the
-  now-falsified P4 "INFLATION CLOSED" claim), then `nudge-audit` → merge → `nudge-red-team`.
+- **Next agents (parallel, disjoint files):** `nudge-uq-fixer` on **P6** (`sloppiness.py`)
+  and `nudge-uq-fixer` on **P5** (`differential.py`, already in flight), each in its own
+  worktree; then `nudge-audit` on each → orchestrator merge → `nudge-red-team` (re-scan).
 - **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
+- **HELD this sweep (recorded as fail-safe wins):** OED structural-null (`min_eig` honest
+  `0.0→0.0`), OED guarded ridge (over-cautious absolute CRLB), OED demo (no merge regression),
+  and all four round-3 fixes (P1/P2/P3/P4) — no merge-induced regression.
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
@@ -29,11 +35,12 @@ SMALL multiplicative confound, `c≈1.15–1.25`, slips the P4 gate 4c's ceiling
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-| **P5** | `differential` | LIM-016 | **NEW (final sweep, `runs/000000017`).** A SMALL uniform multiplicative perturbed-only scale (`c≈1.15–1.25`, control clean) fakes a confident `gain-diff` / `ceiling-diff` (truth no-difference). Slips the P4 gate 4c two ways: (1) at small `c` the BIC winner is often **gain (n)**, and gate 4c is ceiling-scoped (never checks `off_scale` for a gain winner); (2) on the ceiling channel `off_scale` lands in the **(1.18, 1.30] blind gap** — above the measured genuine-ceiling max (1.18) yet below gate 4c's upper cut (1.30). The P4 fix was calibrated only on `c≥1.5`; the interior was unprobed. Verified 8 confident-wrong / 4 seeds. | `scripts/redteam/differential_small_mult_gain_hole.py` | OPEN |
+| **P6** | `sloppiness` (matrix-free) | LIM-023 | **NEW (post-moat sweep, `runs/000000018`).** The iterative Krylov path — and `method="auto"` whenever `n_params > dense_below=256` (its large-network raison-d'être) — labels a structurally-UNIDENTIFIABLE model (two params entering only via their sum ⇒ a provable Fisher zero) **`well-constrained`** (`n_null=0`), while `method="dense"` + the `jacfwd`-SVD oracle correctly say `unidentifiable`. `_verified_smallest_eigsh` Rayleigh-checks *eigenpair-ness*, not *smallest-ness*, so `eigsh(which="SA")` missing the isolated zero still certifies. The single most dangerous mislabel (unidentifiable → well-constrained); contradicts the module's stated fail-safe. Orchestrator-reproduced 6/6, x64 ON (not the float32 caveat). | `scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py` | IN-PROGRESS (uq-fixer) |
+| **P5** | `differential` | LIM-016 | A SMALL uniform multiplicative perturbed-only scale (`c≈1.15–1.25`, control clean) fakes a confident `gain-diff` / `ceiling-diff` (truth no-difference). Slips the P4 gate 4c two ways: (1) at small `c` the BIC winner is often **gain (n)**, and gate 4c is ceiling-scoped (never checks `off_scale` for a gain winner); (2) on the ceiling channel `off_scale` lands in the **(1.18, 1.30] blind gap** — above the measured genuine-ceiling max (1.18) yet below gate 4c's upper cut (1.30). The P4 fix was calibrated only on `c≥1.5`; the interior was unprobed. Verified 8 confident-wrong / 4 seeds. | `scripts/redteam/differential_small_mult_gain_hole.py` | IN-PROGRESS (uq-fixer) |
 
-Reported by red-team round 3 (`design/FAILSAFE_REDTEAM_3.md`); **pending independent UQ
-validation** (role 3 re-reproduces before fixing — status reflects that they are red-team
-claims, not yet main-loop-verified).
+P5 reported by red-team round 5 (`design/FAILSAFE_REDTEAM_5.md`, `runs/000000017`); P6 by
+red-team round 6 (`design/FAILSAFE_REDTEAM_6.md`, `runs/000000018`). Both independently
+re-reproduced by the orchestrator/fixer before fixing.
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
@@ -84,6 +91,7 @@ last; never edit a past row):
 | 000000015 | `runs/000000015-audit-P2.md` | audit | P2 fix | **AUDIT: PASS** — hole gone (seeds 0,1,2), genuine ceiling resolves 4/4, near-zero-floor bound narrow+honest, frozen core untouched |
 | 000000016 | `runs/000000016-orchestrator-P2-merge.md` | orchestrator | P2 merge | independently re-verified + merged → `1d091c1` (2 additive doc conflicts resolved); P2 CLOSED/BOUNDED; queue now EMPTY |
 | 000000017 | `runs/000000017-redteam-finalsweep.md` | redteam | FINAL full sweep | **HOLES_FOUND: 1** — NOT a STOP: NEW hole **P5** (differential small mult confound slips P4 gate 4c); 4 fixes held jointly; report `FAILSAFE_REDTEAM_5.md`; commit `6a1c774` |
+| 000000018 | `runs/000000018-redteam-moat-fullsweep.md` | redteam | POST-MOAT full sweep (moat-first) | **HOLES_FOUND: 1** — NOT a STOP: NEW hole **P6** (matrix-free `sloppiness` iterative/`auto` path mislabels an unidentifiable model `well-constrained`, LIM-023); OED targets + 4 prior fixes HELD; report `FAILSAFE_REDTEAM_6.md`; commit `749954f` |
 
 ---
 
