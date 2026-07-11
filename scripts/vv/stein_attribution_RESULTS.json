@@ -1,0 +1,869 @@
+{
+  "dataset": "Stein 2013 (pop1 no-drug -> pop3 clindamycin+C.diff)",
+  "results": [
+    {
+      "k": 2,
+      "n_rep": 3,
+      "n_timepoints": 8,
+      "t_obs": [
+        0.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        12.0
+      ],
+      "labels": [
+        "background",
+        "Clostridium_difficile"
+      ],
+      "cdiff_group": 1,
+      "baseline_loss": 2.0683,
+      "baseline_secs": 1.6,
+      "rows": [
+        {
+          "group": "background",
+          "call": "no-change",
+          "pub_eps": -0.976,
+          "bic": {
+            "null": 76.93,
+            "growth": 78.2,
+            "interaction": 79.37,
+            "susceptibility": 77.51
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.168,
+            "interaction": -0.1,
+            "susceptibility": -1.347
+          },
+          "d_null_best": -0.57,
+          "cond_number": 153.0,
+          "corr_alpha_beta": 0.975,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 8.2,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-0.6, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Clostridium_difficile",
+          "call": "no-change",
+          "pub_eps": -0.313,
+          "bic": {
+            "null": 76.93,
+            "growth": 79.71,
+            "interaction": 79.71,
+            "susceptibility": 79.71
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.0,
+            "interaction": 0.0,
+            "susceptibility": 0.0
+          },
+          "d_null_best": -2.77,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 4.9,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-2.8, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    },
+    {
+      "k": 3,
+      "n_rep": 3,
+      "n_timepoints": 8,
+      "t_obs": [
+        0.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        12.0
+      ],
+      "labels": [
+        "suppressed",
+        "promoted",
+        "Clostridium_difficile"
+      ],
+      "cdiff_group": 2,
+      "baseline_loss": 2.9805,
+      "baseline_secs": 2.5,
+      "rows": [
+        {
+          "group": "suppressed",
+          "call": "no-change",
+          "pub_eps": -1.816,
+          "bic": {
+            "null": 124.88,
+            "growth": 120.92,
+            "interaction": 121.25,
+            "susceptibility": 117.51
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.727,
+            "interaction": -3.864,
+            "susceptibility": -5.111
+          },
+          "d_null_best": 7.37,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 8.7,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=7.4, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "promoted",
+          "call": "unresolved",
+          "pub_eps": 2.384,
+          "bic": {
+            "null": 124.88,
+            "growth": 111.5,
+            "interaction": 127.98,
+            "susceptibility": 121.69
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 6.045,
+            "interaction": 15.166,
+            "susceptibility": 14.081
+          },
+          "d_null_best": 13.39,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.995,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 5.6,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number inf, |corr|=0.995). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Clostridium_difficile",
+          "call": "no-change",
+          "pub_eps": -0.313,
+          "bic": {
+            "null": 124.88,
+            "growth": 128.06,
+            "interaction": 128.06,
+            "susceptibility": 128.06
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.0,
+            "interaction": 0.0,
+            "susceptibility": 0.0
+          },
+          "d_null_best": -3.18,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 6.2,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-3.2, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    },
+    {
+      "k": 5,
+      "n_rep": 3,
+      "n_timepoints": 8,
+      "t_obs": [
+        0.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        12.0
+      ],
+      "labels": [
+        "strong_suppressed",
+        "mod_suppressed",
+        "Enterobacteriaceae",
+        "Enterococcus",
+        "Clostridium_difficile"
+      ],
+      "cdiff_group": 4,
+      "baseline_loss": 1.1186,
+      "baseline_secs": 2.5,
+      "rows": [
+        {
+          "group": "strong_suppressed",
+          "call": "unresolved",
+          "pub_eps": -2.59,
+          "bic": {
+            "null": 197.17,
+            "growth": 187.16,
+            "interaction": 189.23,
+            "susceptibility": 186.99
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.518,
+            "interaction": -4.225,
+            "susceptibility": -2.265
+          },
+          "d_null_best": 10.18,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 9.9,
+          "reason": "a perturbation is real (\u0394BIC vs null=10.2) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'growth' by only \u0394BIC=0.2 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "mod_suppressed",
+          "call": "no-change",
+          "pub_eps": -1.042,
+          "bic": {
+            "null": 197.17,
+            "growth": 207.71,
+            "interaction": NaN,
+            "susceptibility": 200.22
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.279,
+            "interaction": NaN,
+            "susceptibility": 5.942
+          },
+          "d_null_best": -3.05,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.854,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 7.0,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-3.0, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Enterobacteriaceae",
+          "call": "no-change",
+          "pub_eps": 3.701,
+          "bic": {
+            "null": 197.17,
+            "growth": 194.71,
+            "interaction": NaN,
+            "susceptibility": 199.85
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.484,
+            "interaction": NaN,
+            "susceptibility": 8.698
+          },
+          "d_null_best": 2.46,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 7.0,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=2.5, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Enterococcus",
+          "call": "no-change",
+          "pub_eps": 1.067,
+          "bic": {
+            "null": 197.17,
+            "growth": 197.58,
+            "interaction": 200.82,
+            "susceptibility": 198.51
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.199,
+            "interaction": 13.294,
+            "susceptibility": 6.437
+          },
+          "d_null_best": -0.41,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 7.6,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-0.4, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Clostridium_difficile",
+          "call": "no-change",
+          "pub_eps": -0.313,
+          "bic": {
+            "null": 197.17,
+            "growth": 200.86,
+            "interaction": 200.86,
+            "susceptibility": 200.86
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.0,
+            "interaction": 0.0,
+            "susceptibility": 0.0
+          },
+          "d_null_best": -3.69,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 6.4,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-3.7, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    },
+    {
+      "k": 8,
+      "n_rep": 3,
+      "n_timepoints": 8,
+      "t_obs": [
+        0.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        12.0
+      ],
+      "labels": [
+        "Barnesiella",
+        "Lachnospiraceae_u",
+        "Lachno_other",
+        "Blautia_Mollicutes",
+        "Akkermansia_Coprobacillus",
+        "Enterococcus",
+        "Enterobacteriaceae",
+        "Clostridium_difficile"
+      ],
+      "cdiff_group": 7,
+      "baseline_loss": 1.9042,
+      "baseline_secs": 3.5,
+      "rows": [
+        {
+          "group": "Barnesiella",
+          "call": "unresolved",
+          "pub_eps": -3.293,
+          "bic": {
+            "null": 325.06,
+            "growth": 312.53,
+            "interaction": 317.07,
+            "susceptibility": 312.86
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -2.229,
+            "interaction": -5.676,
+            "susceptibility": -4.619
+          },
+          "d_null_best": 12.53,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 8.9,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number inf, |corr|=1.000). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Lachnospiraceae_u",
+          "call": "no-change",
+          "pub_eps": -3.035,
+          "bic": {
+            "null": 325.06,
+            "growth": 324.61,
+            "interaction": NaN,
+            "susceptibility": 322.34
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.179,
+            "interaction": NaN,
+            "susceptibility": -1.488
+          },
+          "d_null_best": 2.72,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 8.3,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=2.7, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Lachno_other",
+          "call": "no-change",
+          "pub_eps": -2.015,
+          "bic": {
+            "null": 325.06,
+            "growth": 319.33,
+            "interaction": 320.35,
+            "susceptibility": 318.69
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.511,
+            "interaction": -6.207,
+            "susceptibility": -2.469
+          },
+          "d_null_best": 6.37,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 10.0,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=6.4, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Blautia_Mollicutes",
+          "call": "no-change",
+          "pub_eps": -1.225,
+          "bic": {
+            "null": 325.06,
+            "growth": 332.5,
+            "interaction": NaN,
+            "susceptibility": 321.51
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.464,
+            "interaction": NaN,
+            "susceptibility": 7.917
+          },
+          "d_null_best": 3.55,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 8.1,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=3.5, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Akkermansia_Coprobacillus",
+          "call": "no-change",
+          "pub_eps": -0.859,
+          "bic": {
+            "null": 325.06,
+            "growth": 336.88,
+            "interaction": NaN,
+            "susceptibility": 316.7
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.177,
+            "interaction": NaN,
+            "susceptibility": 9.369
+          },
+          "d_null_best": 8.37,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 10.8,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=8.4, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Enterococcus",
+          "call": "no-change",
+          "pub_eps": 1.067,
+          "bic": {
+            "null": 325.06,
+            "growth": 326.52,
+            "interaction": 329.19,
+            "susceptibility": 327.29
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.176,
+            "interaction": 13.364,
+            "susceptibility": 6.699
+          },
+          "d_null_best": -1.46,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 9.9,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-1.5, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Enterobacteriaceae",
+          "call": "no-change",
+          "pub_eps": 3.701,
+          "bic": {
+            "null": 325.06,
+            "growth": 331.41,
+            "interaction": NaN,
+            "susceptibility": 348.88
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.706,
+            "interaction": NaN,
+            "susceptibility": 10.973
+          },
+          "d_null_best": -6.35,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 6.6,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-6.4, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Clostridium_difficile",
+          "call": "no-change",
+          "pub_eps": -0.313,
+          "bic": {
+            "null": 325.06,
+            "growth": 329.22,
+            "interaction": 329.22,
+            "susceptibility": 329.22
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.0,
+            "interaction": 0.0,
+            "susceptibility": 0.0
+          },
+          "d_null_best": -4.16,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 7.8,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-4.2, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    },
+    {
+      "k": 11,
+      "n_rep": 3,
+      "n_timepoints": 8,
+      "t_obs": [
+        0.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        12.0
+      ],
+      "labels": [
+        "undefined_genus_of_Enterobacteriaceae",
+        "Blautia",
+        "Barnesiella",
+        "undefined_genus_of_unclassified_Mollicutes",
+        "undefined_genus_of_Lachnospiraceae",
+        "Akkermansia",
+        "unclassified_Lachnospiraceae",
+        "Coprobacillus",
+        "Enterococcus",
+        "Other",
+        "Clostridium_difficile"
+      ],
+      "cdiff_group": 10,
+      "baseline_loss": 2.2946,
+      "baseline_secs": 2.8,
+      "rows": [
+        {
+          "group": "undefined_genus_of_Enterobacteriaceae",
+          "call": "no-change",
+          "pub_eps": 3.701,
+          "bic": {
+            "null": 443.9,
+            "growth": 451.09,
+            "interaction": NaN,
+            "susceptibility": 459.92
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.769,
+            "interaction": NaN,
+            "susceptibility": 10.803
+          },
+          "d_null_best": -7.19,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 13.6,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-7.2, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Blautia",
+          "call": "no-change",
+          "pub_eps": -1.349,
+          "bic": {
+            "null": 443.9,
+            "growth": 456.67,
+            "interaction": 439.93,
+            "susceptibility": 438.33
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.246,
+            "interaction": -5.36,
+            "susceptibility": -4.222
+          },
+          "d_null_best": 5.57,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 11.4,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=5.6, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Barnesiella",
+          "call": "unresolved",
+          "pub_eps": -3.293,
+          "bic": {
+            "null": 443.9,
+            "growth": 424.75,
+            "interaction": 428.02,
+            "susceptibility": 423.73
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -2.425,
+            "interaction": -4.016,
+            "susceptibility": -6.155
+          },
+          "d_null_best": 20.17,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 12.8,
+          "reason": "a perturbation is real (\u0394BIC vs null=20.2) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'growth' by only \u0394BIC=1.0 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "undefined_genus_of_unclassified_Mollicutes",
+          "call": "no-change",
+          "pub_eps": -1.102,
+          "bic": {
+            "null": 443.9,
+            "growth": 453.21,
+            "interaction": 448.36,
+            "susceptibility": 448.74
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.418,
+            "interaction": 17.02,
+            "susceptibility": 6.554
+          },
+          "d_null_best": -4.46,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.999,
+          "degenerate": true,
+          "selected": "interaction",
+          "confident_wrong": false,
+          "secs": 9.2,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-4.5, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "undefined_genus_of_Lachnospiraceae",
+          "call": "no-change",
+          "pub_eps": -3.035,
+          "bic": {
+            "null": 443.9,
+            "growth": 442.37,
+            "interaction": NaN,
+            "susceptibility": 442.33
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.318,
+            "interaction": NaN,
+            "susceptibility": -1.86
+          },
+          "d_null_best": 1.57,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 11.2,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=1.6, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Akkermansia",
+          "call": "no-change",
+          "pub_eps": -0.924,
+          "bic": {
+            "null": 443.9,
+            "growth": 448.19,
+            "interaction": 448.22,
+            "susceptibility": 448.28
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.123,
+            "interaction": 13.805,
+            "susceptibility": 0.603
+          },
+          "d_null_best": -4.29,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 11.7,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-4.3, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "unclassified_Lachnospiraceae",
+          "call": "no-change",
+          "pub_eps": -2.091,
+          "bic": {
+            "null": 443.9,
+            "growth": 441.54,
+            "interaction": 449.82,
+            "susceptibility": 439.82
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.275,
+            "interaction": 0.206,
+            "susceptibility": -1.944
+          },
+          "d_null_best": 4.08,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.999,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 7.7,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=4.1, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Coprobacillus",
+          "call": "no-change",
+          "pub_eps": -0.794,
+          "bic": {
+            "null": 443.9,
+            "growth": 456.08,
+            "interaction": NaN,
+            "susceptibility": 460.08
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.057,
+            "interaction": NaN,
+            "susceptibility": 10.508
+          },
+          "d_null_best": -12.18,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.179,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 9.4,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-12.2, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Enterococcus",
+          "call": "no-change",
+          "pub_eps": 1.067,
+          "bic": {
+            "null": 443.9,
+            "growth": 445.66,
+            "interaction": 448.35,
+            "susceptibility": 446.42
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 1.329,
+            "interaction": 13.469,
+            "susceptibility": 7.107
+          },
+          "d_null_best": -1.76,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 9.3,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-1.8, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Other",
+          "call": "unresolved",
+          "pub_eps": -1.94,
+          "bic": {
+            "null": 443.9,
+            "growth": 433.97,
+            "interaction": 436.28,
+            "susceptibility": 431.72
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": -0.631,
+            "interaction": -4.263,
+            "susceptibility": -3.579
+          },
+          "d_null_best": 12.18,
+          "cond_number": 5541.7,
+          "corr_alpha_beta": 0.26,
+          "degenerate": true,
+          "selected": "susceptibility",
+          "confident_wrong": false,
+          "secs": 9.5,
+          "reason": "a perturbation is real (\u0394BIC vs null=12.2) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'growth' by only \u0394BIC=2.3 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "Clostridium_difficile",
+          "call": "no-change",
+          "pub_eps": -0.313,
+          "bic": {
+            "null": 443.9,
+            "growth": 448.38,
+            "interaction": 448.38,
+            "susceptibility": 448.38
+          },
+          "delta": {
+            "null": 0.0,
+            "growth": 0.0,
+            "interaction": 0.0,
+            "susceptibility": 0.0
+          },
+          "d_null_best": -4.48,
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.0,
+          "degenerate": true,
+          "selected": "growth",
+          "confident_wrong": false,
+          "secs": 12.7,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-4.5, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    }
+  ]
+}

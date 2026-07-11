@@ -1234,14 +1234,100 @@ a 2-seed sweep per case):**
 - **A no-perturbation null makes no positive call** (`no-change` / `unresolved`).
 - **0 confident-wrong** across the mixed battery (the headline fail-safe property).
 
-**Real coda (Stein et al. 2013, structured `needs_data`; `notebooks/Temporal_Ecology.ipynb`).**
+**Real coda (Stein et al. 2013 — now GENUINELY RUN; see "Real-data gLV attribution" below).**
 The clindamycin→*C. difficile* series (11 taxa, CC-BY). Stein's own fitted ε vector directly
-suppresses several taxa (strongly negative ε — the identifiable axis), but *C. difficile*'s
-ε ≈ −0.31 is near zero: **its bloom is interaction-mediated (β), not direct-kill** — exactly the
-α/β confound NUDGE abstains on. With 11 taxa from ~11 timepoints the full β matrix is
-underdetermined; the honest read is a direct-kill ε POSITIVE on the strongly-susceptible taxa and
-an ABSTENTION on *C. difficile*. Surfaced prominently, not buried behind the positive.
+suppresses several taxa (strongly negative ε), but *C. difficile*'s ε ≈ −0.31 is near zero: **its
+bloom is interaction-mediated (β), not direct-kill**. The EARLIER *expectation* here — "a direct-kill
+ε POSITIVE on the strongly-susceptible taxa" — did NOT survive contact with the real fit: at the
+native 8-timepoint sampling NUDGE **abstains on every group at every k** (0 confident calls, 0
+confident-wrong), and genuinely **abstains on *C. difficile*** (`no-change` at every k). The measured
+verdict, its identifiability boundary, and the MDSINE2 replication are the "Real-data gLV attribution
+on Stein 2013 + MDSINE2" finding below (adapters: `scripts/vv/stein_glv.py`,
+`scripts/vv/mdsine2_glv.py`).
 
 **Wiring.** `nudge lotka` CLI verb + `service.lotka_demo` + a Mechanism Card (`NUDGE-METHOD-012`)
 + `NUDGE-LIM-020` + two gLV decoys (`generate_alpha_beta_confound_decoy`,
 `generate_no_perturbation_null`) + `notebooks/Temporal_Ecology.ipynb`. Additive / opt-in.
+
+
+## Real-data gLV attribution on Stein 2013 + MDSINE2 — NUDGE ABSTAINS on real microbiome data (0 confident-wrong on two datasets, two antibiotics)
+
+**What was run.** The deferred real-data ingestion the temporal capability only *argued* for is now
+BUILT and EXECUTED against the shipped `attribute_glv` (unchanged). Two new additive real-data
+adapters under `scripts/vv/` (lint-clean, imports `nudge.inference.lotka_volterra` read-only, touches
+neither `fit.py` nor `core/`):
+
+- `stein_glv.py` — Stein 2013 Dataset S1 (`.xlsx`, CC-BY) → `GLVDataset`. reference = Population 1
+  (no clindamycin ≡ insusceptible), perturbed = Population 3 (clindamycin pulse + *C. difficile*
+  challenge). 3 colonies each; the 11 taxa aggregated to k∈{2,3,5,8,11} functional groups by the
+  authors' published susceptibility tier (*C. difficile* always its own group). Common 8-timepoint
+  grid t∈{0,2,3,4,5,6,7,12} (no extrapolation past the reference's range); clindamycin as a 1-day unit
+  pulse `u(t)`. Per-group O(1) normalization (α/ε-INVARIANT: gLV is scale-covariant in x — rescaling
+  xᵢ only rescales βᵢⱼ, leaving the α/ε attribution axes — needed because raw metagenomic densities
+  span ~1e-5..12 and drive the RK4 integrator into stiff NaN blow-up).
+- `mdsine2_glv.py` — MDSINE2 Gibson healthy cohort raw tables (fetched from `gerberlab/MDSINE2_Paper`,
+  a few MB of TSV; NOT the 18.7 GB Zenodo model output) → `GLVDataset`. 1088 ASVs → absolute abundance
+  (relative × triplicate-qPCR total load) → top-(k−1) genera + "Other". A within-subject before-vs-
+  during design (no untreated arm exists for these mice): reference = the 6-day pre-**vancomycin**
+  window, perturbed = the vancomycin window + recovery, subjects 2–5 as R=4 replicates, twice-daily →
+  14 timepoints with ~7 OBSERVED DURING the 7-day pulse (Stein observes NONE during its 1-day pulse).
+  Runners: `stein_attribution.py`, `mdsine2_attribution.py` (→ `*_RESULTS.json`).
+
+**Headline (MEASURED).** On BOTH real datasets, at EVERY k, NUDGE returns **0 confident single-knob
+calls** — every group is `no-change` or `unresolved`. **0 confident-WRONG** (the one unacceptable
+outcome) on real data, across two datasets, two different antibiotics (clindamycin, vancomycin), and
+two independent competitive-release pathogen blooms. Heavy, honest abstention — exactly the on-thesis
+behavior for famously ill-posed gLV inference.
+
+**Stein — per-group verdict (Task 1).** The task's central question answered by measurement:
+- ***C. difficile* genuinely ABSTAINS** — `no-change` at every k (k=2..11), ΔBIC vs null ≈ −3 to −4,
+  fitted εΔ = 0.00. Its ~0 reference baseline (never introduced in the no-drug arm) plus a LATE,
+  non-pulse-locked bloom mean no single knob of *C. difficile* reproduces it — matching the published
+  ε ≈ −0.31 (near-zero direct susceptibility; the bloom is interaction-mediated). This is the measured
+  verdict the notebook previously only argued for.
+- **The strongly-suppressed commensals detect a real antibiotic effect but abstain on the KNOB.**
+  Barnesiella (pub ε=−3.29) and the "Other" tier (−1.94) beat the null decisively (ΔBIC = +20.2,
+  +12.2) and their BEST-fit knob is `susceptibility` with the CORRECT negative sign (εΔ = −6.2, −3.6)
+  — NUDGE points the right direction — yet it returns `unresolved` because ε does not beat a growth
+  change by the resolve margin: with **no observation during the 1-day pulse** (first post-pulse
+  sample at t=2, drug already off), a direct kill (ε during [0,1)) and a sustained growth reduction (α)
+  are near-indistinguishable. The confound is real and NUDGE declines to guess.
+- The directly-PROMOTED taxa (Enterobacteriaceae pub ε=+3.70, Enterococcus +1.07) also abstain
+  (`no-change`); their best εΔ has the correct POSITIVE sign but does not clear the null margin
+  (bloom-from-~0, like *C. difficile*).
+
+**Stein — the identifiability boundary (Task 2).** The dimensionality sweep does NOT show a
+resolve→abstain transition in k, because the **α⇄βᵢᵢ Laplace curvature is already near-singular at
+EVERY k** (`alpha_beta_identifiability`: condition number → ∞, |corr| ≈ 1.00 for essentially all
+target/k). The binding constraint on THIS dataset is **temporal resolution, not the k² parameter
+count**: 8 sparse timepoints with none in the pulse window leave even k=2 underdetermined on the knob
+axis. Number of groups that even DETECT an effect (ΔBIC≥10) stays 0–2 across k=2→11; confident calls
+stay 0. So the honest boundary statement is *not* "resolves up to k≈N" — it is **"NUDGE abstains at
+all k on this sampling; the boundary is set by whether the antibiotic window is temporally resolved,
+not by dimensionality"** — which directly motivated the denser MDSINE2 test.
+
+**MDSINE2 — does denser + multi-perturbation data push the boundary? (Task 3 — the user's hypothesis).**
+Fetched and parsed the raw tables in-environment and ran the vancomycin contrast at k∈{3,5,8,12}
+genera. The hypothesis (denser sampling + a longer, observed pulse → higher identifiable dimension)
+is **NOT confirmed by NUDGE's actual behavior: 0 confident calls at every k** (still all
+`no-change`/`unresolved`). BUT the denser in-pulse sampling measurably helped *detection* and
+*direction*: effects are detected far more strongly (Akkermansia ΔBIC vs null = +53 at k=5;
+Enterocloster +38, Parasutterella +22, Hungatella +20 at k=12) and `susceptibility` (correct negative
+sign for every suppressed genus) becomes the best-fit knob for most suppressed genera — a real
+improvement over Stein — yet the ε⇄α/β margin still stays below the resolve threshold, so NUDGE
+abstains. **The competitive-release bloomer Escherichia/Shigella** (vancomycin-resistant gram-negative,
+logFC +3.5 from ≈0 — the direct *C. difficile* analog) → `no-change`: NUDGE abstains on it exactly as
+it did on *C. difficile*, on a different dataset and antibiotic. At **k=8 the baseline gLV fit itself
+diverges to NaN** (64+ β params, stiff integration) → automatic `unresolved` (still fail-safe, but an
+uninformative numerical abstention — a hard high-dimensional boundary of the shipped fit on this data).
+
+**The honest conclusion (loud).** The synthetic-data "ε is the demoable POSITIVE" result does NOT
+transfer to real microbiome data at these sampling regimes: with 3–4 replicates, real measurement
+noise, and (for Stein) an unobserved pulse window, the direct-kill ε axis is best-fit but NOT
+decisively separable from a growth/interaction change, so **NUDGE abstains everywhere — over-abstention,
+never confident-wrong.** This is the correct, fail-safe, on-thesis outcome (a confident-wrong on real
+data would be the CRITICAL failure; none occurred on either dataset). More/denser data + a second
+distinct antibiotic improved DETECTION and pushed the best knob toward the right axis with the right
+sign, but did NOT cross the RESOLUTION threshold — evidence the α/β/ε degeneracy is largely structural,
+not merely a data-quantity limitation. Data fetch for MDSINE2 (reproducible):
+`gerberlab/MDSINE2_Paper/master/datasets/gibson/healthy/raw_tables/{counts,qpcr,metadata,perturbations,rdp_species}.tsv`.
