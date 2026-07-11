@@ -9,8 +9,10 @@ history (append new rows; correct forward).
 
 ## ▶ RESUME POINTER
 
-**Status: 3 cases run (6 arms), 0 confident-wrong. The confound case (000000003) ran — the control
-was NOT baited (it caught the technical scale unaided), so the money-shot still did not land.**
+**Status: 4 cases run (8 arms), 0 confident-wrong. The physics/inversion case (000000004) ALSO did
+not produce a WITH>WITHOUT contrast — and inverted the premise: Opus 4.8 computed the exact
+bifurcation threshold (78.6%) by WRITING CODE, and was MORE precise than NUDGE's `design()` (which
+overshot to 88.6% + emitted a non-physical predicted-state the agent caught). See run 000000004.**
 
 - **What the confound case taught us:** even a per-condition ×2.0 confound built to bait did not fool
   Opus 4.8 — the control spotted that the scale also doubled the OFF-population noise (an instrument
@@ -33,8 +35,9 @@ was NOT baited (it caught the technical scale unaided), so the money-shot still 
 | 000000001 | `blind_threshold` | attribute | threshold K×1.6 (below detection here) | correct-abstention (no-effect) | correct-abstention (no-effect) | no (near-null) |
 | 000000002 | `dose_truncated` | dose-response | switch, truncated below inflection | correct-abstention (unresolved/LIM-007) | correct-abstention (extend range) | no (control didn't bite) |
 | 000000003 | `blind_differential` | differential | no-difference + ×2.0 confound on B-perturbed | correct-abstention (caught NUDGE's own FP) | correct-abstention (spotted the technical gain) | no (control caught the confound) |
+| 000000004 | `blind_design` | design/inversion | collapse toggle: min basal-A reduction to cross the fold | correct-call **78.6%** (own bifurcation analysis; flagged NUDGE's 88.6% overshoot) | correct-call **78.6%** (own saddle-node analysis) | no (control computed it with code) |
 
-**Tally so far: 6 arms, 6 PASS (all correct-abstention), 0 confident-wrong.**
+**Tally so far: 8 arms across 4 case types, all PASS, 0 confident-wrong.**
 
 ## The ablation — what these runs actually show
 
@@ -46,15 +49,17 @@ was NOT baited (it caught the technical scale unaided), so the money-shot still 
 
 So on these cases NUDGE's value is **grounding / standardization / speed**, not outcome-changing.
 
-## KEY FINDING (revised after the confound case, 000000003)
+## KEY FINDING (revised after the physics/inversion case, 000000004)
 
-**Opus 4.8 is well-calibrated across ALL THREE case types — a below-detection threshold shift, a
-truncated-dose over-fit trap, AND a per-condition ×2.0 technical confound built to bait it.** In
-every one, the control arm reached the honest abstention *without* NUDGE — on the confound it even
-rediscovered the specialized tell (the scale also doubles the OFF-population noise → an instrument
-gain, not biology). So the "NUDGE prevents a confident-wrong the model would commit" money-shot did
-**not** materialize on any case: the model is simply too careful to bait with a clean synthetic
-confound.
+**Across ALL FOUR case types — a below-detection threshold shift, a truncated-dose over-fit trap, a
+per-condition ×2.0 technical confound, AND a nonlinear bifurcation-inversion — a code-capable Opus
+4.8 reached the correct answer WITHOUT NUDGE, and on NO case did the control fail where the
+NUDGE arm succeeded.** On statistics it abstains correctly (even decoding the confound's tell
+unaided); on the physics it *wrote code* to implement the toggle ODE, locate the saddle-node, and
+return the exact 78.6% threshold — MORE precise than NUDGE's `design()` (an 88.6% overshoot with a
+non-physical predicted-state the agent caught). The premise "LLMs can't invert nonlinear ODEs" is
+false once the agent has a code interpreter. So a **capability-gap money-shot does not exist for this
+model on these tasks.**
 
 **What NUDGE's value actually IS on these runs (measured, not hoped):**
 1. **Grounding / standardization / speed** — a quantified verdict tied to a documented limitation

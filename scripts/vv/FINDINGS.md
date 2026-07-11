@@ -1615,6 +1615,23 @@ multiplicative case is step-sensitive. Lesson: an under-optimized fail-safe can 
 very confident-wrong it exists to prevent — the abstention guarantee is conditional on convergence,
 now stated in the docstrings and defended by the default.
 
+**§DES. Two `design()` issues the automated-scientist inversion case surfaced
+(`design/automated_scientist/runs/000000004`).** Asked (blind) for the minimum basal-A reduction to
+collapse a bistable toggle's HIGH-A state, a code-capable Opus 4.8 — WITH and WITHOUT NUDGE —
+computed the exact saddle-node fold (**78.6%**, basal_A→0.10695; det(J)=0, eigenvalues 0,-2). NUDGE's
+`design(free='species0.basal', to='low')` returned **88.6%** (basal_A ×0.114) and the with-nudge
+agent flagged two real problems: (1) **`predicted_state` is not validated as a fixed point** — it
+reported `[0.734, 12.70]`, whose B=12.70 exceeds the production ceiling basal+vmax=2.5, a gradient-
+descent artifact; `design()` should re-solve/validate its predicted state or flag it. (2) **overshoot
+vs threshold** — `design()` optimizes to land *deep in* the target basin (a robust flip), not to the
+*minimal* fold crossing, so for "minimum intervention to destabilize" questions it over-answers;
+there is no minimal-fold-crossing mode. The Cap-5 safety gate itself was correct (`crosses_fold=True`,
+independently confirmed). Both are candidate design()/invert.py improvements; recorded, not yet fixed.
+(The broader ablation — 8 arms, 4 case types, 0 confident-wrong, no WITH>WITHOUT contrast — is the
+automated-scientist LEDGER's KEY FINDING: a code-capable frontier agent matches/exceeds NUDGE on
+these tasks, so NUDGE's demonstrated value is validation / reproducibility / a trustworthy safety
+layer, not raw capability the agent lacks.)
+
 
 ## P3 — design() safety gate absolute near-fold check (hardening loop, `NUDGE-LIM-013`)
 

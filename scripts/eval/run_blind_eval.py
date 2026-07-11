@@ -80,6 +80,42 @@ Rules:
 - Be honest and calibrated. State what the data supports and what it does not.
 """
 
+_TASK_DESIGN = """\
+You are an automated scientist working a FICTIONAL, synthetic test case (it is not real data and
+the answer is not in the literature — you must compute it from the model + tools, exactly as on a
+genuinely novel problem). A bistable genetic **toggle switch** (2-gene mutual repression, genes A
+and B) has been characterized: the single-cell readout is in this directory ({data_files}) and its
+measured Hill kinetics are in `switch_characterization.json`. The population rests in two stable
+states (high-A/low-B and low-A/high-B).
+
+The system is currently sitting in the **HIGH-A** state. Your task: determine, **as exactly as the
+model supports, the PERCENTAGE REDUCTION in Gene A's basal transcription rate required to COLLAPSE
+the high-A state into the alternative (high-B) stable state** — i.e. to destabilize the high-A
+fixed point so the system falls to high-B. Also state whether that intervention is dynamically
+**safe** or pushes the switch across a **bifurcation** (a loss of bistability).
+
+This is a nonlinear-dynamics inversion, not a statistics question. If you genuinely cannot compute
+it, say so honestly rather than fabricate a number — but a precise, defensible value (with your
+method) is the goal.
+
+Rules:
+- Do NOT search the web (it is disabled). Compute from the kinetics + data{tools_line}.
+- Keep an append-only REPORT.md in this directory: your approach, every tool call / computation and
+  how you read its output, and a final answer — the exact % reduction AND the safety assessment, or
+  an explicit statement of what you could not compute and why.
+- Be honest and calibrated. Do not present a guess as an exact result.
+"""
+
+_WITH_NUDGE_TOOLS_DESIGN = (
+    ", using the NUDGE tools via MCP — in particular `design`, the INVERSE verb. In circuit "
+    "mode it gradient-inverts a characterized switch to find the intervention that flips it "
+    "between stable basins, behind a bifurcation safety gate. For a toggle, pass "
+    "`topology='toggle'` with the kinetics (`n`, `K`, `vmax`, `basal`), set "
+    "`free='species0.basal'` to move ONLY Gene A's basal rate, and `start='high'`, `to='low'` "
+    "to collapse the high-A state. The returned Δ carries a multiplicative `factor` (a factor "
+    "below 1 is a reduction) and a `safety` report saying whether the intervention crosses the fold"
+)
+
 _WITH_NUDGE_TOOLS_DIFF = (
     ", using the NUDGE tools via MCP. For a two-context comparison NUDGE offers `differential` "
     "(BIC-selects which switch knob — threshold / gain / ceiling — differs between the contexts, "
@@ -125,12 +161,11 @@ def main() -> int:
     elif (sandbox / ".mcp.json").exists():
         (sandbox / ".mcp.json").unlink()
 
-    is_diff = args.surface == "differential"
-    template = _TASK_DIFFERENTIAL if is_diff else _TASK
-    if with_nudge:
-        tools_line = _WITH_NUDGE_TOOLS_DIFF if is_diff else _WITH_NUDGE_TOOLS
-    else:
-        tools_line = _WITHOUT_NUDGE_TOOLS
+    templates = {"differential": _TASK_DIFFERENTIAL, "design": _TASK_DESIGN}
+    with_tools = {"differential": _WITH_NUDGE_TOOLS_DIFF, "design": _WITH_NUDGE_TOOLS_DESIGN}
+    template = templates.get(args.surface, _TASK)
+    tools_line = (with_tools.get(args.surface, _WITH_NUDGE_TOOLS) if with_nudge
+                  else _WITHOUT_NUDGE_TOOLS)
     task = template.format(data_files=", ".join(data_files), tools_line=tools_line)
     (sandbox / "TASK.md").write_text(task)
 

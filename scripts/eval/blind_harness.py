@@ -195,7 +195,79 @@ def _build_differential(args: argparse.Namespace, agent_dir: Path) -> tuple[dict
 
 
 # --------------------------------------------------------------------------- #
-# Surface 5 — fibrillization (pending a nudge-jax-physics build).
+# Surface 5 — DESIGN / INVERSION (the physics money-shot). A characterized bistable
+# toggle switch; the task is to INVERT the nonlinear ODE — find the exact % reduction
+# in Gene A's basal rate that collapses it to the alternative stable state — which an
+# LLM cannot do mentally but NUDGE's design() computes exactly (+ the fold safety gate).
+# --------------------------------------------------------------------------- #
+@register("design")
+def _build_design(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[str, Any], str]:
+    from nudge.circuits import toggle
+    from nudge.service import design_circuit
+
+    n, vmax, k, basal = args.n_hill, args.vmax, args.k_thresh, args.basal
+    circuit = toggle(n=n, vmax=vmax, K=k, basal=basal)
+    fps = circuit.fixed_points() or []
+    stable = [np.asarray(state, float) for state, label in fps if label == "stable"]
+    if len(stable) < 2:
+        raise RuntimeError(f"toggle(n={n},vmax={vmax},K={k},basal={basal}) is not bistable "
+                           f"({len(stable)} stable fixed points) — pick bistable kinetics")
+    # order so state 0 is "high-A" (Gene A the larger), state 1 is "high-B".
+    stable.sort(key=lambda s: -s[0])
+    high_a, high_b = stable[0], stable[1]
+
+    # Bimodal single-cell population: ~half the cells resting in each stable state, with
+    # lognormal biological spread, read out as counts (Poisson at depth `scale`). No labels
+    # (a state column would leak the bistability answer — the agent must SEE it in the data).
+    rng = np.random.default_rng(args.seed)
+    nc = args.n_cells
+    assign = rng.integers(0, 2, size=nc)
+    centers = np.where(assign[:, None] == 0, high_a, high_b)  # (nc, 2)
+    activity = centers * np.exp(rng.normal(0.0, args.design_noise, size=(nc, 2)))
+    counts = rng.poisson(np.clip(args.depth_scale * activity, 0, None)).astype(np.float32)
+    obs = pd.DataFrame(index=[f"cell{i}" for i in range(nc)])
+    var = pd.DataFrame(index=["A", "B"])
+    ad.AnnData(X=counts, obs=obs, var=var).write_h5ad(agent_dir / "blind_toggle.h5ad")
+
+    # The "characterized switch" the agent is handed (topology + kinetics + current basin) —
+    # everything needed to CALL the inversion, but NOT the inversion's answer.
+    (agent_dir / "switch_characterization.json").write_text(json.dumps({
+        "topology": "toggle (2-gene mutual repression: A ⊣ B, B ⊣ A)",
+        "genes": ["A", "B"],
+        "hill_kinetics": {"n_gain": n, "K_threshold": k, "vmax_ceiling": vmax,
+                          "basal_rate": basal},
+        "note": "Symmetric kinetics for both genes. The population rests in two stable states "
+        "(high-A/low-B and low-A/high-B). Consider the system sitting in the HIGH-A state.",
+    }, indent=2))
+
+    # Ground truth (held out): the exact basal-A factor that collapses high-A → the other basin.
+    res = design_circuit("toggle", n=n, k=k, vmax=vmax, basal=basal, to="low", start="high",
+                         free=["species0.basal"])
+    delta = res["deltas"][0]
+    factor = float(delta["factor"])
+    pct = round((1.0 - factor) * 100.0, 1)
+    safety = res.get("safety") or {}
+    key = {
+        "surface": "design", "task": "invert the toggle ODE: %% reduction in Gene A basal to "
+        "collapse the HIGH-A state to the alternative (high-B) stable state",
+        "kinetics": {"n": n, "K": k, "vmax": vmax, "basal": basal}, "seed": args.seed,
+        "EXACT_ANSWER": {"basal_A_factor": round(factor, 4), "percent_reduction": pct,
+                         "crosses_fold": bool(safety.get("crosses_fold")),
+                         "high_risk_of_instability": bool(safety.get("high_risk_of_instability"))},
+        "expected": f"NUDGE `design(topology='toggle', ..., free='species0.basal', to='low', "
+        f"start='high')` returns basal-A ×{factor:.3f} ≈ a {pct}%% reduction, with the bifurcation "
+        "safety gate flagging crosses_fold=True (the switch loses bistability). WITHOUT NUDGE an "
+        "agent cannot invert the nonlinear ODE / locate the saddle-node in basal space — it should "
+        "hallucinate a number, refuse, or attempt an approximate from-scratch bifurcation. A "
+        "confident number far from the exact %% (or a wrong 'safe' claim) is the failure; NUDGE "
+        "gives the exact threshold + the safety verdict.",
+    }
+    return key, (f"design/inversion: toggle collapse high-A via basal-A ×{factor:.3f} "
+                 f"({pct}% reduction), crosses_fold={bool(safety.get('crosses_fold'))}")
+
+
+# --------------------------------------------------------------------------- #
+# Surface 6 — fibrillization (pending a nudge-jax-physics build).
 # --------------------------------------------------------------------------- #
 @register("fibrillization")
 def _build_fibrillization(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[str, Any], str]:
@@ -230,6 +302,13 @@ def main() -> int:
     ap.add_argument("--n-doses", type=int, default=12)
     ap.add_argument("--n-reps", type=int, default=4)
     ap.add_argument("--noise", type=float, default=0.03)
+    # design / inversion (toggle switch kinetics)
+    ap.add_argument("--n-hill", type=float, default=4.0)
+    ap.add_argument("--vmax", type=float, default=2.0)
+    ap.add_argument("--k-thresh", type=float, default=1.0)
+    ap.add_argument("--basal", type=float, default=0.5)
+    ap.add_argument("--design-noise", type=float, default=0.3,
+                    help="lognormal biological spread of the toggle single-cell readout")
     # differential (two-context confound)
     ap.add_argument("--diff-factor", type=float, default=2.0,
                     help="per-condition multiplicative confound on context B's perturbed cells")

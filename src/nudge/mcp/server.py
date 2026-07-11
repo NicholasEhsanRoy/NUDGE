@@ -292,6 +292,7 @@ def build_server() -> Any:
         K: float = 1.0,
         vmax: float = 2.0,
         basal: float = 0.05,
+        free: str = "",
         direction: str = "repress",
         dose_col: str = "dose",
         response_col: str = "response",
@@ -316,7 +317,11 @@ def build_server() -> Any:
         - **Circuit mode**: give ``topology`` (``1node`` / ``2node`` / ``toggle``) + the
           switch kinetics (``n`` gain, ``K`` threshold, ``vmax`` ceiling, ``basal``).
           NUDGE gradient-inverts the circuit to flip it ``to`` a basin (from the
-          ``start`` basin) over its addressable kinetic knobs, then runs the **Cap-5
+          ``start`` basin) over its addressable kinetic knobs — restrict which knobs it
+          may move with ``free`` (comma-separated ``edge0.K`` / ``species0.basal`` names;
+          e.g. ``free="species0.basal"`` asks ONLY "what change to Gene A's basal rate
+          flips it?"; each returned Δ carries a multiplicative ``factor``, so e.g. a
+          ``factor`` of 0.5 = a 50% reduction, 1.5 = a 50% increase). Then runs the **Cap-5
           bifurcation safety gate**: it flags an intervention that pushes the switch
           toward / over its fold (``crosses_fold`` / ``high_risk_of_instability`` — the
           proximity is a ONE-SIDED LOWER BOUND near the fold; ``NUDGE-LIM-012``). It
@@ -330,8 +335,9 @@ def build_server() -> Any:
         from nudge.service import design_circuit, design_file
 
         if topology:
+            knobs = [s.strip() for s in free.split(",") if s.strip()] or None
             return design_circuit(
-                topology, n=n, k=K, vmax=vmax, basal=basal, to=to, start=start
+                topology, n=n, k=K, vmax=vmax, basal=basal, to=to, start=start, free=knobs
             )
         sig = [g.strip() for g in signature.split(",") if g.strip()]
         return design_file(
