@@ -28,6 +28,14 @@ ABSTAIN_CALLS = frozenset(
         # a knob for this variant, so it must read as an abstention, not a positive call.
         "non-responsive",
         "inconclusive",
+        # single-condition covariance attribution: gain and threshold are the measured
+        # confound NUDGE deliberately abstains *between* (never a bare gain/threshold from
+        # one snapshot — nudge.inference.lyapunov._decide_lyapunov), so the chip and the
+        # picture must read as an abstention.
+        "gain_or_threshold",
+        # sloppiness / identifiability (nudge.inference.sloppiness): an unrecoverable
+        # parameter direction is an abstention, not a positive call.
+        "unidentifiable",
     }
 )
 

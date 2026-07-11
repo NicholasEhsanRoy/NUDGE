@@ -143,6 +143,53 @@ def _robustness(call: str) -> dict[str, Any]:
     }
 
 
+def _attribution(resolved: bool) -> dict[str, Any]:
+    """A ``report_to_dict``-shaped AttributionReport: resolved joint vs single-op abstain."""
+    if resolved:
+        return {
+            "target": "SOS1",
+            "n_cells": {"Stim8hr": 1500, "Stim48hr": 1500, "Rest": 40},
+            "single": {
+                "Stim8hr": {"call": "gain_or_threshold",
+                            "nlls": {"n": 10.1, "K": 10.0, "vmax": 12.0}},
+                "Stim48hr": {"call": "gain_or_threshold",
+                             "nlls": {"n": 8.0, "K": 8.1, "vmax": 9.5}},
+            },
+            "multi": {"call": "threshold",
+                      "nlls": {"gain": 20.0, "threshold": 15.0, "ceiling": 22.0}},
+            "skipped": {"Rest": "only 40 target cells (< 200)"},
+        }
+    # A single usable operating point cannot separate gain from threshold → abstain.
+    return {
+        "target": "SOS1", "n_cells": {"Stim8hr": 1500},
+        "single": {"Stim8hr": {"call": "gain_or_threshold",
+                               "nlls": {"n": 10.0, "K": 10.02, "vmax": 12.0}}},
+        "multi": None, "skipped": {},
+    }
+
+
+def _identifiability(resolved: bool) -> dict[str, Any]:
+    """A SloppinessReport-shaped dict: sloppy-but-predictive (usable) vs unidentifiable."""
+    base = {
+        "model_label": "sum-of-exponentials",
+        "param_names": ["A1", "k1", "A2", "k2"],
+        "fim_eigenvalues": [1e-4, 1e-2, 1.0, 100.0], "cond_number": 1e6,
+        "span_decades": 6.0, "smallest_eigenvalue": 1e-4, "largest_eigenvalue": 100.0,
+        "n_sloppy_dims": 1, "is_sloppy": True, "pred_rel_tol": 0.05,
+        "sloppy_decade_threshold": 3.0, "null_hint": "",
+    }
+    if resolved:
+        return {**base, "call": "sloppy-but-predictive",
+                "verdict": "sloppy-but-predictive", "reason": "sloppy but predictive",
+                "n_null_dims": 0, "predictive": True, "relative_prediction_std": 0.01,
+                "naive_verdict": "unidentifiable", "naive_is_wrong": True}
+    return {**base, "model_label": "redundant-exp", "call": "unidentifiable",
+            "verdict": "unidentifiable", "reason": "structural null (k1+k2)",
+            "fim_eigenvalues": [1e-18, 1e-2, 1.0, 100.0], "n_null_dims": 1,
+            "predictive": False, "relative_prediction_std": 0.6,
+            "naive_verdict": "unidentifiable", "naive_is_wrong": False}
+
+
 def _cross_modality(abstain: bool) -> dict[str, Any]:
     call = "non-responsive" if abstain else "threshold"
     return {"variants": [
@@ -157,6 +204,8 @@ def _cross_modality(abstain: bool) -> dict[str, Any]:
 
 # (kind, resolved-input, abstaining-input)
 CASES = [
+    ("attribution", _attribution(True), _attribution(False)),
+    ("identifiability", _identifiability(True), _identifiability(False)),
     ("epistasis", _epistasis("synergistic"), _epistasis("unresolved")),
     ("differential", _differential("gain-diff"), _differential("unresolved")),
     ("multi_reporter", _multi_reporter("ceiling"), _multi_reporter("off-model")),

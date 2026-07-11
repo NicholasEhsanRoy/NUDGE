@@ -66,6 +66,7 @@ def _require_matplotlib() -> None:
 # ``import nudge.viz`` stays cheap and matplotlib-optional.
 _RENDERERS: dict[str, str] = {
     "dose_response": "nudge.viz.dose_response",
+    "attribution": "nudge.viz.attribution",  # the core AttributionReport across ops
     "cross_modality": "nudge.viz.cross_modality",  # reuses the Hill panel (fold-change axis)
     "epistasis": "nudge.viz.epistasis",
     "differential": "nudge.viz.differential",
@@ -76,6 +77,7 @@ _RENDERERS: dict[str, str] = {
     "diagnose": "nudge.viz.diagnose",
     "design": "nudge.viz.design",
     "oed": "nudge.viz.oed",
+    "identifiability": "nudge.viz.identifiability",  # FIM sloppiness spectrum
     "robustness": "nudge.viz.robustness",
 }
 

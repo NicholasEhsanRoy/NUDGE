@@ -162,9 +162,17 @@ def build(obj: Any, *, theme: str = "auto") -> RenderedFigure:
     fig, (ax_plan, ax_safe) = plt.subplots(1, 2, figsize=(10.2, 4.4))
     _draw_plan(ax_plan, d, pal)
     _draw_safety(ax_safe, d, pal)
-    head = "ABSTAIN" if d["design_kind"] == "abstention" else "INTERVENTION"
-    fig.suptitle(f"{d['label']}  →  {head}", fontweight="bold", color=pal["text"],
-                 fontsize=13)
+    # A meaningful suptitle: say what the figure IS (a proposed intervention, or a target
+    # that could not be reached → ABSTAIN) rather than echoing the default label into the
+    # verdict (the old "intervention → INTERVENTION" / "intervention → ABSTAIN" smell).
+    generic = d["label"].strip().lower() in ("", "intervention", "design", "flip")
+    head = (
+        "target unreachable  →  ABSTAIN"
+        if d["design_kind"] == "abstention"
+        else "proposed intervention"
+    )
+    title = head if generic else f"{d['label']}  —  {head}"
+    fig.suptitle(title, fontweight="bold", color=pal["text"], fontsize=13)
     fig.tight_layout()
     # The plan panel carries the verdict → the overlay fires there on an abstaining design.
     panels = [
