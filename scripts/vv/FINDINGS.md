@@ -1049,6 +1049,63 @@ averaged away** — the honest new gate this capability adds.
 > `notebooks/Multi_Reporter.ipynb`. A real-panel demonstration (e.g. OCT4/NANOG self-renewal
 > reporters of the pluripotency latent) is a deferred follow-up — the synthetic
 > degeneracy-break is the load-bearing validation (we do NOT force a real-data claim).
+
+## P2 — a per-condition batch/depth scale faked a confident `ceiling`; the floor-consistency gate (CLOSED + a near-zero-floor BOUND, `NUDGE-LIM-014`)
+
+**The hole (red-team round 3, HOLE 2; `scripts/redteam/multi_reporter_batch_confound.py`).**
+Multiply EVERY perturbed reporter by one factor `c` — a batch / sequencing-depth /
+instrument-gain difference between the control-condition and perturbed-condition measurement,
+consistent across the panel — on a `mechanism="none"` panel (truth = **no-effect**). The
+consistency guard (gate 1) is computed on the **control** curves and is structurally blind to
+a confound on the perturbed condition; and multi_reporter applied **no per-condition depth
+normalization**. `c·(floor + gain·f)` aliases 1:1 onto a shared latent-ceiling change `A = c`.
+Reproduced (independently, seeds 0–1 × factors {0.5, 0.6, 0.75}): **6/6 confident `ceiling`**,
+`A_perturbed/A_wt` = `c` to 3 digits, bootstrap CI excludes 0 (e.g. `c=0.5` → CI [−1.03, −1.00]),
+knob_margin 130–1002 (≫ 1.5), effect_margin 174–1712 (≫ 1.4). Positive controls (`c=1.0`)
+correctly returned `no-effect`.
+
+**Root cause, measured.** The discriminator is the **OFF baseline / floor** (dose→0, latent
+OFF). A *genuine* ceiling scales only the ON term `gain·A·f` and leaves each reporter's floor
+**unchanged** (perturbed floor ≈ pinned control floor); a *batch* scales the whole perturbed
+signal so **every** reporter's floor is rescaled by `c`. Statistic:
+`off_on_coupling = log(median perturbed/control OFF baseline) / log(A)` — ≈ 0 when the floor is
+fixed (ceiling), ≈ 1 when it moves fully with the ON scale (batch). Measured **median
+off_on_coupling** (3 seeds × 2 floor regimes):
+
+| regime | clean (no-effect) | batch c∈{0.5,0.75} | genuine ceiling (÷3) |
+|---|---|---|---|
+| tiny floors (0.0, 0.02) | — | **+0.91 … +1.01** | **+0.06 … +0.11** |
+| realistic floors (0.2, 0.6) | — | **+0.67 … +0.78** | **−0.04 … +0.01** |
+
+Clean separation at BOTH floor regimes (gap straddles the physical midpoint 0.5 with margin
+≥ 0.4). **The near-zero-floor BOUND.** At `floor_range=(0.0, 0.0)` (floors *exactly* zero) the
+perturbed OFF doses are pure ON-leakage `gain·A·f`, which a batch and a genuine ceiling scale
+*identically* — both give `off_on_coupling ≈ 1.0`, **genuinely inseparable**. Detected by
+`floor_measurability` (panel-median fraction of the OFF baseline that is real floor vs
+ON-leakage): ≈ 0.96 at realistic floors, 0.52–0.70 at the red-team's tiny floors, and ≤ 0.18
+(often negative) at floor = 0.
+
+**The fix (additive, in `multi_reporter.py`; frozen core untouched).** A ceiling-scoped
+floor-consistency gate (analogue of the differential per-context depth pin the multi-reporter
+path lacked). Before a `ceiling` call: (a) if `floor_measurability < 0.6` → abstain
+`unresolved` (no measurable depth anchor — the documented BOUND); (b) else if
+`off_on_coupling > 0.5` → abstain `unresolved` (the batch fingerprint). Thresholds are the
+physical midpoint (0.5, halfway between "floor fixed" = 0 and "floor fully rescaled" = 1) and
+the measurability floor separating the resolvable regime from the floorless one — both read off
+the separation sweep, not tuned.
+
+**Re-validation (0 confident-wrong).** Batch confound now **abstains 9/9** (3 seeds × 3
+factors, tiny floors) and **4/4** at realistic floors (`unresolved`, reason cites
+NUDGE-LIM-014). The required positive control — a genuine `ceiling` (factor 3) at realistic
+floors — **still resolves 3/3** (`off_on_coupling` ≈ 0.00–0.01). Every other guard holds:
+`threshold`/`gain` resolve, clean `none` → `no-effect`, `hidden_latent_reporter` → `off-model`,
+single reporter → `unresolved`, and floorless genuine ceiling → `unresolved` (the honest BOUND,
+locked by a strict-xfail). Verdict: **the confident-wrong hole is CLOSED** (measurable floors),
+with an honest **residual BOUND** (over-abstention, never confident-wrong) on (near-)zero-floor
+panels that need an independent depth anchor (spike-in / housekeeping / no-response reporter).
+Locks: `tests/inference/test_multi_reporter.py` (batch-scale decoy + genuine-ceiling positive
+control + floorless-bound strict-xfail).
+
 # Abstention catalogue + the toggle-gain deep dive: gain is a FUNDAMENTAL covariance-channel limit
 
 A read-only analysis (`design/ABSTENTION_ANALYSIS.md`) maps every surface on which NUDGE declines a
@@ -1330,7 +1387,20 @@ deflating measurement scale are fundamentally degenerate (both shrink the OFF cl
 abstains on both — killing the deflating confound at the cost of no longer resolving a strong genuine
 ceiling reduction; a per-context multiplicative scale without an independent depth anchor cannot be
 separated from a ceiling change. NUDGE still requires each context's control to come from the same
-library as its perturbed cells. Decoy: `test_decoy_multiplicative_perturbed_scale_abstains` (8 cases,
+library as its perturbed cells.
+
+**Precision (P4-fix red-team re-scan, `design/hardening/runs/000000013`, HOLES_FOUND: 0).** "CLOSED
+for the inflating scale" means against a *uniform* or *smoothly content-dependent* inflating scale
+(the physically-motivated forms — both caught: the smooth content-capture bias trips gate 4c because
+its gain bleeds into the upper OFF cluster). A *pathological* scale confined **strictly** to
+above-median (ON-mode) cells leaves the OFF cluster untouched and evades the `off_scale` fingerprint —
+but it then raises the ON mode with an anchored OFF spread, i.e. it is observationally **identical to
+a genuine ceiling change** (not a distinguishable confident-wrong, and no plausible physical
+generator). Repros: `scripts/redteam/differential_subset_scale_confound.py` (the degenerate evader,
+HELD as not-a-hole), `..._content_capture_confound.py` + `..._doublet_rate_confound.py` (realistic
+siblings, caught).
+
+Decoy: `test_decoy_multiplicative_perturbed_scale_abstains` (8 cases,
 inflating + deflating) + the factor-1 positive control + the genuine-ceiling positive control
 `test_genuine_ceiling_inflation_still_resolves_past_gate_4c` + the strict-xfail bound lock
 `test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound`.
@@ -1376,3 +1446,61 @@ an ABSTENTION on *C. difficile*. Surfaced prominently, not buried behind the pos
 **Wiring.** `nudge lotka` CLI verb + `service.lotka_demo` + a Mechanism Card (`NUDGE-METHOD-012`)
 + `NUDGE-LIM-020` + two gLV decoys (`generate_alpha_beta_confound_decoy`,
 `generate_no_perturbation_null`) + `notebooks/Temporal_Ecology.ipynb`. Additive / opt-in.
+
+## P3 — design() safety gate absolute near-fold check (hardening loop, `NUDGE-LIM-013`)
+
+**The hole (red-team round 3, HOLE 3; `design/FAILSAFE_REDTEAM_3.md`).** `design()`'s
+bifurcation safety gate (`nudge.design.invert._safety_report`) flagged
+`high_risk_of_instability` **only** on a *relative* proximity rise `delta =
+proximity_after − proximity_before > margin` (default 0.15). It **never** compared the
+**absolute** `proximity_after` against the shipped near-fold cut
+`bifurcation.NEAR_FOLD = 0.55`. So an intervention that pushed a robust switch *across*
+0.55 into the near-fold regime by a **sub-margin** increment was cleared as "safety: OK,
+stays away from the fold" — the highest-harm output class (a confident-wrong SAFETY label
+on a **proposal**), directly contradicting `classify_robustness` on the identical circuit.
+
+**Measured before (deterministic — `scripts/redteam/design_safety_gate_absolute_proximity.py`).**
+base `ras_switch_1node(n=2, vmax=3, K=1.5)` proximity **0.500** (`robust`); the reachable
+inversion scales K ×0.667 (→ K≈1.0) to hit the target ON level, landing at proximity
+**0.589** (a rise of **0.089 < margin 0.15**):
+
+```
+safety.proximity_before = 0.500   safety.proximity_after = 0.589   safety.delta = 0.089
+safety.high_risk_of_instability = False   safety.crosses_fold = False       <== HOLE
+design REASON: "... — safety: OK, stays away from the fold (proximity 0.50->0.59)."
+# classify_robustness on the SAME intervened circuit: 0.589 -> 'near-fold'
+```
+
+**The fix (additive, `src/nudge/design/invert.py`; frozen core untouched).** `_safety_report`
+now computes `near_fold = proximity_after >= NEAR_FOLD` (a new `SafetyReport.near_fold`
+field) and fires `high_risk_of_instability = (delta > margin) OR near_fold` — an **absolute**
+check reusing the **existing** `NEAR_FOLD` constant, so the safety gate and
+`classify_robustness` can never disagree on the same circuit (no arbitrary new threshold).
+The near-fold case is routed through wording that AGREES with `classify_robustness`
+("the intervened switch is in the near-fold regime ... NUDGE's own classify_robustness calls
+this circuit 'near-fold'"). Aggravating factor also fixed: the one-sided-LOWER-bound caveat
+(`NUDGE-LIM-012`) is now carried on the **SAFE** ("OK") reason branch too whenever
+`proximity_after` is one-sided — the reassuring number is no longer presented as a point
+estimate.
+
+**Measured after (0 confident-wrong; positive control still resolves "OK").**
+
+```
+# the hole case now flags (repro exits "no hole"):
+safety.high_risk_of_instability = True   safety.near_fold = True
+design REASON: "... — HIGH RISK OF INSTABILITY: the intervened switch is in the near-fold
+  regime (proximity 0.50->0.59 >= NEAR_FOLD 0.55) ... classify_robustness calls this
+  circuit 'near-fold' (NUDGE-LIM-013)."
+
+# POSITIVE CONTROL — no over-abstention. base K=1.5, target the ON level of the K=1.2
+# variant (proximity ~0.498 < 0.55): still cleared "safety: OK, stays away from the fold".
+```
+
+**Regression lock (`tests/design/test_invert.py`).**
+`test_safety_gate_flags_sub_margin_push_across_near_fold` (the deterministic hole → now
+high-risk near-fold, and asserts agreement with `classify_robustness`),
+`test_positive_control_robust_intervention_below_near_fold_stays_ok` (a genuinely-robust
+intervention below `NEAR_FOLD` stays "OK" — proves the absolute gate does not over-abstain),
+and `test_safe_branch_carries_one_sided_lower_bound_caveat` (the SAFE reason hedges a
+one-sided proximity). All 10 design tests pass; the red-team repro now exits "no hole".
+Honesty record: `NUDGE-LIM-013` sharpened (the two-alarm rule + the safe-branch caveat).

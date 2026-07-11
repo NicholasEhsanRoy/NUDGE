@@ -72,13 +72,18 @@ dose = K · ( (y − floor)/(amp − (y − floor)) )^(1/n)   (activate)
    extrapolate a false proposal (`NUDGE-LIM-013`).
 3. **Bifurcation safety gate** (circuit mode only). It scores `bifurcation_proximity`
    (Cap 5, `NUDGE-METHOD-006`) on the base vs the intervened circuit:
-   - base not bistable → no switch to destabilize (`high_risk=False`);
    - intervened circuit no longer bistable → the intervention **crossed the fold**; the
      switch loses bistability (`crosses_fold=True`, `high_risk=True`) — the sharpest
      instability signal;
-   - both bistable → `Δproximity = after − before`; `high_risk` if it exceeds a margin
-     (pushed toward the fold). The proximity is a **one-sided LOWER bound** near the fold
-     (`NUDGE-LIM-012`), so the risk is reported as "at least this close".
+   - otherwise `high_risk` fires on **two independent alarms** — a *relative* rise
+     `Δproximity = after − before` exceeding a margin (pushed toward the fold), **OR** an
+     *absolute* landing `proximity_after ≥ NEAR_FOLD` (recorded as `near_fold`), reusing
+     the **same** `NEAR_FOLD` cut `classify_robustness` uses, so the safety gate and the
+     robustness verdict never disagree on the identical circuit. (Without the absolute
+     check a sub-margin push *across* `NEAR_FOLD` was falsely cleared "OK" — red-team
+     round 3, `NUDGE-LIM-013`.) The proximity is a **one-sided LOWER bound** near the fold
+     (`NUDGE-LIM-012`), so the risk is "at least this close" — a caveat now carried on the
+     "OK" (safe) reason branch too whenever `proximity_after` is one-sided.
 
 ## Assumptions & simplifications
 
@@ -106,7 +111,8 @@ dose = K · ( (y − floor)/(amp − (y − floor)) )^(1/n)   (activate)
 | Designing off an untrustworthy fit | the integrity gate (`is_reliable` false → abstain); `test_integrity_gate_refuses_unreliable_attribution` | `NUDGE-LIM-013` |
 | Extrapolating a proposal to an unreachable target | the reachability abstention (circuit `tol`; curve out-of-`(floor, floor+amp)`); `test_reachability_abstains_on_impossible_target` / `test_curve_inversion_abstains_out_of_range` | `NUDGE-LIM-013` |
 | Silently proposing an intervention that destabilizes a switch | the Cap-5 safety gate (`crosses_fold` / `high_risk_of_instability`); `test_safety_gate_flags_a_fold_crossing_flip` | `NUDGE-LIM-012` |
-| A false-precise safety number near the fold | inherited one-sided lower bound (`SafetyReport.one_sided`) | `NUDGE-LIM-012` |
+| Clearing a sub-margin push **across** `NEAR_FOLD` as "OK" (relative-delta blind spot) | the **absolute** near-fold check (`proximity_after ≥ NEAR_FOLD` → `near_fold` / `high_risk`, reusing `classify_robustness`'s cut); `test_safety_gate_flags_sub_margin_push_across_near_fold` (+ positive control `test_positive_control_robust_intervention_below_near_fold_stays_ok`) | `NUDGE-LIM-013` |
+| A false-precise safety number near the fold (incl. the "OK" branch) | inherited one-sided lower bound (`SafetyReport.one_sided`), now carried on the safe branch; `test_safe_branch_carries_one_sided_lower_bound_caveat` | `NUDGE-LIM-012` |
 
 There is **no dedicated design decoy battery yet** (`vulnerable_to_decoys: []`) — the
 failure modes above are guarded by the two abstention gates, the safety gate, and the
@@ -161,6 +167,13 @@ reference must resolve to a real attribute.)*
 - `tests/design/test_invert.py::test_safety_gate_flags_a_fold_crossing_flip` /
   `::test_safe_intervention_stays_away_from_the_fold` — the safety gate flags a
   fold-crossing flip and clears a safe nudge.
+- `tests/design/test_invert.py::test_safety_gate_flags_sub_margin_push_across_near_fold`
+  / `::test_positive_control_robust_intervention_below_near_fold_stays_ok` /
+  `::test_safe_branch_carries_one_sided_lower_bound_caveat` — the **absolute** near-fold
+  check (red-team round 3, `NUDGE-LIM-013`): a sub-margin push across `NEAR_FOLD` is
+  flagged high-risk in agreement with `classify_robustness`, a genuinely-robust
+  intervention below the cut is still cleared "OK" (no over-abstention), and the safe
+  reason carries the one-sided caveat.
 - `tests/design/test_invert.py::test_curve_inversion_round_trips_to_a_dose` /
   `::test_curve_inversion_abstains_out_of_range` — curve-mode round-trip + reachability.
 - `tests/design/test_invert.py::test_design_inverts_real_oct4_fit` — the real OCT4 fit
