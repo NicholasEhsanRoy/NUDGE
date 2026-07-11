@@ -1691,3 +1691,60 @@ def fibrillization_demo(
             "ground_truth": truth,
         }
     raise ValueError(f"unknown mode {mode!r}; expected single | inhibitor | series")
+
+
+def fibrillization_file(
+    path: str,
+    *,
+    time_col: str | None = None,
+    value_col: str | None = None,
+    m_tot: float = 1.0,
+    steps: int = 600,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Attribute a SINGLE aggregation curve from a CSV/TSV (``time`` + ``mass_fraction``).
+
+    The file-input twin of :func:`fibrillization_demo` (``mode="single"``): reads a
+    polymerization / aggregation curve (mass fraction ∈ [0, 1] vs time), fits the microscopic
+    filament-assembly moment model, and returns the identifiable composites ``κ`` / ``λ`` +
+    the MEASURED non-identifiability of the three microscopic rate constants (the gauge null,
+    ``NUDGE-LIM-021``) — the honest answer an unaided agent hand-derives in ~12 min, in one call.
+    ``time_col`` / ``value_col`` default to the first two columns; ``m_tot`` is the (normalized)
+    initial monomer concentration (1.0 for a mass-fraction curve).
+    """
+    import numpy as np
+    import pandas as pd
+
+    from nudge.mechanisms.fibrillization import (
+        AggregationCurve,
+        _grid,
+        attribute_aggregation,
+    )
+
+    sep = "\t" if path.endswith((".tsv", ".txt")) else ","
+    df = pd.read_csv(path, sep=sep)
+    cols = list(df.columns)
+    tcol = time_col or cols[0]
+    vcol = value_col or cols[1]
+    t = df[tcol].to_numpy(dtype=float)
+    y = df[vcol].to_numpy(dtype=float)
+    order = np.argsort(t)
+    t, y = t[order], y[order]
+    t_max = float(t[-1])
+    dt = t_max / 2000.0
+    n_steps, obs_idx = _grid(t_max, dt, t)
+    curve = AggregationCurve(
+        signal=y[None, :], t_obs=t, m_tot=m_tot, dt=dt, n_steps=n_steps,
+        obs_idx=obs_idx, p0=0.0, ground_truth={},
+    )
+    res = attribute_aggregation(curve, steps=steps, seed=seed)
+    ident = res.identifiability
+    return {
+        "call": res.call, "reason": res.reason, "guidance": res.guidance,
+        "kappa": _jsonsafe(res.kappa), "lambda": _jsonsafe(res.lam),
+        "kappa_ci": [_jsonsafe(x) for x in res.fit.kappa_ci],
+        "lambda_ci": [_jsonsafe(x) for x in res.fit.lam_ci],
+        "individual_k_identifiable": bool(res.individual_k_identifiable),
+        "cond_number": _jsonsafe(ident.cond_number),
+        "null_direction": [float(x) for x in ident.null_direction],
+    }

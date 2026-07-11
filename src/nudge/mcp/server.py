@@ -552,6 +552,30 @@ def build_server() -> Any:
         return lotka_file(path, target=None if target < 0 else target, steps=steps)
 
     @mcp.tool()
+    def fibrillization(path: str, m_tot: float = 1.0) -> dict[str, Any]:
+        """Fit a protein-aggregation / polymerization curve + report the rate + its identifiability.
+
+        For a single sigmoidal aggregation (amyloid-type filament assembly / nucleated
+        polymerization) curve, `path` is a CSV/TSV of mass-fraction (∈[0,1]) vs time (first two
+        columns). NUDGE fits the microscopic filament-assembly moment model — PRIMARY NUCLEATION
+        (k_n), ELONGATION (k_+), SECONDARY surface-catalysed NUCLEATION (k_2) — and returns the two
+        composite rate parameters the curve actually determines (λ=√(2·k_+·k_n·…), κ=√(2·k_+·k_2·…))
+        with CIs, PLUS the honest identifiability of the THREE individual constants.
+
+        **The point (Meisl 2016 / Michaels 2020):** a single curve is PROVABLY non-identifiable in
+        the individual rate constants — there is an exact gauge (k_n,k_+,k_2)→(k_n/α, α·k_+, k_2/α)
+        that leaves the mass-fraction curve unchanged — so a least-squares fit that reports three
+        confident k's is over-fitting. NUDGE measures the Fisher/Laplace curvature and, when the
+        individual constants are degenerate, returns their identifiable composites + the null
+        direction + "need a concentration series AND a seeded/elongation anchor" (`NUDGE-LIM-021`),
+        rather than a fabricated point estimate. `m_tot` is the initial monomer concentration
+        (1.0 for a normalized mass-fraction curve).
+        """
+        from nudge.service import fibrillization_file
+
+        return fibrillization_file(path, m_tot=m_tot)
+
+    @mcp.tool()
     def constitutive(
         path: str = "",
         demo: bool = False,

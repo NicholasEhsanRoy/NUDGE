@@ -34,6 +34,7 @@ def test_server_registers_the_expected_tools() -> None:
         "differential",
         "differential_robust",
         "lotka",
+        "fibrillization",
         "constitutive",
         "diagnose_abstention",
         "explain_abstention",
