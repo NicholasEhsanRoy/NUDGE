@@ -150,7 +150,52 @@ def _build_lotka(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[str, A
 
 
 # --------------------------------------------------------------------------- #
-# Surface 4 — fibrillization (pending a nudge-jax-physics build).
+# Surface 4 — DIFFERENTIAL (two-context) with a per-condition technical CONFOUND.
+# The money-shot for NUDGE's UNIQUE value: truth = no-difference, but a per-context
+# affine nuisance on ONE context's perturbed cells aliases onto a spurious mechanism
+# difference. A naive comparison is baited into a confident-wrong; the robust
+# (earn-guard) differential abstains. (See design/automated_scientist/LEDGER.md.)
+# --------------------------------------------------------------------------- #
+@register("differential")
+def _build_differential(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[str, Any], str]:
+    from nudge.circuits import ras_switch_1node
+    from nudge.inference.differential import simulate_context_pair
+
+    circuit = ras_switch_1node()
+    ctx_a, ctx_b = simulate_context_pair(
+        circuit, mechanism="none", n_cells=args.diff_n_cells,
+        scale_a=args.diff_scale, scale_b=args.diff_scale, obs_sd=args.diff_obs_sd,
+        seed=args.seed,
+    )
+    data_a = np.asarray(ctx_a.data, dtype=float)
+    control_a = np.asarray(ctx_a.control, dtype=float)
+    # THE CONFOUND: a per-condition multiplicative scale on context B's PERTURBED cells only
+    # (B's control left clean, so a control-keyed depth guard never engages). Truth is that the
+    # SAME perturbation ran in both contexts (mechanism="none") — there is NO mechanistic
+    # difference; the scale merely aliases onto a per-context ceiling/gain/threshold difference.
+    data_b = np.asarray(ctx_b.data, dtype=float) * args.diff_factor
+    control_b = np.asarray(ctx_b.control, dtype=float)
+    np.savez(agent_dir / "blind_diff.npz", data_a=data_a, control_a=control_a,
+             data_b=data_b, control_b=control_b)
+
+    key = {
+        "surface": "differential", "ground_truth": "no-difference",
+        "mechanism_applied": "none (identical perturbation in BOTH contexts)",
+        "confound": f"per-condition multiplicative scale ×{args.diff_factor} on context B's "
+        "PERTURBED cells only (B's control clean)", "seed": args.seed,
+        "expected": f"no-difference / unresolved. The apparent between-context difference is a "
+        f"×{args.diff_factor} TECHNICAL scale on B's perturbed cells, which aliases onto a "
+        "ceiling/gain/threshold difference. A confident threshold-diff / gain-diff / ceiling-diff "
+        "is the confident-WRONG hard fail. The robust (earn-guard) `differential_robust` abstains "
+        "(no knob earns its parameter over a free affine); the banded default `differential` is "
+        "seed/magnitude-dependent and may itself be fooled — that contrast is part of the finding.",
+    }
+    return key, (f"differential: truth=no-difference + ×{args.diff_factor} technical scale on "
+                 f"B-perturbed (control clean) → baits a spurious knob-diff")
+
+
+# --------------------------------------------------------------------------- #
+# Surface 5 — fibrillization (pending a nudge-jax-physics build).
 # --------------------------------------------------------------------------- #
 @register("fibrillization")
 def _build_fibrillization(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[str, Any], str]:
@@ -185,6 +230,12 @@ def main() -> int:
     ap.add_argument("--n-doses", type=int, default=12)
     ap.add_argument("--n-reps", type=int, default=4)
     ap.add_argument("--noise", type=float, default=0.03)
+    # differential (two-context confound)
+    ap.add_argument("--diff-factor", type=float, default=2.0,
+                    help="per-condition multiplicative confound on context B's perturbed cells")
+    ap.add_argument("--diff-scale", type=float, default=20.0)
+    ap.add_argument("--diff-obs-sd", type=float, default=0.5)
+    ap.add_argument("--diff-n-cells", type=int, default=3000)
     # lotka
     ap.add_argument("--n-species", type=int, default=3)
     ap.add_argument("--glv-mechanism", default="susceptibility",

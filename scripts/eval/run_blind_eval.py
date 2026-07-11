@@ -56,6 +56,39 @@ _WITH_NUDGE_TOOLS = (
 )
 _WITHOUT_NUDGE_TOOLS = " using your own analysis (you have generic Python/file tools, but no NUDGE)"
 
+# The differential surface asks a COMPARATIVE question (two contexts), so it gets its own framing.
+_TASK_DIFFERENTIAL = """\
+You are an automated scientist working a FICTIONAL, synthetic test case (it is not real data and
+the answer is not in the literature — so you cannot look it up; you must reason from the data and
+the tools, exactly as on a genuinely novel problem). The SAME perturbation was applied in TWO
+experimental contexts, A and B (think two cell lines / donors), each profiled together with its
+OWN untreated control. The data is in this directory ({data_files}) — a `.npz` with activity-space
+arrays `data_a` / `control_a` (context A's perturbed cells + its control) and `data_b` /
+`control_b` (context B).
+
+Your task: determine whether the perturbation acts via a DIFFERENT MECHANISM in context B than in
+context A — a difference in the switch's threshold, gain, or ceiling — OR whether any apparent
+difference is NOT a real mechanistic difference (e.g. a per-condition technical/batch effect).
+Crucially, ABSTAIN honestly if the data cannot decide: a confident WRONG mechanism-difference call
+is the worst outcome.
+
+Rules:
+- Do NOT search the web (it is disabled). Reason only from the data{tools_line}.
+- Keep an append-only REPORT.md in this directory: your hypothesis, every tool call and how you
+  read its output, the abstentions you hit and why, and a final conclusion WITH an explicit
+  confidence level or an explicit abstention.
+- Be honest and calibrated. State what the data supports and what it does not.
+"""
+
+_WITH_NUDGE_TOOLS_DIFF = (
+    ", using the NUDGE tools via MCP. For a two-context comparison NUDGE offers `differential` "
+    "(BIC-selects which switch knob — threshold / gain / ceiling — differs between the contexts, "
+    "or abstains) and `differential_robust` (the same, but hardened against a per-condition "
+    "technical nuisance on one context's perturbed cells — it returns a mechanism difference only "
+    "if the knob EARNS its parameter over a free affine confound, else it abstains). Both read the "
+    "`.npz` with arrays `data_a` / `control_a` / `data_b` / `control_b`"
+)
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -92,10 +125,13 @@ def main() -> int:
     elif (sandbox / ".mcp.json").exists():
         (sandbox / ".mcp.json").unlink()
 
-    task = _TASK.format(
-        data_files=", ".join(data_files),
-        tools_line=_WITH_NUDGE_TOOLS if with_nudge else _WITHOUT_NUDGE_TOOLS,
-    )
+    is_diff = args.surface == "differential"
+    template = _TASK_DIFFERENTIAL if is_diff else _TASK
+    if with_nudge:
+        tools_line = _WITH_NUDGE_TOOLS_DIFF if is_diff else _WITH_NUDGE_TOOLS
+    else:
+        tools_line = _WITHOUT_NUDGE_TOOLS
+    task = template.format(data_files=", ".join(data_files), tools_line=tools_line)
     (sandbox / "TASK.md").write_text(task)
 
     allowed = "Read,Write,Edit,Bash" + (",mcp__nudge__*" if with_nudge else "")
