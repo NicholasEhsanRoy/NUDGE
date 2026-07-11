@@ -59,25 +59,51 @@ def _require_matplotlib() -> None:
         raise ImportError(_INSTALL_HINT) from exc
 
 
+# The renderer registry — ``kind`` → the ``module`` exposing ``build(result, *, theme)``.
+# Each renderer builds its overlay-FREE figure with per-panel verdicts; the pipeline
+# (:func:`_apply_honesty`) stamps the abstention overlay off each panel's own ``call``, so
+# a new renderer inherits the honesty guarantee for free. Imports are lazy (per-kind) so
+# ``import nudge.viz`` stays cheap and matplotlib-optional.
+_RENDERERS: dict[str, str] = {
+    "dose_response": "nudge.viz.dose_response",
+    "cross_modality": "nudge.viz.cross_modality",  # reuses the Hill panel (fold-change axis)
+    "epistasis": "nudge.viz.epistasis",
+    "differential": "nudge.viz.differential",
+    "multi_reporter": "nudge.viz.multi_reporter",
+    "temporal": "nudge.viz.temporal",
+    "aggregation": "nudge.viz.aggregation",
+    "constitutive": "nudge.viz.constitutive",
+    "diagnose": "nudge.viz.diagnose",
+    "design": "nudge.viz.design",
+    "oed": "nudge.viz.oed",
+    "robustness": "nudge.viz.robustness",
+}
+
+
 def _dispatch_build(result: Any, ctx: dict[str, Any], theme: str) -> RenderedFigure:
-    """Build the (overlay-free) figure for ``result``'s kind. Dose-response only, so far."""
+    """Build the (overlay-free) figure for ``result``'s kind via the renderer registry."""
     kind = ctx.get("kind")
     if kind is None and isinstance(result, dict):
         kind = result.get("kind")
     if kind in (None, "dose_response"):
         entries = _dose_entries(result, ctx)
         return _build_from_kind("dose_response", entries, theme)
+    if kind in _RENDERERS:
+        return _build_from_kind(kind, result, theme)
     raise ValueError(
-        f"nudge.viz has no renderer for kind={kind!r} yet (first slice = dose_response)"
+        f"nudge.viz has no renderer for kind={kind!r} "
+        f"(known: {sorted(_RENDERERS)})"
     )
 
 
 def _build_from_kind(kind: str, entries: Any, theme: str) -> RenderedFigure:
-    if kind == "dose_response":
-        from nudge.viz.dose_response import build
+    import importlib
 
-        return build(entries, theme=theme)
-    raise ValueError(f"unknown figure kind {kind!r}")
+    module_name = _RENDERERS.get(kind)
+    if module_name is None:
+        raise ValueError(f"unknown figure kind {kind!r}")
+    build = importlib.import_module(module_name).build
+    return build(entries, theme=theme)
 
 
 def _dose_entries(result: Any, ctx: dict[str, Any]) -> Any:
@@ -147,8 +173,19 @@ def render(
     abstained. ``animate`` is accepted for API stability but not implemented in this slice.
     """
     if animate:
-        raise NotImplementedError(
-            "animation is a later viz slice (design §5.2); animate=True is not yet wired"
+        _require_matplotlib()
+        if out is None:
+            raise ValueError("animate=True requires an out= path (a .gif)")
+        from nudge.viz.animate import render_animation
+
+        kind = ctx.get("kind")
+        if kind is None and isinstance(result, dict):
+            kind = result.get("kind")
+        return render_animation(
+            result, out, kind=kind, theme=theme,
+            frames=int(ctx.get("anim_frames", 28)),
+            fps=int(ctx.get("anim_fps", 8)),
+            emit_code=emit_code, self_contained=self_contained, cli_call=cli_call,
         )
     rf = figure(result, theme=theme, **ctx)
 

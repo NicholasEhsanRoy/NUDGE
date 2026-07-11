@@ -24,6 +24,10 @@ ABSTAIN_CALLS = frozenset(
         "not-bistable",
         "abstention",
         "abstain",
+        # cross-modality variant abstentions (NUDGE-METHOD-002): the panel cannot localise
+        # a knob for this variant, so it must read as an abstention, not a positive call.
+        "non-responsive",
+        "inconclusive",
     }
 )
 
@@ -106,6 +110,8 @@ def abstain_overlay(
     """
     import matplotlib.patches as mpatches
 
+    from nudge.viz.layout import reserve_top_band
+
     pal = palette or {}
     grey = pal.get("abstain", "#898781")
     surface = pal.get("surface", "#fcfcfb")
@@ -124,11 +130,14 @@ def abstain_overlay(
     )
     ax.add_patch(patch)
 
+    # Clear a top band of data so the banner never sits ON the data points, then anchor
+    # the banner in the centre of that reserved band (collision-aware; see viz.layout).
+    band_y = reserve_top_band(ax, band=0.24)
     head = "CAN'T TELL — ONE-SIDED BOUND" if one_sided else "I CAN'T TELL"
     banner = f"{head}\n{verdict.upper()}"
     ax.text(
         0.5,
-        0.88,
+        band_y,
         banner,
         transform=ax.transAxes,
         ha="center",

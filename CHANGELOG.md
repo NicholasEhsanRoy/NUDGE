@@ -9,6 +9,26 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **`nudge.viz` figure battery — a renderer per mechanism result type, honest by
+  construction (`feat/viz-renderers`).** The opt-in figure layer grows from the single
+  flagship dose-response slice to the full surface: `epistasis`, `differential`,
+  `multi_reporter`, `temporal`/gLV, `aggregation`/fibrillization, `constitutive`, `diagnose`,
+  `design`, `oed`, `cross_modality` (which REUSES the dose-response Hill panel), and
+  `robustness` (the 0–1 bifurcation-proximity dial). Each renderer reads only the frozen
+  result dataclass / its `*_to_dict()` / demo dict (never re-fits, never imports the fit
+  engine), ships a standalone `fig.py` + data sidecar (provenance replay), and — the
+  load-bearing guarantee — inherits the **automatic abstention overlay**: the render pipeline
+  stamps the hatch + "I CAN'T TELL" banner off each panel's OWN verdict, so a positive call
+  can never be drawn where the fit abstained (a per-kind test locks this). Added a shared
+  **collision-aware placement layer** (`viz/layout.py`) so the abstain banner, the K-line
+  label, and the legend land in data-free regions in both light and dark themes (fixing the
+  overlap complaint). Added an **animation engine** (`viz/animate.py`, `render(..., animate=
+  True)` → Pillow GIF, no ffmpeg): the flagship **constitutive-flip** shows the circuit-`n`
+  profile going FLAT → `n=1` rejected as the constitutive control switches on
+  (`NUDGE-LIM-006`), staying flat + hatched when the fit abstains. Cross-modality variant
+  abstentions (`non-responsive`, `inconclusive`) were added to the shared `ABSTAIN_CALLS` so
+  their overlay fires. Additive/opt-in — `fit.py`/`core/` untouched. `tests/viz/`.
+
 - **Matrix-free identifiability / sloppiness diagnostic — scales past the dense-`jacfwd` OOM
   (`NUDGE-LIM-023`).** The sloppiness diagnostic (FIM = `JᵀJ/σ²` eigenspectrum →
   `well-constrained` / `sloppy-but-predictive` / `unidentifiable`) gains a **matrix-free** path
