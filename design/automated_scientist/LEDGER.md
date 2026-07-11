@@ -38,6 +38,13 @@ overshot to 88.6% + emitted a non-physical predicted-state the agent caught). Se
 | 000000004 | `blind_design` | design/inversion | collapse toggle: min basal-A reduction to cross the fold | correct-call **78.6%** (own bifurcation analysis; flagged NUDGE's 88.6% overshoot) | correct-call **78.6%** (own saddle-node analysis) | no (control computed it with code) |
 | 000000005 | `gauntlet_A_glv` | lotka (identifiability) | "give me the interaction params β" on a degenerate (near-eq) gLV | correct-abstention (NUDGE degeneracy_direction; 14 turns/$0.66) | correct-abstention (3 methods+bootstrap, derived null-space itself; 17 turns/$1.47) | no — but NUDGE **~2× cheaper** for the same answer |
 | 000000006 | `gauntlet_B_noise` | attribute (heavy over-dispersion) | ceiling×2 under Fano≈12; "which mechanism?" | correct-abstention (16 turns/$0.87) | correct-abstention — modelled the noise carefully, "abstain not over-interpret" (12 turns/$0.63) | no — effect swamped; efficiency signal **reversed** (control cheaper on a clear null) |
+| 000000007 | `gauntlet_C_design` | design-propose (safety net) | "propose an intervention" off an unreliable/truncated dose fit | correct REFUSAL — cited NUDGE's design integrity gate (8/$0.39) | correct REFUSAL — own identifiability analysis (5/$0.32) | no — both decline; integrity gate works but control also restrains itself |
+
+**FINAL gauntlet tally: 14 arms across 7 case types, 0 confident-wrong, NO WITH>WITHOUT capability
+contrast on gene-circuit / gLV / dose-response data.** The deep-research (`design/DEEP_RESEARCH_…md`)
+identifies WHERE a genuine contrast lives: **protein-aggregation kinetics**, where single-curve
+non-identifiability is PROVEN (Meisl 2016) — an agent given one curve over-fits a mechanism
+(confident-wrong), a disciplined global-fit-or-abstain engine does not. That is the next demo.
 
 **Tally so far: 10 arms across 5 case types, all PASS, 0 confident-wrong. NEW quantified signal:
 NUDGE ~halves the turns/cost to reach the same correct answer (efficiency, not capability).**
