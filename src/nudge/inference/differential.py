@@ -57,26 +57,41 @@ aliases with a genuine knob *reduction* and is NOT separable, so it remains ungu
 documented (``NUDGE-LIM-016``); and NUDGE still requires each context's control to come from
 the same library as its perturbed cells.
 
-**Third confound channel: a MULTIPLICATIVE perturbed-condition scale (``NUDGE-LIM-016`` P4).**
-A constant *multiplicative* factor ``c`` on ONE context's **perturbed** cells only (its
-control clean) is the sharpest confound of all: it aliases a genuine **ceiling** (``v_max``)
-difference 1:1 (both multiply the ON mode), and it slips past BOTH earlier guards — the
-control-keyed ``depth_ratio`` stays ≈ 1 (gate 2 blind), and a factor scales the near-zero OFF
-*baseline* to near-zero so the additive ``off_shift`` stays ≈ 1 (gate 4b blind). It leaves ONE
-fingerprint: it multiplies the OFF-cluster **spread** by ``c`` too (``off_scale`` ≈ ``c``),
-whereas a genuine ``v_max`` difference leaves the OFF mode's spread anchored at basal
-(``off_scale`` ≈ 1). So before a ``ceiling-diff`` call NUDGE **abstains** when the perturbed
-OFF-cluster scale departs from its control beyond a MEASURED band (gate 4c). **INFLATION is
-CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 left ``off_scale`` ≤ 1.18; every
-inflating confound ``c`` ≥ 1.5 drove it ≥ 1.43; ``FINDINGS`` §P4). **DEFLATION is BOUNDED, not
-closed:** a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
-OFF cluster into the same band as a deflating scale (both ``off_scale`` ≈ 0.5–0.75) — they are
-INDISTINGUISHABLE, so the lower guard abstains on both, correctly killing the deflating confound
-at the cost of no longer resolving a strong genuine ceiling *reduction* (the honest price; a
-per-context multiplicative scale without an independent depth anchor is fundamentally degenerate
-with a ceiling change). The guard is **ceiling-scoped** (only a ``v_max`` winner) since a global
-scale is degenerate with ``v_max`` specifically — a genuine gain/threshold difference reshapes
-the distribution and is untouched.
+**Third confound channel: a perturbed-only MULTIPLICATIVE scale (``NUDGE-LIM-016`` P4/P5 —
+BOUNDED, not closed).** A constant *multiplicative* factor ``c`` on ONE context's **perturbed**
+cells only (its control clean) is the sharpest confound: it slips past both earlier guards (the
+control-keyed ``depth_ratio`` ≈ 1; a factor scales the near-zero OFF *baseline* to near-zero so
+the additive ``off_shift`` ≈ 1) and the joint BIC assigns it to the **ceiling** (``v_max``) OR
+**gain** (``n``) channel. The P4 fix claimed a clean ``off_scale`` (OFF-cluster spread) gap
+separating it from a genuine ceiling; a P5 re-measurement (``FINDINGS`` §P5, both regimes, 4
+seeds) **FALSIFIED** that: a genuine ceiling/gain difference *also* moves ``off_scale`` **and**
+``off_shift`` (via mode-occupancy shifts), so the confident-wrong confound's fingerprint
+**OVERLAPS** the genuine range in *both* regimes (confounds at ``off_scale`` 1.08–1.28, genuine
+ceiling up to 1.18). Neither the OFF-cluster spread nor its location separates it. NUDGE therefore
+uses a MEASURED, physically-grounded fail-safe (gate 4c, scoped to the ``n``/``v_max`` channels a
+scale is assigned to):
+
+- A uniform scale corrupts the μ_off/μ_on mode ratio — and so fakes a *confident* ``gain-diff`` /
+  ``ceiling-diff`` no OFF statistic can separate — **precisely when the OFF mode sits near the
+  observation-noise floor** (near-zero basal): scaling μ_off ≈ 0 by ``c`` leaves it ≈ 0. So when
+  either context's OFF mode is not resolvably above zero — the scale-invariant ``off_resolvability``
+  (OFF-cluster level ÷ spread of the clean control) below ``off_resolvability_min`` — NUDGE
+  **abstains** on both channels (a genuine gain difference does not resolve in that regime anyway;
+  a genuine ceiling there is the honest sacrifice).
+- When the OFF mode *is* resolvable, the scale reads as a **magnitude-BOUNDED** ceiling difference
+  (``off_scale`` ≤ 1.30 caps its ON shift → faked ``|log2 v_max ratio|`` ≤ 0.48 measured), while a
+  confident ``gain-diff`` no longer occurs. NUDGE resolves a ``ceiling-diff`` only when its fitted
+  ``|log2 ratio|`` clears ``ceiling_resolve_mag_min`` (a large, un-fakeable ceiling difference,
+  ≳ ×1.5); a small ceiling difference is sacrificed. A resolvable ``gain-diff`` is trustworthy.
+- A GROSS scale (``off_scale`` outside ``[0.80, 1.30]``) is still caught outright (the surviving
+  part of P4, now applied to the gain channel too).
+
+**Verdict: BOUNDED, not closed.** A per-context perturbed-only multiplicative scale cannot be
+separated from a *small* ceiling/gain difference from a single steady-state snapshot without an
+independent per-context perturbed-cell depth anchor; NUDGE abstains rather than emit a confident
+``*-diff`` (0 confident-wrong across the P5 sweep, both regimes, 4 seeds). The honest price is
+over-abstention on genuine small ceiling/gain differences and on the whole ceiling/gain channel in
+a near-zero-basal regime.
 """
 
 from __future__ import annotations
@@ -188,6 +203,13 @@ class DifferentialFit:
     # genuine v_max difference leaves it ≈ 1. Drives the ceiling-channel gate 4c (P4).
     off_scale_a: float = 1.0
     off_scale_b: float = 1.0
+    # OFF-mode RESOLVABILITY (scale-invariant level/spread of each context's CLEAN control OFF
+    # cluster) — how far the OFF mode sits above zero relative to its own spread. When it is near
+    # zero (near-zero basal), a perturbed-only multiplicative scale is washed out of
+    # off_shift/off_scale and cannot be separated from a genuine gain/ceiling difference → gate 4c
+    # abstains below _OFF_RESOLVABILITY_MIN (P5).
+    off_resolvability_a: float = float("nan")
+    off_resolvability_b: float = float("nan")
     ci_log2: tuple[float, float] = (float("nan"), float("nan"))
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -491,6 +513,63 @@ def _off_mode_scale_ratio(data: np.ndarray, control: np.ndarray) -> float:
     return float("nan")
 
 
+#: OFF-baseline RESOLVABILITY floor (``NUDGE-LIM-016`` P5). A per-context perturbed-only
+#: MULTIPLICATIVE scale ``c`` corrupts the μ_off/μ_on mode ratio — and so fakes a confident
+#: ``gain-diff`` / ``ceiling-diff`` that NO OFF-cluster statistic can separate from a genuine
+#: difference — PRECISELY when the OFF mode sits near the observation-noise floor (near-zero
+#: basal): scaling μ_off ≈ 0 by ``c`` leaves it ≈ 0, so ``off_shift``/``off_scale`` are washed out
+#: (measured RT: the confound reads as a confident gain/ceiling-diff at ``off_scale`` 1.08–1.28,
+#: INSIDE the genuine range; FINDINGS §P5). NUDGE therefore requires, before ANY ``gain-diff`` /
+#: ``ceiling-diff``, that BOTH contexts' OFF mode be RESOLVABLY above zero, measured by the
+#: scale-invariant ratio ``off_resolvability`` = (OFF-cluster level) / (OFF-cluster spread) of each
+#: clean control — how far the OFF mode sits above zero relative to the low-population spread.
+#: Measured (5 seeds × 2 contexts, data-only): RT (near-zero basal) ≤ 0.136, TEST (resolvable
+#: basal) ≥ 0.374 — a clean gap. 0.25 (its midpoint) is the floor: below it the perturbed-only
+#: scale cannot be ruled out and NUDGE abstains. Scale-invariant (level and spread scale together),
+#: so it does NOT depend on the erratic calibrated ``obs_sd``.
+_OFF_RESOLVABILITY_MIN = 0.25
+
+#: Minimum fitted ``|log2(v_max_b / v_max_a)|`` a CEILING difference must clear, in the
+#: resolvable-OFF regime, before NUDGE resolves ``ceiling-diff`` (``NUDGE-LIM-016`` P5). A
+#: perturbed-only multiplicative scale that survives the ``off_scale`` band (≤ 1.30) is
+#: magnitude-BOUNDED: it caps its ON-mode shift, so its faked ceiling ``|log2 ratio|`` stays small
+#: (measured ≤ 0.48 across both regimes, 4 seeds; FINDINGS §P5). A genuine LARGE ceiling difference
+#: (×1.6 → 0.68, ×2 → 1.0, ×4 → 1.6) exceeds that reach and is un-fakeable by such a scale. 0.60
+#: sits above the measured confound ceiling (0.48) with margin and below ×1.6; a SMALL genuine
+#: ceiling difference (< ×1.5) is sacrificed — inseparable from a small perturbed-only scale (the
+#: honest over-abstention, accepted per abstain-over-confident-wrong).
+_CEILING_RESOLVE_MAG_MIN = 0.60
+
+
+def _off_baseline_resolvability(control: np.ndarray) -> float:
+    """How far a context's CONTROL OFF mode sits above zero, relative to the OFF-cluster spread.
+
+    **Resolvability probe (``NUDGE-LIM-016`` P5).** The scale-invariant ratio (OFF-cluster level) /
+    (OFF-cluster spread) of the context's OWN (clean) control: the *level* is the median row-sum
+    (total activity, clipped ≥ 0 since counts cannot be negative) of the below-median-activity
+    cells — the OFF cluster — and the *spread* is the median-absolute-deviation of those same cells
+    (raw, unclipped — the OFF cluster's own noise width). When this ratio is small the OFF mode is
+    buried near zero: a per-context multiplicative scale on the perturbed cells scales a near-zero
+    OFF mode to a still-near-zero one and is WASHED OUT of the OFF-cluster fingerprints
+    (``off_shift``/``off_scale``), so it cannot be separated from a genuine gain/ceiling difference
+    (:func:`classify_differential`, gate 4c abstains below ``_OFF_RESOLVABILITY_MIN``). The control
+    (not the perturbed data) is used: it is the clean basal reference a scale would have to lift
+    above. Scale-invariant (level and spread scale together), so independent of the depth/noise
+    calibration.
+    """
+    s = np.asarray(control, dtype=float).sum(axis=1)
+    if s.size == 0:
+        return float("nan")
+    low = s[s <= np.median(s)]
+    if low.size == 0:
+        return float("nan")
+    level = float(np.median(np.clip(low, 0.0, None)))
+    spread = float(np.median(np.abs(low - np.median(low))))
+    if not np.isfinite(spread) or spread <= 1e-9:
+        return float("inf")  # a zero-spread OFF cluster is trivially resolvable
+    return level / spread
+
+
 def fit_differential(
     context_a: Context,
     context_b: Context,
@@ -583,6 +662,8 @@ def fit_differential(
         off_shift_ratio = float("nan")
     off_scale_a = _off_mode_scale_ratio(context_a.data, context_a.control)
     off_scale_b = _off_mode_scale_ratio(context_b.data, context_b.control)
+    off_resolvability_a = _off_baseline_resolvability(context_a.control)
+    off_resolvability_b = _off_baseline_resolvability(context_b.control)
 
     ci_log2 = (float("nan"), float("nan"))
     if n_boot > 0 and best_diff == selected != "shared":
@@ -618,6 +699,8 @@ def fit_differential(
         off_shift_ratio=off_shift_ratio,
         off_scale_a=off_scale_a,
         off_scale_b=off_scale_b,
+        off_resolvability_a=off_resolvability_a,
+        off_resolvability_b=off_resolvability_b,
         ci_log2=ci_log2,
     )
 
@@ -675,6 +758,8 @@ def classify_differential(
     off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
     off_scale_inflation_max: float = _OFF_SCALE_INFLATION_MAX,
     off_scale_deflation_min: float = _OFF_SCALE_DEFLATION_MIN,
+    off_resolvability_min: float = _OFF_RESOLVABILITY_MIN,
+    ceiling_resolve_mag_min: float = _CEILING_RESOLVE_MAG_MIN,
 ) -> tuple[str, str]:
     """Turn a joint fit into a conservative verdict — the fail-safe classifier.
 
@@ -813,54 +898,93 @@ def classify_differential(
             "difference leaves the OFF mode anchored near basal (off_shift ≈ 1)"
         )
 
-    # 4c. the MULTIPLICATIVE perturbed-condition scale confound (NUDGE-LIM-016, P4). Scoped to
-    # the CEILING channel: a constant multiplicative factor c on ONE context's PERTURBED cells
-    # (its control clean) is exactly degenerate with a genuine v_max difference (both multiply
-    # the ON mode), and it slips past BOTH earlier guards — the control-keyed depth_ratio stays
-    # ≈ 1 (gate 2 blind), and a factor scales the near-zero OFF baseline to near-zero so
-    # off_shift ≈ 1 (gate 4b blind, which keys on TRANSLATION not scale). Its ONE fingerprint:
-    # it multiplies that context's OFF-cluster SPREAD by c too, while a genuine ceiling
-    # difference leaves the OFF mode's spread anchored at basal. So before a ceiling-diff call,
-    # if EITHER context's perturbed OFF-cluster scale departs from its own control beyond the
-    # MEASURED band [off_scale_deflation_min, off_scale_inflation_max], NUDGE ABSTAINS. Only the
-    # ceiling channel is gated (a global scale is degenerate with v_max specifically; a genuine
-    # gain/threshold difference reshapes the distribution and is untouched — no over-abstention
-    # there). INFLATION is CLOSED (genuine ceiling ×1.4–×4 ≤ 1.18, every inflating confound
-    # ≥ 1.43 — FINDINGS §P4). DEFLATION is BOUNDED: a genuine ceiling reduction shrinks the OFF
-    # cluster into the same band as a deflating scale (indistinguishable), so the lower guard
-    # abstains on both — killing the deflating confound at the cost of a strong genuine ceiling
-    # reduction (the honest residual, NUDGE-LIM-016 P4).
-    if fit.best_diff == "vmax":
+    # 4c. the perturbed-only MULTIPLICATIVE scale confound (NUDGE-LIM-016, P4 + P5). A constant
+    # multiplicative factor c on ONE context's PERTURBED cells (its control clean) slips past
+    # gates 2 (control-keyed depth_ratio ≈ 1) and 4b (a factor scales the near-zero OFF *baseline*
+    # to near-zero → additive off_shift ≈ 1). BIC assigns it to the CEILING (v_max) OR GAIN (n)
+    # channel. P5 re-measurement (FINDINGS §P5, both regimes, 4 seeds) FALSIFIED the P4 claim of a
+    # clean off_scale gap: a genuine ceiling/gain difference ALSO moves off_scale AND off_shift
+    # (via mode-occupancy shifts), so the confound's fingerprint OVERLAPS genuine in BOTH regimes —
+    # confident-wrong confounds land at off_scale 1.08–1.28, INSIDE the genuine range. off_scale is
+    # therefore NOT a clean separator; the fix is a MEASURED, physically-grounded fallback scoped to
+    # the two channels a scale is BIC-assigned to (n, vmax):
+    #   (i)  LARGE scale — off_scale out of the [deflation_min, inflation_max] band. A gross scale
+    #        (c ≳ 1.3) still shows up as an out-of-band OFF-cluster spread and is caught outright;
+    #        this is the surviving, honest part of P4, now applied to the gain channel too.
+    #   (ii) RESOLVABILITY — a uniform scale corrupts the μ_off/μ_on mode ratio (and so fakes a
+    #        CONFIDENT gain/ceiling-diff that no OFF statistic separates) PRECISELY when the OFF
+    #        mode sits near the observation-noise floor: scaling μ_off ≈ 0 by c leaves it ≈ 0. So
+    #        when EITHER context's OFF mode is not resolvably above zero — the scale-invariant
+    #        off_resolvability (OFF level ÷ spread of the clean control) below off_resolvability_min
+    #        — NUDGE ABSTAINS on gain-diff AND ceiling-diff (the scale cannot be ruled out; measured
+    #        RT ≤ 0.136 vs TEST ≥ 0.374, the confound reads confident gain/ceiling-diff at off_scale
+    #        inside the genuine range). A genuine gain difference does not resolve in that regime
+    #        anyway (modes too degenerate); a genuine ceiling difference there is the honest price.
+    #   (iii) MAGNITUDE (resolvable OFF only) — when the OFF mode IS resolvable the scale reads as a
+    #        magnitude-BOUNDED ceiling (off_scale ≤ inflation_max caps its ON shift → faked
+    #        |log2 v_max ratio| ≤ ~0.42, measured), while a confident gain-diff no longer occurs (a
+    #        resolvable-OFF confound assigned to n ties on the runner-up and gate 4 already
+    #        abstains it). So NUDGE resolves a ceiling-diff only when its fitted |log2 ratio| clears
+    #        ceiling_resolve_mag_min (a large, un-fakeable ceiling difference); a small ceiling
+    #        difference is sacrificed (inseparable from a small perturbed-only scale). A resolvable
+    #        gain-diff is trustworthy. BOUNDED, not closed (NUDGE-LIM-016 P5).
+    if fit.best_diff in ("n", "vmax"):
+        # (i) LARGE scale: out-of-band OFF-cluster spread on either context (both channels now).
         cand = [
             (v, ctx)
             for v, ctx in ((fit.off_scale_a, "A"), (fit.off_scale_b, "B"))
             if np.isfinite(v) and v > 0
         ]
         if cand:
-            # the context whose OFF-cluster scale deviates most from 1 (up OR down).
             off_scale, which = max(cand, key=lambda t: abs(np.log(t[0])))
             if off_scale > off_scale_inflation_max or off_scale < off_scale_deflation_min:
                 direction = "inflated" if off_scale > 1.0 else "deflated"
-                extra = (
-                    "this is the CLOSED (cleanly-separable) side: a genuine ceiling difference "
-                    "leaves the OFF-cluster spread ≈ 1 (measured ≤ 1.18 even ×4)"
-                    if direction == "inflated"
-                    else "this is the BOUNDED side: a genuine ceiling REDUCTION also shrinks the "
-                    "OFF cluster and is indistinguishable from a deflating scale, so NUDGE "
-                    "abstains on both rather than risk a spurious ceiling-diff"
-                )
                 return "unresolved", (
                     f"context {which}'s perturbed OFF-cluster scale is {direction} "
                     f"{off_scale:.2f}× vs its OWN control (outside the measured band "
                     f"[{off_scale_deflation_min:g}, {off_scale_inflation_max:g}]) — the "
-                    "fingerprint of a per-context MULTIPLICATIVE measurement scale on that "
+                    "fingerprint of a GROSS per-context MULTIPLICATIVE measurement scale on that "
                     "context's PERTURBED cells (a batch / library scale on the perturbed "
-                    f"condition only). Its control-derived depth ratio ({fit.depth_ratio:.2f}) "
-                    "stays ≈ 1 and its additive OFF-baseline shift is ≈ 1, so gates 2 and 4b are "
-                    "blind to it, but a multiplicative factor is EXACTLY degenerate with a "
-                    "ceiling (v_max) difference — both multiply the ON mode. NUDGE cannot certify "
-                    "the apparent ceiling difference is mechanistic rather than a masked "
-                    f"perturbed-condition scale, so it abstains (NUDGE-LIM-016 P4). ({extra}.)"
+                    f"condition only). Its control depth ratio ({fit.depth_ratio:.2f}) stays ≈ 1 "
+                    "and its additive OFF-baseline shift is ≈ 1, so gates 2 and 4b are blind, but "
+                    f"a multiplicative factor is degenerate with the {_CALL_OF[fit.best_diff]} it "
+                    "was BIC-assigned to. NUDGE abstains rather than risk it (NUDGE-LIM-016 P4/P5)"
+                )
+
+        # (ii) RESOLVABILITY: is the OFF mode resolvably above zero in BOTH contexts? (P5)
+        res = ((fit.off_resolvability_a, "A"), (fit.off_resolvability_b, "B"))
+        unresolvable = [
+            (r, ctx) for r, ctx in res if not np.isfinite(r) or r < off_resolvability_min
+        ]
+        if unresolvable:
+            r, which = min(unresolvable, key=lambda t: t[0] if np.isfinite(t[0]) else -1.0)
+            return "unresolved", (
+                f"context {which}'s OFF mode is not resolvably above zero (resolvability "
+                f"{r:.2f} < {off_resolvability_min:g}: OFF-cluster level ÷ spread of its clean "
+                "control). A per-context MULTIPLICATIVE scale on that context's perturbed cells "
+                "would scale a near-zero OFF mode to a still-near-zero one, so it is WASHED OUT of "
+                "the OFF-cluster fingerprints (off_shift AND off_scale) and is INDISTINGUISHABLE "
+                f"from a genuine {_CALL_OF[fit.best_diff]} (measured: the confound fakes a "
+                "confident gain/ceiling-diff there at an off_scale inside the genuine range; "
+                "FINDINGS §P5). NUDGE cannot certify the difference is mechanistic rather than a "
+                "masked perturbed-only scale, so it abstains (NUDGE-LIM-016 P5); a resolvable OFF "
+                "baseline is required to trust a ceiling / gain difference here"
+            )
+
+        # (iii) MAGNITUDE (resolvable OFF): a ceiling difference must be too LARGE to be a scale.
+        if fit.best_diff == "vmax":
+            mag = abs(fit.log2_ratio)
+            if not np.isfinite(mag) or mag < ceiling_resolve_mag_min:
+                return "unresolved", (
+                    f"the apparent ceiling difference is small (|log2 v_max ratio|={mag:.2f} < "
+                    f"{ceiling_resolve_mag_min:g}) — within the reach of a per-context "
+                    "MULTIPLICATIVE scale on one context's perturbed cells, which survives the "
+                    "off_scale band and fakes a bounded ceiling difference (measured |log2 ratio| "
+                    "≤ 0.48 for a scale with off_scale ≤ 1.30; FINDINGS §P5). NUDGE cannot "
+                    "separate a SMALL genuine ceiling difference from such a scale, so it "
+                    "abstains; only a "
+                    f"LARGE ceiling difference (|log2 ratio| ≥ {ceiling_resolve_mag_min:g}, "
+                    "un-fakeable by a bounded scale) resolves (NUDGE-LIM-016 P5)"
                 )
 
     # 5. a resolved mechanistic difference.
@@ -904,6 +1028,8 @@ def attribute_differential(
     off_shift_max: float = _OFF_SHIFT_INFLATION_MAX,
     off_scale_inflation_max: float = _OFF_SCALE_INFLATION_MAX,
     off_scale_deflation_min: float = _OFF_SCALE_DEFLATION_MIN,
+    off_resolvability_min: float = _OFF_RESOLVABILITY_MIN,
+    ceiling_resolve_mag_min: float = _CEILING_RESOLVE_MAG_MIN,
 ) -> DifferentialResult:
     """Fit + classify a two-context differential in one call — the CLI / MCP entry point.
 
@@ -933,6 +1059,8 @@ def attribute_differential(
         off_shift_max=off_shift_max,
         off_scale_inflation_max=off_scale_inflation_max,
         off_scale_deflation_min=off_scale_deflation_min,
+        off_resolvability_min=off_resolvability_min,
+        ceiling_resolve_mag_min=ceiling_resolve_mag_min,
     )
     return DifferentialResult(fit=fit, call=call, reason=reason)
 
