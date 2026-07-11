@@ -53,6 +53,17 @@ overfit gap does not exist against Opus 4.8 on 1D identifiability (memory OR mat
 param count; agent OOMs at network scale) + sloppiness-aware abstention (sloppy ≠ unidentifiable) for
 a 15+ ODE blind case.
 
+**DUAL-TRACK BUILD — both merged to main + CONFIRMED:**
+- **Track 1 / EFFICIENCY (run 000000009):** `mechanisms/fibrillization.py` (NUDGE-METHOD-013). WITH
+  vs WITHOUT on the same obfuscated curve: **WITHOUT 28 turns / $1.63 / 12.2 min; WITH 7 turns /
+  $0.41 / 1.45 min** — same honest answer (κ≈0.94, λ≈0.0125, individual k's non-identifiable via the
+  exact gauge), **8.4× faster / 4× cheaper**. NUDGE removes 11 min of re-deriving a known result.
+- **Track 2 / CAPABILITY (adjoint + sloppiness, merged):** adjoint gradient = autodiff (rel-err 0.0),
+  scaling forward 5.9→24.1 ms (4.1×) vs adjoint flat, speedup 5.5→16.3×; sloppiness 3/3 (catches the
+  sloppy-but-predictive case the naive eigenvalue-gap test mislabels). Blind-case run 000000010
+  pending a deep-research grounding (large real ODE model + data where an ad-hoc forward-sensitivity
+  fit OOMs).
+
 **Tally so far: 10 arms across 5 case types, all PASS, 0 confident-wrong. NEW quantified signal:
 NUDGE ~halves the turns/cost to reach the same correct answer (efficiency, not capability).**
 
