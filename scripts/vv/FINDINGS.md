@@ -1626,7 +1626,14 @@ descent artifact; `design()` should re-solve/validate its predicted state or fla
 vs threshold** — `design()` optimizes to land *deep in* the target basin (a robust flip), not to the
 *minimal* fold crossing, so for "minimum intervention to destabilize" questions it over-answers;
 there is no minimal-fold-crossing mode. The Cap-5 safety gate itself was correct (`crosses_fold=True`,
-independently confirmed). Both are candidate design()/invert.py improvements; recorded, not yet fixed.
+independently confirmed). **FIXED** (service layer, `_augment_flip_design`, invert.py core untouched):
+a circuit-mode flip now reports (1) `predicted_state_space` labelling `predicted_state` as readout
+(`Λ = base + scale·activity`), (2) `predicted_activity` — the validated activity-space fixed point
+(re-solved to convergence + a production-balance `predicted_is_fixed_point` check; on the toggle
+`[0.107, 2.50]`, matching the agents), and (3) `minimal_flip` — the MINIMAL fold-crossing factor from
+a bisection along the knob (toggle: −78.9%, matching the agents' 78.6% fold), distinct from the
+ranked `deltas` overshoot (88.6%). So the tool now hands back BOTH the minimal-collapse threshold and
+the robust-flip, each labelled, and never reports a non-physical predicted state unflagged.
 (The broader ablation — 8 arms, 4 case types, 0 confident-wrong, no WITH>WITHOUT contrast — is the
 automated-scientist LEDGER's KEY FINDING: a code-capable frontier agent matches/exceeds NUDGE on
 these tasks, so NUDGE's demonstrated value is validation / reproducibility / a trustworthy safety

@@ -680,6 +680,71 @@ def design_to_dict(plan: Any) -> dict[str, Any]:
     return out
 
 
+def _augment_flip_design(
+    out: dict[str, Any], circuit: Any, base: Any, start: str, to: str
+) -> None:
+    """Make a circuit-mode flip result RELIABLE + unambiguous (in place).
+
+    Two failure modes an inversion demo surfaced (FINDINGS §DES): (1) ``predicted_state`` is in
+    **readout** space (``Λ = base + scale·activity``, e.g. ``Readout.identity`` = ``0.2 + 5·act``),
+    easy to misread as raw activity exceeding a physical ceiling; (2) the ranked ``deltas``
+    **overshoot** — ``design()`` chases the ORIGINAL opposite fixed point, but the intervention
+    MOVES the fixed points, so it lands deep in the target basin rather than at the minimal fold.
+    This adds the validated **activity-space** fixed point and the **minimal fold-crossing** factor
+    so both are explicit.
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from nudge.design.invert import _apply_delta, _base_value, _resolve_x0, _stable_states
+
+    out["predicted_state_space"] = (
+        "readout Λ = base + scale·activity (Readout.identity = 0.2 + 5·activity) — NOT raw activity"
+    )
+    deltas = out.get("deltas") or []
+    states = _stable_states(circuit)
+    if len(states) < 2 or not deltas:
+        return
+    start_state = states[-1] if start == "high" else states[0]
+    target_state = states[0] if to == "low" else states[-1]
+    x0 = _resolve_x0(circuit, start)
+    moved = [((d["param"]["scope"], d["param"]["index"], d["param"]["name"]), d["factor"])
+             for d in deltas]
+    free_list = [fp for fp, _ in moved]
+    vals = jnp.asarray([_base_value(base, fp) * fac for fp, fac in moved], jnp.float32)
+    params = _apply_delta(base, free_list, vals)
+    act = np.asarray(circuit.steady_state(params, x0, n_steps=2000), dtype=float)
+    prod = np.asarray(circuit.production(jnp.asarray(act, jnp.float32), params), dtype=float)
+    decay = np.asarray(base["species"]["decay"], dtype=float)
+    out["predicted_activity"] = [round(float(v), 4) for v in act]
+    out["predicted_is_fixed_point"] = bool(np.max(np.abs(prod - decay * act)) < 1e-2)
+
+    # The MINIMAL fold-crossing factor for a single-knob flip (bisection along the knob).
+    if len(moved) == 1 and out.get("safety", {}).get("crosses_fold"):
+        fp, design_factor = moved[0]
+        base_val = _base_value(base, fp)
+
+        def flips(f: float) -> bool:
+            p = _apply_delta(base, [fp], jnp.asarray([base_val * f], jnp.float32))
+            ss = np.asarray(circuit.steady_state(p, x0, n_steps=1500), dtype=float)
+            return bool(np.linalg.norm(ss - target_state) < np.linalg.norm(ss - start_state))
+
+        if flips(design_factor):
+            lo, hi = design_factor, 1.0  # lo flips; hi (no change) does not
+            for _ in range(44):
+                mid = 0.5 * (lo + hi)
+                lo, hi = (mid, hi) if flips(mid) else (lo, mid)
+            out["minimal_flip"] = {
+                "param": {"scope": fp[0], "index": fp[1], "name": fp[2]},
+                "factor": round(lo, 4),
+                "percent_change": round((lo - 1.0) * 100.0, 1),
+                "note": "the MINIMAL knob change that crosses the fold (destabilises the current "
+                "state so it collapses to the other basin). The ranked `deltas` OVERSHOOT this — "
+                "they land robustly deep in the target basin; for a 'minimum intervention' answer "
+                "use `minimal_flip`.",
+            }
+
+
 def design_circuit(
     topology: str = "1node",
     *,
@@ -722,6 +787,8 @@ def design_circuit(
     out["topology"] = topology
     out["kinetics"] = {"n": n, "K": k, "vmax": vmax, "basal": basal}
     out["target_basin"] = to
+    if out.get("kind") == "intervention" and out.get("mode") == "circuit":
+        _augment_flip_design(out, circuit, circuit.base_params(), start, to)
     return out
 
 
