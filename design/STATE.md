@@ -126,6 +126,21 @@ threshold/gain/ceiling → and `off-model` when a linear model suffices.
   **disabled** in `tests/conftest.py` — do NOT re-enable it.
 - **maddening pin:** `maddening[ift]>=0.3.1` (the `[ift]` extra pulls `lineax` for
   `ift_linear_solve`). 0.3.0 lacked it.
+- **PRINCIPLE — guard the identifiability, not the confound** (an orthogonal anchor or a
+  measured degeneracy, **never a calibrated band**). A per-confound OFF-cluster band (e.g.
+  differential gates 4b/4c) fixes one magnitude and leaves the next as a blind gap (P5 slips
+  `(1.18,1.30]`). Instead add the nuisance itself as a **free parameter** — a free-affine null
+  *contains the entire confound family*, so ONE measured statistic ("does the bio knob earn its
+  BIC parameter over the free nuisance", the profiled ΔBIC) covers the class continuously. When
+  even that is degenerate (a non-uniform nuisance observationally identical to a mechanism),
+  resolve with an **orthogonal anchor** (perturbation-inert genes) or **abstain**. **Prototyped
+  and measured** for the differential's per-condition affine class: `_proto_nuisance.py` — 0
+  confident-wrong across the whole uniform-affine sweep (bands leave 13/30) with every positive
+  control preserved; the anchor recovers a ceiling under a scale; residual = non-uniform
+  nuisances need the anchor. Full design + migration plan: `design/PERTURBED_CONFOUND_STRATEGY.md`.
+  (Honest dead-end recorded there: the raw Laplace **condition number** is NOT the discriminator
+  — it saturates on the offset's unit scale; the degeneracy that matters is GLOBAL, so the
+  integrated profiled ΔBIC is the right statistic.)
 
 ## 5. Public API surface (import-light where it matters)
 

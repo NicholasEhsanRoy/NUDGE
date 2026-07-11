@@ -1331,3 +1331,72 @@ distinct antibiotic improved DETECTION and pushed the best knob toward the right
 sign, but did NOT cross the RESOLUTION threshold — evidence the α/β/ε degeneracy is largely structural,
 not merely a data-quantity limitation. Data fetch for MDSINE2 (reproducible):
 `gerberlab/MDSINE2_Paper/master/datasets/gibson/healthy/raw_tables/{counts,qpcr,metadata,perturbations,rdp_species}.tsv`.
+
+# Prototype — the unified affine-nuisance guard (systemic fix for the differential confound class)
+
+*Prototype (experimental, NOT shipped): `src/nudge/inference/_proto_nuisance.py`; measured by
+`scripts/eval/proto_nuisance_sweep.py` + `proto_nuisance_confirm.py`. Full design + migration:
+`design/PERTURBED_CONFOUND_STRATEGY.md`. Baseline = this worktree's pre-4b/4c `differential`.*
+
+The red-team's differential holes (additive P1, multiplicative P4, small-multiplicative P5) are
+ONE class: a per-condition **affine** nuisance `y = s·x + o` on one context's PERTURBED cells
+(control clean). The shipped fix is per-confound OFF-cluster bands with measured blind gaps (P5
+slips gate 4c's `(1.18,1.30]`). Prototyped two principled replacements and MEASURED them:
+
+- **(B) nuisance-augmented BIC abstention** — add the affine `(s,o)` as free nuisances; abstain
+  unless the bio knob EARNS its BIC parameter over a pure-affine null (`earn = profiled ΔBIC`),
+  in both directions. **Coverage (the thing bands can't do): 0 confident-wrong across the whole
+  uniform-affine sweep** — 30 cases/2 seeds spanning `s∈[1.05,1.50]` (incl. P5's interior and the
+  `(1.18,1.30]` gap), `o∈[1,5]`, and mixed; `earn ∈ [−7.6, −6.1]`, all `< 0`. The baseline leaves
+  **13/30 confident-wrong**. The guarantee is structural: the confound family is inside the free-
+  affine null's span, so the knob provably cannot earn its parameter over it.
+- **Positive controls preserved** (earn separation is enormous, `[−7.6,−6.1]` vs `[+33,+83]`):
+  gain-diff (0.55, earn +33) and ceiling-diff (1.4, earn +55/+83) RESOLVE; threshold and
+  no-difference abstain, matching the baseline. **0 over-abstention beyond the baseline.**
+- **(A) inert-anchor normalization** — estimate `(s,o)` from a perturbation-inert gene block and
+  undo the affine before attribution. Recovers a genuine ceiling under a technical scale
+  `s_tech=1.3`: anchor `s_hat=1.302/1.309` (<1% error), ceiling-diff preserved + magnitude
+  corrected.
+
+**Honest residual (bounded, not hidden).** (B) covers the UNIFORM affine family completely; a
+**non-uniform** above-median-only nuisance is *observationally identical to a genuine ceiling*
+(the documented evader the P5 repro explicitly excludes) and fools (B) on 1 of 2 seeds — that is
+a true identifiability limit, resolvable only by the orthogonal anchor (A), not by any band.
+
+**Honest dead-end (recorded so it isn't re-tried).** The first (B) hypothesis — a Fisher/Laplace
+**condition-number** degeneracy on the joint `[knob,s,o]` Hessian — does NOT discriminate: it
+saturates (~900–2600) for confound and genuine ceiling alike, because the linear offset `o`
+(count units) dominates the condition number. The local profiled-curvature ratio is no better
+(~0.3 for both). The degeneracy that matters is GLOBAL (can one affine match BOTH modes at
+once), so the discriminative measured statistic is the **integrated profiled ΔBIC**, not a local
+curvature. Compute: guard B ≈ 16–60 s/call, ~5–10× the shipped differential (opt-in).
+
+**DIRECT PROOF vs the exact cloud red-team repros — P1 / P4 / P5 (0 confident-wrong).**
+`scripts/eval/proto_earnguard_vs_redteam.py` (log: `proto_earnguard_vs_redteam_RESULTS.txt`)
+reproduces each cloud red-team construction *verbatim* — `ras_switch_1node()` default,
+`simulate_context_pair(mechanism="none")`, SCALE=20, obs_sd=0.5, N_CELLS=3000, the per-context
+affine on context B's PERTURBED cells only (control clean) — and runs the Earn-Guard
+(`winner=base.fit.best_diff`, `check_both=True`) with **NO** cloud-loop bands (gates 4b/4c). Result
+(2 seeds/case):
+
+| hole | attack | baseline confident-wrong | **Earn-Guard confident-wrong** | earn range |
+|---|---|---|---|---|
+| P1 additive | `o ∈ {1,2,3,5}` | 2/8 (gain-diff at o=5) | **0/8** | −2.1 … −7.5 |
+| P4 multiplicative | `c ∈ {1.5,2,2.4,0.7,0.5}` | 10/10 (ceiling-diff) | **0/10** | −7.1 … −7.5 |
+| P5 small multiplicative | `c ∈ {1.15,1.20,1.25}` | 3/6 (gain-/ceiling-diff) | **0/6** | −1.8 … −7.5 |
+| **total** | **24 confound cases** | **15/24** | **0/24** | all earn < 0 |
+
+Every confound → `no-difference` (the free per-context affine strictly out-explains the bio knob).
+**Positive controls 3/3 RESOLVED** (gain / ceiling / threshold — the Earn-Guard even resolves a
+genuine gain the pre-4b baseline left `unresolved`), so no over-abstention. This is the direct,
+repro-level confirmation that ONE continuous earn statistic closes the whole differential affine
+family the per-magnitude bands chase one at a time.
+
+**Scope boundary (honest).** This proves the **differential** affine class (P1/P4/P5). **P2 is NOT
+in class** — it is a `multi_reporter` batch confound (`NUDGE-METHOD-008`), a different surface;
+`guard_b_classify` takes `differential.Context` pairs, not a reporter panel. P2 stays closed by the
+cloud loop's shipped **`multi_reporter` fix**. The Earn-Guard *principle* generalizes there (§5
+`PERTURBED_CONFOUND_STRATEGY`, argued *stronger* on a heterogeneous panel) but that is **unimplemented
+future work**. Consequence for the merge: the cloud fixes are **kept** (they close P2 and are the
+shipped baseline); the Earn-Guard ships **opt-in** as the differential-class structural direction.
+Retiring the differential bands *behind* the Earn-Guard is the §4 migration, not this change.
