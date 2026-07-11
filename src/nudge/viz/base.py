@@ -24,6 +24,10 @@ ABSTAIN_CALLS = frozenset(
         "not-bistable",
         "abstention",
         "abstain",
+        # cross-modality variant abstentions (NUDGE-METHOD-002): the panel cannot localise
+        # a knob for this variant, so it must read as an abstention, not a positive call.
+        "non-responsive",
+        "inconclusive",
     }
 )
 
