@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 
 from nudge.viz.base import Panel, RenderedFigure, is_abstention
+from nudge.viz.layout import freest_corner, place_label, reserve_top_band
 from nudge.viz.theme import apply_theme, call_color
 
 _DEFAULT_XLABEL = "perturbation dose"
@@ -194,21 +195,32 @@ def _draw_panel(ax: Any, p: dict[str, Any], pal: dict[str, str]) -> None:
     if p["dose_max"] is not None:
         ax.axvline(p["dose_max"], ls=":", color=pal["muted"], lw=1.0, zorder=2)
 
-    if p["spans_inflection"]:
+    abst = is_abstention(p["call"])
+    if p["spans_inflection"] and not abst:
         ax.axvline(
             p["k_threshold"], ls="--", color=color, lw=1.2, alpha=0.8, zorder=2,
         )
+        # Reserve a clear top band and drop the K-label there, anchored to the K line but
+        # clamped inside the frame — so it never lands on the curve or under the legend.
+        # (Only for a RESOLVED call: an abstained panel gets the banner in this band and
+        # must not assert a confident K.)
+        band_y = reserve_top_band(ax, band=0.18)
+        xmin_ax, xmax_ax = ax.get_xlim()
+        k_frac = (p["k_threshold"] - xmin_ax) / max(xmax_ax - xmin_ax, 1e-9)
+        ha = "left" if k_frac < 0.5 else "right"
         ax.annotate(
             f"K={p['k_threshold']:.2f} (inside range)",
-            xy=(p["k_threshold"], 0.11),
-            xytext=(-6, 0),
+            xy=(p["k_threshold"], band_y),
+            xytext=(5 if ha == "left" else -5, 0),
             textcoords="offset points",
             xycoords=("data", "axes fraction"),
-            fontsize=8, color=color, ha="right", va="bottom",
+            fontsize=8, color=color, ha=ha, va="center", zorder=7,
         )
-    else:
+    elif not p["spans_inflection"]:
         # One-sided lower bound: an OPEN-ENDED arrow, never a point estimate. K sits
-        # past the observed dose range, so gain is unidentifiable.
+        # past the observed dose range, so gain is unidentifiable. The arrow sits mid-axes
+        # (the abstain banner will occupy the reserved top band); the label is placed in
+        # the freest region so it clears both the arrow and the curve.
         x0 = dmax * 0.55
         ax.annotate(
             "", xy=(xmax, 0.5), xytext=(x0, 0.5),
@@ -216,15 +228,15 @@ def _draw_panel(ax: Any, p: dict[str, Any], pal: dict[str, str]) -> None:
             arrowprops={"arrowstyle": "-|>", "color": color, "lw": 1.6,
                         "linestyle": "--"},
         )
-        ax.annotate(
-            "K past max dose →\ngain unidentifiable",
-            xy=(x0, 0.5), xycoords=("data", "axes fraction"),
-            fontsize=8, color=color, ha="right", va="center",
+        place_label(
+            ax, "K past max dose →\ngain unidentifiable",
+            [(0.06, 0.30), (0.06, 0.62), (0.40, 0.30)],
+            color=color, ha="left", va="center",
         )
 
     lbl = p["label"] or "curve"
     ax.set_title(f"{lbl}  →  {p['call'].upper()}", fontweight="bold", color=pal["text"])
-    ax.legend(loc="lower left", fontsize=8, framealpha=0.85)
+    ax.legend(loc=freest_corner(ax, avoid_top=True), fontsize=8, framealpha=0.9)
 
 
 def build(data_or_entries: Any, *, theme: str = "auto") -> RenderedFigure:
