@@ -9,6 +9,26 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Protein aggregation / fibrillization attribution (`NUDGE-METHOD-013`, `NUDGE-LIM-021`)
+  — the efficiency demo + a third dynamical-systems domain.** NUDGE analyzes an amyloid
+  aggregation curve (the sigmoidal ThT / polymer-mass trace) by fitting the filament master
+  equation's principal moments (`dP/dt = k_n·m^{n_c} + k_2·m^{n_2}·M`, `dM/dt = 2·k_+·m·P`;
+  Knowles 2009 / Cohen 2013 / Meisl 2016 / Michaels 2020) with a self-contained
+  differentiable RK4 `lax.scan` (no `diffrax`; touches neither `fit.py` nor `core/`). In
+  ONE deterministic call it returns the two IDENTIFIABLE composites **κ = √(2·k_+·k_2·
+  m^{n_2+1}) ≈ 1** and **λ = √(2·k_+·k_n·m^{n_c}) ≈ 0.01**, and the MEASURED
+  non-identifiability of the three microscopic constants — an **exact continuous gauge
+  symmetry** `(k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α)` (Fisher/Laplace condition number →
+  ∞, null direction `[+0.577, −0.577, +0.577]`, numerical gauge check ~1e-16). A control
+  LLM agent took 12.2 min / 28 turns / 6 scripts to hand-derive the same answer. A
+  concentration series ALONE stays degenerate; a series + a seeded/elongation anchor (the
+  Meisl discipline) resolves all three (0 confident-wrong). An inhibitor is attributed to
+  the microscopic step it lowers (primary / elongation / secondary nucleation) from the
+  composite log-ratios, or abstained on — 0 confident-wrong across the battery.
+  `src/nudge/mechanisms/fibrillization.py`, `tests/mechanisms/test_fibrillization.py`
+  (13 tests), `nudge fibrillization` CLI + `service.fibrillization_demo` + Mechanism Card +
+  `notebooks/Aggregation_Kinetics.ipynb`; FINDINGS "Protein aggregation / fibrillization".
+
 - **Fail-safe red-team ROUND 3 (design safety gate) + fix (`design/FAILSAFE_REDTEAM_3.md`,
   HOLE 3 → `NUDGE-LIM-013`).** A third adversarial pass found that `design()`'s bifurcation
   **safety gate** flagged `high_risk_of_instability` on a *relative* proximity rise only
