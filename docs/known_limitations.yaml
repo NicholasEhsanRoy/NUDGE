@@ -998,50 +998,80 @@ anomalies:
     description: >-
       The matrix-free sloppiness/identifiability path (sloppiness_diagnostic_matrixfree /
       analyze_model_matrixfree / adjoint.ode_identifiability) computes the Fisher-information
-      (FIM = JᵀJ/σ²) eigenspectrum using ONLY matrix-vector products JᵀJ·v — one jax.jvp
-      (J·v) composed with one jax.vjp (Jᵀ·w) — so it never materializes the sensitivity matrix
-      J and does NOT OOM the way the dense jacfwd path does on a large ODE network (MEASURED,
-      scripts/vv/sloppiness_scaling.py: a 77-state gLV, dense jacfwd OOMs at ~4000–6000 free
-      params under a 2.5 GB cap while the matrix-free path stays flat at ~0.42 GB and ~3 s to
-      6000 params). The LIMITATION: an iterative Krylov eigensolver (Lanczos eigsh, LOBPCG) is
-      reliable for the LARGEST eigenvalues but NOT for the SMALLEST eigenvalues of an
-      ill-conditioned FIM — and the smallest eigenvalue / its eigenvector is exactly the
-      sloppy/near-null direction the diagnostic reports. Measured on a rank-deficient gLV
-      (120 params, 17 true nulls): eigsh which='SA' returned a LARGE eigenvalue as "smallest"
-      (and would mislabel a rank-deficient model well-constrained), and unpreconditioned
-      LOBPCG returned ~1e-3 for true ~1e-14 eigenvalues — neither reaches the null space. NUDGE
-      therefore does NOT trust an iterative smallest-eigenvalue estimate blindly; it FAILS
-      SAFE along three lines, so the iterative path is never confidently wrong: (1) when
-      n_params > n_obs the FIM is rank-deficient BY SHAPE (rank ≤ n_obs), so unidentifiable is
-      certified from shape alone — the realistic large-network regime, fast and exact; (2)
-      every iteratively-found smallest eigenpair is Rayleigh-residual verified (‖FIM·v − λv‖ /
-      λ_max) and only trusted if it converged; (3) if the smallest end does not converge and
-      shape does not settle it, the diagnostic ABSTAINS (label unidentifiable, with an explicit
-      non-convergence reason) rather than assert identifiability it could not verify. The
-      DEFINITIVE verdict on a moderate-n_params model comes from the exact dense-via-matvec
-      route (method='dense' / auto below dense_below): it reconstructs the n_params×n_params
-      FIM from n_params matvecs and eigh's it — still never forming J or the jacfwd tangent
-      fan-out — matching the dense sloppiness_diagnostic bit-for-bit (VERIFIED,
-      tests/inference/test_sloppiness_matrixfree.py: same label, eigenvalues, and null
-      direction on the sum-of-exponentials sloppy case and the A·e^{-(k₁+k₂)t} unidentifiable
-      case); its cost is O(n_params²) memory, so it is the recommended path only until
-      n_params is enormous, above which the O(n_params + n_obs) iterative path (top-k + shape
-      + fail-safe) takes over. Related: NUDGE-METHOD (sloppiness diagnostic), the adjoint
-      scaling capability, FINDINGS "Matrix-free identifiability".
-    severity: minor
+      (FIM = JᵀJ/σ²) eigenspectrum using ONLY matrix-vector products JᵀJ·v (one jax.jvp J·v
+      composed with one jax.vjp Jᵀ·w), never materializing J, so it does NOT OOM the way the
+      dense jacfwd path does on a large ODE network (MEASURED, scripts/vv/sloppiness_scaling.py:
+      a 77-state gLV, dense jacfwd OOMs at ~4000–6000 free params under a 2.5 GB cap while the
+      matrix-free path stays flat at ~0.42 GB / ~3 s to 6000 params). The CORE LIMITATION: a
+      matrix-free Krylov eigensolver cannot certify the SMALLEST FIM eigenvalue — and the
+      smallest eigenvalue / its eigenvector is exactly the sloppy/near-null direction the
+      diagnostic reports. The P6 red-team (round 6) sharpened this into a concrete confident-wrong
+      the module's ORIGINAL fail-safe missed: on an ISOLATED exact structural null embedded in an
+      otherwise well-conditioned spectrum (two parameters entering only via their sum; n_params ≤
+      n_obs, so the shape-null certificate is inapplicable), eigsh(which='SA') converges to the
+      well-conditioned cluster and MISSES the isolated zero — the pairs it returns are GENUINE
+      eigenpairs, so they pass the Rayleigh residual (which verifies eigenpair-NESS, not
+      smallest-NESS) — so the iterative / auto path (n_params > dense_below) returned
+      label='well-constrained' n_null=0 ("every parameter individually identifiable") on a
+      provably-unidentifiable model, the single most dangerous mislabel (VERIFIED 6/6 across
+      seeds at full float64, NOT the float32 caveat;
+      scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py). FIXED (measured, FINDINGS §P6)
+      on three lines so the iterative path is never confidently wrong: (1) shape-null — when
+      n_params > n_obs the FIM is rank-deficient BY SHAPE ⇒ unidentifiable from shape alone
+      (unchanged; the realistic large-network regime). (2) auto now DEFERS to the EXACT
+      dense-via-matvec reconstruction up to dense_below=2048 (raised from 256): it rebuilds the
+      n_params×n_params FIM from n_params matvecs and eigh's it (still never forming J or the
+      jacfwd tangent), recovering the exact smallest eigenvalue / null — MEASURED affordable on a
+      ~15 GB box (~18 s / 0.7 GB peak at n=2048, ~42 s / 2.0 GB at 4096, recovering the exact
+      null n_null=1 at every size 256–4096), routing the entire realistic/default regime through
+      the exact path. (3) above dense_below (or explicit method='iterative') the smallest end is
+      probed by INVERSE ITERATION (shift-invert via CG, _smallest_eig_null_probe): it AMPLIFIES
+      the FIM's smallest eigenvalue (a null is the strictly dominant eigenpair of (FIM+εI)⁻¹) and
+      reliably CATCHES the isolated null eigsh('SA') misses (MEASURED: Rayleigh quotient → ~1e-19
+      ≤ rank floor on the P6 models where eigsh returned ~1661; 0 false nulls on well-conditioned
+      + sloppy controls; ~150–800 matvecs, <0.3 s). A residual-verified near-null ⇒ unidentifiable
+      naming the null direction; if NO null is found the full smallest spectrum is still not
+      certifiable matrix-free (the probe is one-sided — a low Rayleigh quotient PROVES a null, but
+      a large one does NOT prove identifiability; MEASURED: on a dense sloppy small-end inverse
+      iteration overestimates λ_min), so the path ABSTAINS (unidentifiable, "cannot certify the
+      smallest eigenvalue"). Trace-completeness (tr FIM = Σλ) was evaluated and REJECTED as a null
+      certificate — a missed ZERO changes the trace by 0, so it cannot see the P6 case (MEASURED).
+      CLOSED vs BOUNDED. CLOSED: the isolated-structural-null mislabel — 0/6 confident-wrong
+      across the reported seeds/sizes via the DEFAULT method='auto' (n=300) and explicit
+      method='iterative' (n=40, n=3000); genuine well-constrained and sloppy-but-predictive
+      positive controls still resolve via the dense/affordable path (NO over-abstention below
+      dense_below); dense==auto label agreement preserved. BOUNDED (documented, locked): above
+      dense_below with no shape-null and no isolated null found, the iterative path CANNOT return
+      a positive well-constrained / sloppy-but-predictive verdict — it OVER-ABSTAINS
+      (unidentifiable; over-abstaining is the fail-safe direction, never a confident-wrong); the
+      exact positive verdict is recoverable on demand via method='dense' (O(n_params²) memory) or
+      by raising dense_below. The inverse-iteration probe reports ONE null direction even when the
+      true null space is higher-dimensional (the LABEL is correct but the null COUNT can be
+      undercounted in the iterative path; exact counts need method='dense'). Guards:
+      tests/inference/test_sloppiness_p6_structural_null.py (regression + positive controls + a
+      strict-xfail decoy locking the over-abstention bound),
+      tests/inference/test_sloppiness_matrixfree.py (dense==matrix-free agreement + iterative
+      fail-safe), scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py (0/6 after fix).
+      Related: NUDGE-METHOD (sloppiness diagnostic), the adjoint scaling capability, FINDINGS §P6
+      "Matrix-free identifiability — the isolated-null certification gap".
+    severity: major
     safety_relevance: context_dependent
     safety_relevance_rationale: >-
-      Handled correctly today (0 confident-wrong): the dangerous error would be labelling a
-      rank-deficient / near-unidentifiable model "well-constrained" or "sloppy-but-predictive"
-      off an unconverged iterative smallest eigenvalue — which is precisely what the shape
-      test, the Rayleigh-residual verification, and the non-convergence abstention prevent. The
-      guarantee is asymmetric and honest: proving a SMALL eigenvalue (a null / sloppy
-      direction, hence unidentifiable) is safe from any low Rayleigh quotient, but proving a
-      LARGE smallest eigenvalue (identifiability) needs a converged, verified smallest end, so
-      when the iterative solve cannot deliver that the path abstains (potentially
-      over-abstaining, never over-claiming). A user needing a definitive identifiable verdict
-      on a moderate-size model should use method='dense' (exact). The regression tests lock the
-      dense==matrix-free agreement and the iterative fail-safe so the abstention stays earned.
+      The dangerous error is labelling a rank-deficient / structurally-unidentifiable model
+      "well-constrained" or "sloppy-but-predictive" — a false green-light for a downstream
+      point-estimate / attribution the data cannot support. P6 showed the ORIGINAL fail-safe
+      (Rayleigh-residual verification) was INSUFFICIENT for an isolated null (it verifies
+      eigenpair-ness, not smallest-ness), so that mislabel was briefly live on the iterative /
+      auto path. It is now prevented on three lines: the shape-null certificate, the auto-defer to
+      the exact dense reconstruction up to dense_below=2048, and — where neither applies — an
+      inverse-iteration null probe that reliably catches an isolated null plus a hard abstention
+      when the smallest end cannot be certified. The guarantee is asymmetric and honest: proving a
+      SMALL eigenvalue (a null ⇒ unidentifiable) is safe from a low Rayleigh quotient, but proving
+      a LARGE smallest eigenvalue (identifiability) needs the exact spectrum, so above dense_below
+      the path abstains (over-abstains, never over-claims). Severity major because a regression in
+      any of the three guards reintroduces the single most dangerous mislabel (unidentifiable →
+      well-constrained); the regression test, the positive controls, and the strict-xfail decoy
+      keep the guards — and the earned abstention — in place.
 
   - anomaly_id: NUDGE-LIM-024
     title: Gradient-based optimal experimental design is LOCAL (valid near the nominal θ₀)

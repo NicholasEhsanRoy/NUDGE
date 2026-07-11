@@ -91,13 +91,22 @@ dense `sloppiness_diagnostic(jac_log, …)` API is unchanged; the additions are
 ∝n_params·n_steps·n_states blow-up that hits ~59 GB at the 2000-*state* scale) while matrix-free
 stays **flat at ~0.42 GB, ~3 s to 6000 params**, returning the same verdict. Matches the dense
 diagnostic **bit-for-bit** on the validated small cases (same label / eigenvalues / null
-direction). **Honest bound (`NUDGE-LIM-023`, fail-safe):** a matrix-free Krylov solver is
-reliable for the LARGEST FIM eigenvalues but NOT the smallest (the sloppy/near-null direction) of
-an ill-conditioned FIM — so the iterative path certifies `unidentifiable` via shape rank
-deficiency (`n_params > n_obs`), Rayleigh-residual-verifies any smallest eigenpair, and
-**abstains rather than assert identifiability it cannot verify**; the exact dense-via-matvec
-route (`method="dense"`) is the definitive verdict for moderate `n_params`. FINDINGS "Matrix-free
-identifiability"; `tests/inference/test_sloppiness_matrixfree.py`. Additive/opt-in — never
+direction). **Honest bound (`NUDGE-LIM-023`, fail-safe; SHARPENED by P6):** a matrix-free Krylov solver
+cannot certify the SMALLEST FIM eigenvalue (the sloppy/near-null direction) of an ill-conditioned
+FIM. The P6 red-team exposed that `eigsh(which='SA')` MISSES an *isolated* exact null in an
+otherwise well-conditioned spectrum (it verifies eigenpair-ness, not smallest-ness), so the
+iterative/`auto` path briefly mislabelled a structurally-unidentifiable model `well-constrained`.
+Fixed (measured, FINDINGS §P6) on three lines so the iterative path is **never confidently
+wrong**: shape rank-deficiency (`n_params > n_obs`); `auto` now DEFERS to the EXACT
+dense-via-matvec reconstruction up to `dense_below=2048` (measured affordable: ~18 s / 0.7 GB at
+n=2048, recovering the exact null every time — routing the whole realistic regime through the
+exact path); and above that an INVERSE-ITERATION null probe (shift-invert via CG) that reliably
+CATCHES the isolated null `eigsh('SA')` misses, else **ABSTAINS** (`unidentifiable`) rather than
+assert identifiability it cannot verify. CLOSED: the mislabel (0/6 confident-wrong, positive
+controls still resolve). BOUNDED: above `dense_below` a genuine well-constrained model
+over-abstains (fail-safe; use `method="dense"` for the exact verdict). FINDINGS §P6;
+`tests/inference/test_sloppiness_p6_structural_null.py`, `test_sloppiness_matrixfree.py`.
+Additive/opt-in — never
 touches frozen `fit.py`/`core/`.
 
 **The PoC works end to end** (`tests/inference/test_fit_end_to_end.py`, slow lane):
