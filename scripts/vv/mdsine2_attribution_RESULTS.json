@@ -1,0 +1,581 @@
+{
+  "dataset": "MDSINE2 Gibson healthy \u2014 vancomycin pulse, subjects 2-5",
+  "results": [
+    {
+      "k": 3,
+      "n_rep": 4,
+      "n_timepoints": 14,
+      "pulse_frac": 0.54,
+      "baseline_loss": 3.3118,
+      "labels": [
+        "Bacteroides",
+        "Akkermansia",
+        "Other"
+      ],
+      "rows": [
+        {
+          "group": "Bacteroides",
+          "call": "no-change",
+          "logFC": -0.75,
+          "selected": "interaction",
+          "d_null_best": 9.88,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.225,
+            "interaction": -0.876,
+            "susceptibility": -0.312
+          },
+          "cond_number": 394.2,
+          "corr_alpha_beta": 0.995,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=9.9, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Akkermansia",
+          "call": "unresolved",
+          "logFC": -1.83,
+          "selected": "growth",
+          "d_null_best": 38.8,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.387,
+            "interaction": -3.546,
+            "susceptibility": -0.383
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number inf, |corr|=1.000). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Other",
+          "call": "no-change",
+          "logFC": -0.75,
+          "selected": "growth",
+          "d_null_best": -0.65,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.163,
+            "interaction": -0.424,
+            "susceptibility": -0.161
+          },
+          "cond_number": 77.4,
+          "corr_alpha_beta": 0.974,
+          "degenerate": false,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-0.7, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    },
+    {
+      "k": 5,
+      "n_rep": 4,
+      "n_timepoints": 14,
+      "pulse_frac": 0.54,
+      "baseline_loss": 7.1308,
+      "labels": [
+        "Bacteroides",
+        "Akkermansia",
+        "Phocaeicola",
+        "Parabacteroides",
+        "Other"
+      ],
+      "rows": [
+        {
+          "group": "Bacteroides",
+          "call": "no-change",
+          "logFC": -0.75,
+          "selected": "interaction",
+          "d_null_best": 0.39,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.167,
+            "interaction": -0.647,
+            "susceptibility": -0.231
+          },
+          "cond_number": 47.9,
+          "corr_alpha_beta": 0.958,
+          "degenerate": false,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=0.4, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Akkermansia",
+          "call": "unresolved",
+          "logFC": -1.83,
+          "selected": "susceptibility",
+          "d_null_best": 53.22,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.553,
+            "interaction": -3.767,
+            "susceptibility": -0.518
+          },
+          "cond_number": 154.3,
+          "corr_alpha_beta": 0.105,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "a perturbation is real (\u0394BIC vs null=53.2) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'growth' by only \u0394BIC=2.4 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "Phocaeicola",
+          "call": "no-change",
+          "logFC": -1.84,
+          "selected": "growth",
+          "d_null_best": 5.41,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.131,
+            "interaction": -0.725,
+            "susceptibility": -0.164
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.999,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=5.4, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Parabacteroides",
+          "call": "no-change",
+          "logFC": -0.34,
+          "selected": "interaction",
+          "d_null_best": 2.63,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.123,
+            "interaction": -0.592,
+            "susceptibility": -0.181
+          },
+          "cond_number": 158.9,
+          "corr_alpha_beta": 0.113,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=2.6, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Other",
+          "call": "no-change",
+          "logFC": -0.62,
+          "selected": "growth",
+          "d_null_best": 1.7,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.232,
+            "interaction": -0.916,
+            "susceptibility": -0.302
+          },
+          "cond_number": 102.7,
+          "corr_alpha_beta": 0.979,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=1.7, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    },
+    {
+      "k": 8,
+      "n_rep": 4,
+      "n_timepoints": 14,
+      "pulse_frac": 0.54,
+      "baseline_loss": NaN,
+      "labels": [
+        "Bacteroides",
+        "Akkermansia",
+        "Phocaeicola",
+        "Parabacteroides",
+        "Parasutterella",
+        "Phascolarctobacterium",
+        "Paraprevotella",
+        "Other"
+      ],
+      "rows": [
+        {
+          "group": "Bacteroides",
+          "call": "unresolved",
+          "logFC": -0.75,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Akkermansia",
+          "call": "unresolved",
+          "logFC": -1.83,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Phocaeicola",
+          "call": "unresolved",
+          "logFC": -1.84,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Parabacteroides",
+          "call": "unresolved",
+          "logFC": -0.34,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Parasutterella",
+          "call": "unresolved",
+          "logFC": -1.31,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Phascolarctobacterium",
+          "call": "unresolved",
+          "logFC": -0.41,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Paraprevotella",
+          "call": "unresolved",
+          "logFC": -1.05,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Other",
+          "call": "unresolved",
+          "logFC": -0.45,
+          "selected": "growth",
+          "d_null_best": NaN,
+          "delta": {
+            "null": 0.0,
+            "growth": NaN,
+            "interaction": NaN,
+            "susceptibility": NaN
+          },
+          "cond_number": NaN,
+          "corr_alpha_beta": NaN,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'growth', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number nan, |corr|=nan). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        }
+      ]
+    },
+    {
+      "k": 12,
+      "n_rep": 4,
+      "n_timepoints": 14,
+      "pulse_frac": 0.54,
+      "baseline_loss": 13.6948,
+      "labels": [
+        "Bacteroides",
+        "Akkermansia",
+        "Phocaeicola",
+        "Parabacteroides",
+        "Parasutterella",
+        "Phascolarctobacterium",
+        "Paraprevotella",
+        "Escherichia/Shigella",
+        "Enterocloster",
+        "Bilophila",
+        "Hungatella",
+        "Other"
+      ],
+      "rows": [
+        {
+          "group": "Bacteroides",
+          "call": "no-change",
+          "logFC": -0.75,
+          "selected": "susceptibility",
+          "d_null_best": 6.79,
+          "delta": {
+            "null": 0.0,
+            "growth": 0.15,
+            "interaction": 0.207,
+            "susceptibility": 0.278
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=6.8, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Akkermansia",
+          "call": "unresolved",
+          "logFC": -1.83,
+          "selected": "susceptibility",
+          "d_null_best": 19.7,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.307,
+            "interaction": -3.657,
+            "susceptibility": -0.424
+          },
+          "cond_number": 56.9,
+          "corr_alpha_beta": 0.112,
+          "degenerate": false,
+          "confident_wrong": false,
+          "reason": "a perturbation is real (\u0394BIC vs null=19.7) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'interaction' by only \u0394BIC=1.0 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "Phocaeicola",
+          "call": "no-change",
+          "logFC": -1.84,
+          "selected": "interaction",
+          "d_null_best": 4.77,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.123,
+            "interaction": -1.406,
+            "susceptibility": -0.167
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=4.8, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Parabacteroides",
+          "call": "no-change",
+          "logFC": -0.34,
+          "selected": "interaction",
+          "d_null_best": -5.55,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.057,
+            "interaction": -0.055,
+            "susceptibility": -0.026
+          },
+          "cond_number": 97.6,
+          "corr_alpha_beta": 0.908,
+          "degenerate": false,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-5.6, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Parasutterella",
+          "call": "unresolved",
+          "logFC": -1.31,
+          "selected": "susceptibility",
+          "d_null_best": 21.7,
+          "delta": {
+            "null": 0.0,
+            "growth": 0.108,
+            "interaction": 0.18,
+            "susceptibility": 0.162
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.928,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "a perturbation is real (\u0394BIC vs null=21.7) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'interaction' by only \u0394BIC=0.1 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "Phascolarctobacterium",
+          "call": "no-change",
+          "logFC": -0.41,
+          "selected": "susceptibility",
+          "d_null_best": 4.23,
+          "delta": {
+            "null": 0.0,
+            "growth": 0.161,
+            "interaction": NaN,
+            "susceptibility": 0.312
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.966,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=4.2, knob=susceptibility) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Paraprevotella",
+          "call": "no-change",
+          "logFC": -1.05,
+          "selected": "growth",
+          "d_null_best": -4.37,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.095,
+            "interaction": NaN,
+            "susceptibility": -0.066
+          },
+          "cond_number": 109.1,
+          "corr_alpha_beta": 0.876,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-4.4, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Escherichia/Shigella",
+          "call": "no-change",
+          "logFC": 3.48,
+          "selected": "interaction",
+          "d_null_best": -5.12,
+          "delta": {
+            "null": 0.0,
+            "growth": 4.057,
+            "interaction": 12.601,
+            "susceptibility": 4.279
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 0.965,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-5.1, knob=interaction) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        },
+        {
+          "group": "Enterocloster",
+          "call": "unresolved",
+          "logFC": -2.0,
+          "selected": "susceptibility",
+          "d_null_best": 38.26,
+          "delta": {
+            "null": 0.0,
+            "growth": -1.801,
+            "interaction": -5.127,
+            "susceptibility": -1.878
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "a perturbation is real (\u0394BIC vs null=38.3) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'growth' by only \u0394BIC=0.1 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "Bilophila",
+          "call": "unresolved",
+          "logFC": -0.45,
+          "selected": "interaction",
+          "d_null_best": 14.65,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.204,
+            "interaction": -2.026,
+            "susceptibility": -0.288
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "the winning knob is 'interaction', but growth (\u03b1\u209c) and self-limitation (\u03b2\u209c\u209c) are DEGENERATE here: the Laplace curvature on the pair is near-singular (condition number inf, |corr|=1.000). K\u1d62=\u2212\u03b1\u1d62/\u03b2\u1d62\u1d62 means a growth change and a carrying-capacity change give the same steady state \u2014 separable only by the transient, which this sampling does not resolve. NUDGE abstains (NUDGE-LIM-020). [Hessian not positive definite (theta* is not a local min): abstain]"
+        },
+        {
+          "group": "Hungatella",
+          "call": "unresolved",
+          "logFC": -3.44,
+          "selected": "susceptibility",
+          "d_null_best": 19.63,
+          "delta": {
+            "null": 0.0,
+            "growth": -1.791,
+            "interaction": -7.497,
+            "susceptibility": -1.834
+          },
+          "cond_number": Infinity,
+          "corr_alpha_beta": 1.0,
+          "degenerate": true,
+          "confident_wrong": false,
+          "reason": "a perturbation is real (\u0394BIC vs null=19.6) but WHICH knob moved is unidentifiable: 'susceptibility' beats runner-up 'growth' by only \u0394BIC=0.1 < 6 \u2014 NUDGE abstains rather than guess"
+        },
+        {
+          "group": "Other",
+          "call": "no-change",
+          "logFC": -1.08,
+          "selected": "growth",
+          "d_null_best": -8.09,
+          "delta": {
+            "null": 0.0,
+            "growth": -0.322,
+            "interaction": -1.207,
+            "susceptibility": -0.453
+          },
+          "cond_number": 9.9,
+          "corr_alpha_beta": 0.726,
+          "degenerate": false,
+          "confident_wrong": false,
+          "reason": "no single-knob model beats the no-change null by \u0394BIC\u226510 (best \u0394BIC=-8.1, knob=growth) \u2014 the perturbation is inert or not captured by an \u03b1/\u03b2/\u03b5 change; NUDGE declines to manufacture a mechanism"
+        }
+      ]
+    }
+  ]
+}
