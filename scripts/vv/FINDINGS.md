@@ -1245,3 +1245,42 @@ an ABSTENTION on *C. difficile*. Surfaced prominently, not buried behind the pos
 **Wiring.** `nudge lotka` CLI verb + `service.lotka_demo` + a Mechanism Card (`NUDGE-METHOD-012`)
 + `NUDGE-LIM-020` + two gLV decoys (`generate_alpha_beta_confound_decoy`,
 `generate_no_perturbation_null`) + `notebooks/Temporal_Ecology.ipynb`. Additive / opt-in.
+
+# Prototype — the unified affine-nuisance guard (systemic fix for the differential confound class)
+
+*Prototype (experimental, NOT shipped): `src/nudge/inference/_proto_nuisance.py`; measured by
+`scripts/eval/proto_nuisance_sweep.py` + `proto_nuisance_confirm.py`. Full design + migration:
+`design/PERTURBED_CONFOUND_STRATEGY.md`. Baseline = this worktree's pre-4b/4c `differential`.*
+
+The red-team's differential holes (additive P1, multiplicative P4, small-multiplicative P5) are
+ONE class: a per-condition **affine** nuisance `y = s·x + o` on one context's PERTURBED cells
+(control clean). The shipped fix is per-confound OFF-cluster bands with measured blind gaps (P5
+slips gate 4c's `(1.18,1.30]`). Prototyped two principled replacements and MEASURED them:
+
+- **(B) nuisance-augmented BIC abstention** — add the affine `(s,o)` as free nuisances; abstain
+  unless the bio knob EARNS its BIC parameter over a pure-affine null (`earn = profiled ΔBIC`),
+  in both directions. **Coverage (the thing bands can't do): 0 confident-wrong across the whole
+  uniform-affine sweep** — 30 cases/2 seeds spanning `s∈[1.05,1.50]` (incl. P5's interior and the
+  `(1.18,1.30]` gap), `o∈[1,5]`, and mixed; `earn ∈ [−7.6, −6.1]`, all `< 0`. The baseline leaves
+  **13/30 confident-wrong**. The guarantee is structural: the confound family is inside the free-
+  affine null's span, so the knob provably cannot earn its parameter over it.
+- **Positive controls preserved** (earn separation is enormous, `[−7.6,−6.1]` vs `[+33,+83]`):
+  gain-diff (0.55, earn +33) and ceiling-diff (1.4, earn +55/+83) RESOLVE; threshold and
+  no-difference abstain, matching the baseline. **0 over-abstention beyond the baseline.**
+- **(A) inert-anchor normalization** — estimate `(s,o)` from a perturbation-inert gene block and
+  undo the affine before attribution. Recovers a genuine ceiling under a technical scale
+  `s_tech=1.3`: anchor `s_hat=1.302/1.309` (<1% error), ceiling-diff preserved + magnitude
+  corrected.
+
+**Honest residual (bounded, not hidden).** (B) covers the UNIFORM affine family completely; a
+**non-uniform** above-median-only nuisance is *observationally identical to a genuine ceiling*
+(the documented evader the P5 repro explicitly excludes) and fools (B) on 1 of 2 seeds — that is
+a true identifiability limit, resolvable only by the orthogonal anchor (A), not by any band.
+
+**Honest dead-end (recorded so it isn't re-tried).** The first (B) hypothesis — a Fisher/Laplace
+**condition-number** degeneracy on the joint `[knob,s,o]` Hessian — does NOT discriminate: it
+saturates (~900–2600) for confound and genuine ceiling alike, because the linear offset `o`
+(count units) dominates the condition number. The local profiled-curvature ratio is no better
+(~0.3 for both). The degeneracy that matters is GLOBAL (can one affine match BOTH modes at
+once), so the discriminative measured statistic is the **integrated profiled ΔBIC**, not a local
+curvature. Compute: guard B ≈ 16–60 s/call, ~5–10× the shipped differential (opt-in).
