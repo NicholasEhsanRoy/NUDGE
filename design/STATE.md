@@ -73,6 +73,32 @@ matplotlib moved to `[viz]`; `[dev]` depends on it. **Deferred** (designed in
 `design/VISUALIZATION_DESIGN.md`, later slices): the ~11 other renderers, the LIM-006
 constitutive-flip **animation**, the MCP `render_figure` tool.
 
+**Efficiency / scaling layer — adjoint gradients + MATRIX-FREE identifiability (Depth, 20%).**
+Two additive, opt-in modules that make NUDGE's mechanistic-ODE work scale to large networks
+without ever materializing the O(N²) objects an ad-hoc script would. (1) `inference/adjoint.py`
+— the discrete adjoint (reverse-mode through a `lax.scan` RK4) gives the trajectory-loss
+gradient at cost O(1) in the parameter count vs the forward-sensitivity augmented system
+(measured curve in FINDINGS; `scripts/vv/adjoint_scaling.py`). (2) **`inference/sloppiness.py`
+matrix-free identifiability** (`NUDGE-LIM-023`) — the sloppiness/identifiability diagnostic
+(FIM = `JᵀJ/σ²` eigenspectrum → `well-constrained`/`sloppy-but-predictive`/`unidentifiable`)
+now has a path that touches the FIM **only through matvecs** `JᵀJ·v` (one `jax.jvp` + one
+`jax.vjp`), never forming `J = ∂(obs)/∂θ`, so it does NOT OOM the dense `jacfwd` at scale. The
+dense `sloppiness_diagnostic(jac_log, …)` API is unchanged; the additions are
+`sloppiness_diagnostic_matrixfree` / `analyze_model_matrixfree` / `fim_matvec` and
+`adjoint.ode_identifiability` (large-ODE end-to-end). **MEASURED** (`scripts/vv/sloppiness_scaling.py`,
+77-state gLV): dense jacfwd OOMs at ~4000–6000 free params (systemd `MemoryMax` cap; the
+∝n_params·n_steps·n_states blow-up that hits ~59 GB at the 2000-*state* scale) while matrix-free
+stays **flat at ~0.42 GB, ~3 s to 6000 params**, returning the same verdict. Matches the dense
+diagnostic **bit-for-bit** on the validated small cases (same label / eigenvalues / null
+direction). **Honest bound (`NUDGE-LIM-023`, fail-safe):** a matrix-free Krylov solver is
+reliable for the LARGEST FIM eigenvalues but NOT the smallest (the sloppy/near-null direction) of
+an ill-conditioned FIM — so the iterative path certifies `unidentifiable` via shape rank
+deficiency (`n_params > n_obs`), Rayleigh-residual-verifies any smallest eigenpair, and
+**abstains rather than assert identifiability it cannot verify**; the exact dense-via-matvec
+route (`method="dense"`) is the definitive verdict for moderate `n_params`. FINDINGS "Matrix-free
+identifiability"; `tests/inference/test_sloppiness_matrixfree.py`. Additive/opt-in — never
+touches frozen `fit.py`/`core/`.
+
 **The PoC works end to end** (`tests/inference/test_fit_end_to_end.py`, slow lane):
 generate ground-truth data → `fit()` → recover kinetics → attribute
 threshold/gain/ceiling → and `off-model` when a linear model suffices.

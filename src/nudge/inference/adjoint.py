@@ -66,6 +66,8 @@ __all__ = [
     "fit_ode_adjoint",
     "make_glv_problem",
     "make_linear_pathway_problem",
+    "ode_trajectory_predict_fn",
+    "ode_identifiability",
 ]
 
 #: A parameterised vector field ``f(x, θ, u) -> dx/dt`` — ``x`` the state ``(n_x,)``,
@@ -478,4 +480,51 @@ def fit_ode_adjoint(
         loss_history=history,
         n_steps=steps,
         n_theta=problem.n_theta,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# matrix-free identifiability of a large ODE problem (end-to-end)
+# --------------------------------------------------------------------------- #
+def ode_trajectory_predict_fn(problem: ODEProblem) -> Callable[[Array], Array]:
+    """A differentiable ``theta -> flattened observed trajectory`` map for ``problem``.
+
+    The observables are the fitted trajectory ``x(θ)`` at the observation times, flattened to
+    a ``(T·n_states,)`` vector — exactly the residual map whose Fisher information is the
+    identifiability of the fit. Used as the ``predict_fn`` for the matrix-free sloppiness
+    diagnostic, so a large gLV / pathway network is analyzed **without materializing J**.
+    """
+    x0, u_grid, obs_idx, _target = problem.jax_args()
+    field, dt = problem.field, problem.dt
+
+    def predict(theta: Array) -> Array:
+        traj = rk4_integrate(field, x0, jnp.asarray(theta, problem.dtype), u_grid, dt, obs_idx)
+        return traj.reshape(-1)
+
+    return predict
+
+
+def ode_identifiability(
+    problem: ODEProblem,
+    theta: Array | np.ndarray | None = None,
+    *,
+    sigma: float = 1e-2,
+    **kwargs: Any,
+):
+    """Matrix-free identifiability / sloppiness report for a (large) ODE fit ``problem``.
+
+    Builds the trajectory prediction map (:func:`ode_trajectory_predict_fn`) and runs
+    :func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree` on it — the FIM
+    eigenspectrum + sloppy-vs-unidentifiable verdict computed via ``JᵀJ·v`` matvecs only, so
+    it scales to parameter counts that OOM the dense ``jacfwd`` sensitivity matrix. ``theta``
+    defaults to the problem's true free parameters. Extra ``kwargs`` pass through to the
+    diagnostic (``n_eigs``, ``method``, thresholds, …). Imported lazily to keep this module's
+    import graph independent of the sloppiness layer.
+    """
+    from nudge.inference.sloppiness import sloppiness_diagnostic_matrixfree
+
+    theta_arr = problem.theta0 if theta is None else np.asarray(theta)
+    predict_fn = ode_trajectory_predict_fn(problem)
+    return sloppiness_diagnostic_matrixfree(
+        predict_fn, np.asarray(theta_arr, dtype=np.float64), sigma, **kwargs
     )

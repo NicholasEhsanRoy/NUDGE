@@ -9,6 +9,31 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Matrix-free identifiability / sloppiness diagnostic — scales past the dense-`jacfwd` OOM
+  (`NUDGE-LIM-023`).** The sloppiness diagnostic (FIM = `JᵀJ/σ²` eigenspectrum →
+  `well-constrained` / `sloppy-but-predictive` / `unidentifiable`) gains a **matrix-free** path
+  that computes the spectrum + verdict using ONLY matvec products `JᵀJ·v` — one `jax.jvp`
+  (`J·v`) composed with one `jax.vjp` (`Jᵀ·w`) — **never materializing** the sensitivity matrix
+  `J = ∂(observables)/∂θ`, so its memory is O(n_params + n_obs), not O(n_obs·n_params). The
+  dense `sloppiness_diagnostic(jac_log, …)` API is UNCHANGED; the additions are
+  `sloppiness_diagnostic_matrixfree` / `analyze_model_matrixfree` / `fim_matvec`
+  (`src/nudge/inference/sloppiness.py`) and `ode_identifiability` / `ode_trajectory_predict_fn`
+  (`src/nudge/inference/adjoint.py`, large-ODE end-to-end). **Verified equal to the dense
+  diagnostic bit-for-bit** on the validated cases (same label / eigenvalues / null direction:
+  the sum-of-exponentials sloppy model and the `A·e^{-(k₁+k₂)t}` unidentifiable model);
+  `fim_matvec` reproduces `JᵀJ/σ²·v` to rtol 1e-8. **MEASURED scaling**
+  (`scripts/vv/sloppiness_scaling.py`, 77-state gLV): dense `jacfwd` OOMs at ~4000–6000 free
+  params (systemd `MemoryMax=2.5 GB` cap; peak RSS grows ∝ n_params) while matrix-free stays
+  **flat at ~0.42 GB, ~3 s to 6000 params** with the same verdict. **Honest bound
+  (`NUDGE-LIM-023`, fail-safe):** an iterative Krylov solver is reliable for the LARGEST FIM
+  eigenvalues but not the smallest (the sloppy/near-null direction) of an ill-conditioned FIM —
+  so the iterative path certifies `unidentifiable` via shape rank deficiency
+  (`n_params > n_obs`), Rayleigh-residual-verifies any smallest eigenpair, and **abstains rather
+  than assert identifiability it cannot verify**; the exact dense-via-matvec route
+  (`method="dense"`) is the definitive verdict for moderate `n_params`. Additive/opt-in — never
+  touches frozen `fit.py`/`core/`. `tests/inference/test_sloppiness_matrixfree.py`; FINDINGS
+  "Matrix-free identifiability".
+
 - **Protein aggregation / fibrillization attribution (`NUDGE-METHOD-013`, `NUDGE-LIM-021`)
   — the efficiency demo + a third dynamical-systems domain.** NUDGE analyzes an amyloid
   aggregation curve (the sigmoidal ThT / polymer-mass trace) by fitting the filament master
