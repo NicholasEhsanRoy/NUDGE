@@ -8,19 +8,21 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000022-redteam-finalsweep2.md`. That immutable record is the source of truth;
+`runs/000000023-orchestrator-stop.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: RUNNING.** P3/P1/P4/P2/P5 CLOSED/BOUNDED + merged. The 2nd FINAL full sweep
-(`runs/000000022`) RAN the previously-unreached LIM-017 lyapunov collusion probe and returned
-**HOLES_FOUND: 1** → NOT a STOP: a NEW hole **P6** (`attribute_lyapunov_multi` — a perturbed-only
-batch ×2.0 defeats the LIM-017 best-buffered-pair corroboration → confident bare `ceiling`; the
-same systemic class as P1/P2/P4/P5, now in the core multi-point breaker). The fix loop resumes.
+**Status: PAUSED BY USER (not at HOLES_FOUND: 0).** P3/P1/P4/P2/P5 CLOSED/BOUNDED + merged
+(5 holes, each audited PASS + orchestrator-re-verified). The 2nd final sweep (`runs/000000022`)
+found a genuine NEW hole **P6** (`attribute_lyapunov_multi` corroboration-collusion → confident
+`ceiling`; re-confirmed 3/3 deterministic). Because P6 is real, the loop's `HOLES_FOUND: 0` STOP
+was NOT met; the **user chose to stop here** (the systemic class judged sufficiently addressed by
+P1–P5), leaving **P6 as a documented OPEN hole**. See `runs/000000023`.
 
-- **Next agent:** `nudge-uq-fixer` on **P6** (port the differential OFF-cluster/scale check into
-  `attribute_lyapunov_multi`; `lyapunov.py` is NOT frozen core), then `nudge-audit` → merge →
-  `nudge-red-team`.
-- **STOP** when `nudge-red-team` reports `HOLES_FOUND: 0` after a genuine FULL sweep.
+- **Next action when the loop resumes:** `nudge-uq-fixer` on **P6** (port the differential
+  OFF-cluster / perturbed-vs-control scale check into `attribute_lyapunov_multi`; `lyapunov.py`
+  is NOT frozen core), then `nudge-audit` → merge → `nudge-red-team`; then the un-probed surface
+  (dose-response / cross-modality / epistasis / constitutive for this vector).
+- **Do NOT dispatch any agent until the user says go.**
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
@@ -91,6 +93,7 @@ last; never edit a past row):
 | 000000020 | `runs/000000020-audit-P5-v2.md` | audit | P5 re-fix | **AUDIT: PASS** — hole gone both regimes at ≥4+ seeds + interior probe; separators genuine ~0.10-margin gaps; over-abstention narrow+documented; overclaims retracted |
 | 000000021 | `runs/000000021-orchestrator-P5-merge.md` | orchestrator | P5 merge | independently re-verified + fast-forward merged → `1904b46` + precision fix (≤0.48→≤~0.50); P5 BOUNDED; queue EMPTY |
 | 000000022 | `runs/000000022-redteam-finalsweep2.md` | redteam | FINAL full sweep #2 | **HOLES_FOUND: 1** — NOT a STOP: RAN the unreached LIM-017 lyapunov collusion probe → NEW hole **P6** (`attribute_lyapunov_multi`); 5 fixes held jointly; report `FAILSAFE_REDTEAM_6.md`; commit `fe0cb92` |
+| 000000023 | `runs/000000023-orchestrator-stop.md` | orchestrator | loop pause | **PAUSED BY USER** (not at HOLES_FOUND: 0). P6 re-confirmed 3/3 deterministic, left OPEN + documented; P1–P5 stand closed/bounded. Resume on P6. |
 
 ---
 
