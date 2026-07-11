@@ -1261,11 +1261,19 @@ synthetic near-equilibrium confound the null direction lies on the α⇄β diago
 same sign, |corr|→1) → the hint *"Cannot separate Growth (α) from Interaction (β)"*; a
 transient-resolved fit exposes no direction. `fit.py`/`core/` untouched.
 
-**Real Stein 2013 (`scripts/vv/stein_attribution.py`, k=3, measured):** *Clostridium difficile*
-→ **abstains** (`no-change`; no antibiotic-susceptibility ε signature beats the null — its bloom
-is interaction-mediated, published ε≈−0.31); the underdetermined "promoted" background group →
-**`UNRESOLVED` with the directional abstention** (cond→∞, |corr|≈0.99, null direction on the
-α⇄β diagonal → *"Cannot separate Growth from Interaction"*). **0 confident-wrong on real data.**
+**Real Stein 2013 (`scripts/vv/stein_attribution.py`, k=3, measured — reconciled to the
+headless notebook run):** all three k=3 functional groups **abstain** (0 confident-wrong on real
+data). *Clostridium difficile* → `no-change` (best single-knob ΔBIC≈−3.2 < 10; no direct-kill ε —
+its bloom is interaction-mediated, published ε≈−0.31); the strongly-**suppressed** group →
+`no-change` (ΔBIC≈7.4 < 10 — even a large published effect does not earn a confident knob from this
+sampling). The strongly-**promoted** group → **`UNRESOLVED` with the directional abstention**
+(cond→∞, |corr(α,βᵢᵢ)|≈0.995). **Measured null direction ≈ [1.00, −0.01] over (log αₜ, log|βₜₜ|) —
+almost pure growth-α, NOT the 45° diagonal.** So the hint the data actually returns is *"Growth (α)
+is not identifiable here … the growth rate is under-determined by this sampling"* — NUDGE names
+growth-α as the un-pinnable coordinate (sample the growth transient to break the Kₜ=−αₜ/βₜₜ tie).
+*(The α⇄β diagonal "Cannot separate Growth from Interaction" hint is the SYNTHETIC near-equilibrium
+confound's result above; on real Stein the geometry is single-knob-dominated. The direction-aware
+`_degeneracy_hint` reports whichever the data shows.)*
 
 **Experimental-design sweep — "what would it take?" (`scripts/vv/glv_design_sweep.py`,
 synthetic; NO math change / NO regularization).** A known ε (antibiotic-susceptibility)
