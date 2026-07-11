@@ -132,6 +132,17 @@ def _oed(call: str) -> dict[str, Any]:
     }
 
 
+def _robustness(call: str) -> dict[str, Any]:
+    prox = {"robust": 0.33, "near-fold": 0.9, "unresolved": 0.02,
+            "not-bistable": float("nan")}[call]
+    return {
+        "kind": "robustness", "call": call, "reason": "test", "label": "1node",
+        "proximity": prox, "one_sided": call in ("robust", "near-fold"),
+        "channels": {"critical_slowing": 0.5, "basin_collapse": 0.2,
+                     "lobe_overlap": 0.6},
+    }
+
+
 def _cross_modality(abstain: bool) -> dict[str, Any]:
     call = "non-responsive" if abstain else "threshold"
     return {"variants": [
@@ -156,6 +167,7 @@ CASES = [
     ("design", _design(False), _design(True)),
     ("oed", _oed(""), _oed("unresolved")),
     ("cross_modality", _cross_modality(False), _cross_modality(True)),
+    ("robustness", _robustness("robust"), _robustness("not-bistable")),
 ]
 
 
