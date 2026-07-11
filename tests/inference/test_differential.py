@@ -41,18 +41,23 @@ def _fit(
     depth_ratio: float = 1.02,
     off_shift_ratio: float = 1.0,
     off_scale: float = 1.0,
+    off_resolvability: float = 1.0,
+    vmax_b: float = 5.0,
     best_diff: str | None = None,
 ) -> DifferentialFit:
     """A minimal ``DifferentialFit`` carrying just what ``classify_differential`` reads.
 
-    ``off_scale`` is context B's OFF-cluster scale vs its own control (gate 4c, P4); A is
-    fixed at 1.0.
+    ``off_scale`` is context B's OFF-cluster scale vs its own control (gate 4c large-scale, P4);
+    A is fixed at 1.0. ``off_resolvability`` is BOTH contexts' OFF-mode resolvability (gate 4c
+    P5; ≥ 0.25 = resolvable, the confound is not washed out). ``vmax_b`` sets context B's fitted
+    ceiling so ``log2(vmax_b / 2.5)`` drives the ceiling MAGNITUDE gate (P5): 5.0 → |log2|=1.0
+    (a LARGE, un-fakeable ceiling difference that resolves past the gate).
     """
     if best_diff is None:
         best_diff = min(("n", "K", "vmax"), key=lambda m: bic[m])
     est = {m: {"n": 6.0, "K": 1.0, "vmax": 2.5} for m in ("shared", "n", "K", "vmax")}
     est_b = {m: dict(v) for m, v in est.items()}
-    est_b["vmax"] = {"n": 6.0, "K": 1.0, "vmax": 3.2}
+    est_b["vmax"] = {"n": 6.0, "K": 1.0, "vmax": vmax_b}
     est_b["n"] = {"n": 3.5, "K": 1.0, "vmax": 2.5}
     return DifferentialFit(
         target_edge=0, n_species=1, k_modes=2, n_cells_a=n_cells, n_cells_b=n_cells,
@@ -62,6 +67,7 @@ def _fit(
         est_a=est, est_b=est_b, selected=min(bic, key=lambda m: bic[m]), best_diff=best_diff,
         depth_ratio=depth_ratio, off_shift_a=1.0, off_shift_b=off_shift_ratio,
         off_shift_ratio=off_shift_ratio, off_scale_a=1.0, off_scale_b=off_scale,
+        off_resolvability_a=off_resolvability, off_resolvability_b=off_resolvability,
     )
 
 
@@ -167,13 +173,12 @@ def test_classify_off_shift_below_threshold_resolves() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# gate 4c: the MULTIPLICATIVE perturbed-condition scale confound (NUDGE-LIM-016, P4)
+# gate 4c: the perturbed-only MULTIPLICATIVE scale confound (NUDGE-LIM-016, P4 + P5)
 # --------------------------------------------------------------------------- #
-def test_classify_ceiling_multiplicative_inflation_abstains() -> None:
-    # A ceiling winner (would be ceiling-diff) BUT one context's perturbed OFF-cluster SCALE
-    # is inflated above its control beyond the band — the fingerprint of a per-context
-    # MULTIPLICATIVE measurement scale, degenerate with a v_max difference and invisible to
-    # gates 2 (depth) and 4b (additive off_shift). NUDGE must ABSTAIN. INFLATION side = CLOSED.
+def test_classify_gross_scale_out_of_band_abstains() -> None:
+    # (i) A GROSS scale: a ceiling winner whose perturbed OFF-cluster SCALE is inflated beyond
+    # the band [0.80, 1.30] — the fingerprint of a large per-context MULTIPLICATIVE scale.
+    # NUDGE must ABSTAIN (the surviving part of P4).
     bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
     fit = _fit(bic, best_diff="vmax", off_scale=1.6)
     call, reason = classify_differential(fit)
@@ -181,10 +186,9 @@ def test_classify_ceiling_multiplicative_inflation_abstains() -> None:
     assert "OFF-cluster scale" in reason and "NUDGE-LIM-016" in reason
 
 
-def test_classify_ceiling_multiplicative_deflation_abstains() -> None:
-    # A ceiling winner with the OFF-cluster scale DEFLATED below the band — a deflating
+def test_classify_gross_scale_deflation_abstains() -> None:
+    # (i) A ceiling winner with the OFF-cluster scale DEFLATED below the band — a deflating
     # per-context measurement scale (or, indistinguishably, a genuine ceiling reduction).
-    # NUDGE abstains on both (the honest BOUNDED side). Truth cannot be certified.
     bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
     fit = _fit(bic, best_diff="vmax", off_scale=0.55)
     call, reason = classify_differential(fit)
@@ -192,21 +196,66 @@ def test_classify_ceiling_multiplicative_deflation_abstains() -> None:
     assert "OFF-cluster scale" in reason and "deflated" in reason
 
 
-def test_classify_ceiling_off_scale_in_band_resolves() -> None:
-    # A genuine ceiling INCREASE leaves the OFF-cluster spread ≈ 1 (measured ≤ 1.18 even ×4),
-    # inside the band — the guard must NOT fire, so a genuine ceiling-diff still resolves.
+def test_classify_gross_scale_guard_now_covers_the_gain_channel() -> None:
+    # REVISED P5 LOCK (was test_classify_off_scale_guard_is_ceiling_scoped, now FALSIFIED). The
+    # P5 re-measurement proved a small perturbed-only multiplicative scale is BIC-assigned to
+    # the GAIN (n) channel too, not only v_max — so the gate-4c large-scale guard is NO LONGER
+    # ceiling-scoped: a GAIN winner with a gross out-of-band OFF-cluster scale must now ABSTAIN
+    # (the old test asserted it resolved gain-diff — that was the hole).
+    bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
+    fit = _fit(bic, best_diff="n", off_scale=1.9)
+    call, reason = classify_differential(fit)
+    assert call == "unresolved"
+    assert "gain-diff" in reason and "NUDGE-LIM-016" in reason
+
+
+def test_classify_unresolvable_off_baseline_abstains_ceiling() -> None:
+    # (ii) RESOLVABILITY (P5): a would-be ceiling-diff whose OFF mode is NOT resolvable above
+    # zero (near-zero basal) — a perturbed-only multiplicative scale is washed out of the OFF
+    # statistics there and cannot be ruled out. NUDGE abstains (even with a large ceiling
+    # magnitude and an in-band off_scale).
     bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
-    fit = _fit(bic, best_diff="vmax", off_scale=1.1)
+    fit = _fit(bic, best_diff="vmax", off_scale=1.1, off_resolvability=0.1, vmax_b=5.0)
+    call, reason = classify_differential(fit)
+    assert call == "unresolved"
+    assert "resolvably above zero" in reason and "NUDGE-LIM-016 P5" in reason
+
+
+def test_classify_unresolvable_off_baseline_abstains_gain() -> None:
+    # (ii) RESOLVABILITY (P5) applies to the GAIN channel too: a gain winner in a near-zero-OFF
+    # regime abstains (the confound fakes gain there and no OFF statistic separates it).
+    bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
+    fit = _fit(bic, best_diff="n", off_scale=1.05, off_resolvability=0.1)
+    call, _ = classify_differential(fit)
+    assert call == "unresolved"
+
+
+def test_classify_small_ceiling_magnitude_abstains() -> None:
+    # (iii) MAGNITUDE (P5): a resolvable-OFF ceiling winner with an in-band off_scale but a SMALL
+    # fitted magnitude (|log2 v_max ratio| < 0.60) — within the reach of a perturbed-only scale
+    # that survives the off_scale band. NUDGE abstains (the honest sacrifice of small ceilings).
+    bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
+    fit = _fit(bic, best_diff="vmax", off_scale=1.1, off_resolvability=1.0, vmax_b=3.0)
+    call, reason = classify_differential(fit)
+    assert call == "unresolved"
+    assert "|log2 v_max ratio|" in reason and "NUDGE-LIM-016 P5" in reason
+
+
+def test_classify_large_ceiling_resolvable_resolves() -> None:
+    # A LARGE genuine ceiling difference (|log2 v_max ratio| = 1.0 ≥ 0.60), resolvable OFF, in
+    # band — un-fakeable by a bounded perturbed-only scale, so it MUST still resolve.
+    bic = {"shared": 400.0, "n": 300.0, "K": 250.0, "vmax": 100.0}
+    fit = _fit(bic, best_diff="vmax", off_scale=1.1, off_resolvability=1.0, vmax_b=5.0)
     call, _ = classify_differential(fit)
     assert call == "ceiling-diff"
 
 
-def test_classify_off_scale_guard_is_ceiling_scoped() -> None:
-    # The gate-4c guard is CEILING-SCOPED (a global scale is degenerate with v_max, not gain):
-    # a GAIN winner with a wildly out-of-band OFF-cluster scale must STILL resolve gain-diff —
-    # a genuine gain difference reshapes the distribution, so there is no over-abstention here.
+def test_classify_resolvable_gain_still_resolves() -> None:
+    # A genuine gain difference with a resolvable OFF baseline and an in-band off_scale must
+    # resolve — the gain channel is trustworthy when the OFF mode is resolvable (no magnitude
+    # gate on gain; a resolvable-OFF confound assigned to n ties on the runner-up, gate 4).
     bic = {"shared": 200.0, "n": 100.0, "K": 130.0, "vmax": 160.0}
-    fit = _fit(bic, best_diff="n", off_scale=1.9)
+    fit = _fit(bic, best_diff="n", off_scale=1.1, off_resolvability=1.0)
     call, _ = classify_differential(fit)
     assert call == "gain-diff"
 
@@ -223,8 +272,11 @@ def _pair(mechanism: str, factor: float, *, scale_b: float = SCALE, seed: int = 
 
 @pytest.mark.slow
 def test_recovers_ceiling_difference() -> None:
-    # A raised ceiling in context B (the drug-resistance story) → ceiling-diff.
-    a, b = _pair("ceiling", 1.4, seed=1)
+    # A raised ceiling in context B (the drug-resistance story) → ceiling-diff. Uses ×2.0: the
+    # P5 magnitude gate sacrifices SMALL ceiling differences (< ~×1.5, |log2 ratio| < 0.60) as
+    # inseparable from a perturbed-only multiplicative scale, so only a LARGE genuine ceiling
+    # resolves (×1.4 now abstains — see test_small_genuine_ceiling_is_sacrificed_to_P5_bound).
+    a, b = _pair("ceiling", 2.0, seed=1)
     res = attribute_differential(a, b, CIRC, steps=250, seed=0)
     assert res.call == "ceiling-diff"
     assert res.is_reliable
@@ -399,13 +451,54 @@ def test_decoy_multiplicative_factor_one_is_no_difference() -> None:
     assert res.call == "no-difference"
 
 
+# --------------------------------------------------------------------------- #
+# DECOY (NUDGE-LIM-016, P5): a SMALL perturbed-only multiplicative scale (c ~ 1.15–1.25) — the
+# sharpest confound — fakes a confident gain-diff / ceiling-diff that the P4 gate 4c missed (it
+# lands at off_scale INSIDE the genuine range, so the OFF-cluster fingerprint does NOT separate
+# it). The P5 fix must convert every one to an abstention in BOTH regimes: RT (near-zero basal)
+# via the resolvability gate, TEST (resolvable basal) via the ceiling-magnitude gate. Repro:
+# scripts/redteam/differential_small_mult_gain_hole.py (RT) + ..._testregime.py (TEST), 4 seeds.
+# --------------------------------------------------------------------------- #
+def _small_mult_confound_pair(circ, scale: float, n_cells: int, factor: float, *, seed: int):
+    """A no-difference pair (given regime circuit/depth), then a small ×factor on B's perturbed."""
+    import numpy as np
+
+    from nudge.inference.differential import Context
+
+    a, b = simulate_context_pair(
+        circ, mechanism="none", n_cells=n_cells,
+        scale_a=scale, scale_b=scale, obs_sd=OBS_SD, seed=seed,
+    )
+    b_data = np.asarray(b.data, dtype=float) * factor
+    return a, Context(name="B", data=b_data, control=b.control)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("factor", [1.15, 1.20, 1.25])
+@pytest.mark.parametrize("seed", [0, 2])
+@pytest.mark.parametrize("regime", ["RT", "TEST"])
+def test_decoy_small_multiplicative_scale_abstains(regime: str, seed: int, factor: float) -> None:
+    # The P5 hole: a small perturbed-only ×factor (truth = no-difference) fakes a confident
+    # gain-diff / ceiling-diff at an off_scale inside the genuine range. NUDGE must ABSTAIN
+    # (never a *-diff) in BOTH regimes — RT via resolvability, TEST via ceiling magnitude.
+    if regime == "RT":
+        circ, scale, n_cells = RT_CIRC, RT_SCALE, RT_NCELLS
+    else:
+        circ, scale, n_cells = CIRC, SCALE, NCELLS
+    a, b = _small_mult_confound_pair(circ, scale, n_cells, factor, seed=seed)
+    res = attribute_differential(a, b, circ, target_edge=0, steps=250, seed=seed)
+    assert res.call not in POSITIVE, (
+        f"{regime} factor={factor} seed={seed}: spurious {res.call} on a small perturbed scale"
+    )
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("seed", [1, 2])
 def test_genuine_ceiling_inflation_still_resolves_past_gate_4c(seed: int) -> None:
-    # THE no-over-abstention lock (gate 4c INFLATION side is CLOSED, not over-broad): a GENUINE
-    # ceiling INFLATION (×2.0, both controls clean, no measurement scale) leaves the OFF-cluster
-    # spread ≈ 1 (measured ≤ 1.18 even ×4), inside the band — so it must STILL resolve
-    # ceiling-diff. If gate 4c ever over-abstained on a genuine ceiling this fails loudly.
+    # THE no-over-abstention lock: a GENUINE LARGE ceiling INFLATION (×2.0, both controls clean,
+    # no measurement scale, resolvable OFF) has |log2 v_max ratio| ≈ 1.0 ≥ 0.60 — un-fakeable by
+    # a bounded perturbed-only scale — so it must STILL resolve ceiling-diff. If the P5 magnitude
+    # or resolvability gate ever over-abstained on a large genuine ceiling this fails loudly.
     a, b = _pair("ceiling", 2.0, seed=seed)
     res = attribute_differential(a, b, CIRC, steps=250, seed=0)
     assert res.call == "ceiling-diff"
@@ -415,9 +508,27 @@ def test_genuine_ceiling_inflation_still_resolves_past_gate_4c(seed: int) -> Non
 @pytest.mark.slow
 @pytest.mark.xfail(
     strict=True,
-    reason="BOUNDED, not closed (NUDGE-LIM-016 P4): a strong genuine ceiling REDUCTION shrinks "
-    "the OFF cluster into the same band as a DEFLATING measurement scale — they are "
-    "indistinguishable without an independent depth anchor, so gate 4c abstains on both. This "
+    reason="BOUNDED (NUDGE-LIM-016 P5): a SMALL genuine ceiling difference (×1.4, |log2 ratio| "
+    "≈ 0.45 < 0.60) is within the reach of a perturbed-only multiplicative scale that survives "
+    "the off_scale band, so the P5 ceiling-magnitude gate abstains on it (inseparable from a "
+    "scale). This is the honest over-abstention accepted to kill the small-scale confound; a "
+    "LARGE genuine ceiling (≥ ~×1.5) still resolves. If a future independent per-context depth "
+    "anchor makes ×1.4 separable, this xfail XPASSes and forces the bound to be re-examined.",
+)
+def test_small_genuine_ceiling_is_sacrificed_to_P5_bound() -> None:
+    # We WOULD like a small genuine ceiling difference (×1.4) to resolve, but it is inseparable
+    # from a small perturbed-only scale — so the P5 magnitude gate abstains. Strict-xfail LOCK.
+    a, b = _pair("ceiling", 1.4, seed=1)
+    res = attribute_differential(a, b, CIRC, steps=250, seed=0)
+    assert res.call == "ceiling-diff"
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(
+    strict=True,
+    reason="BOUNDED, not closed (NUDGE-LIM-016 P4/P5): a strong genuine ceiling REDUCTION shrinks "
+    "the OFF cluster into the same band as a DEFLATING measurement scale — indistinguishable "
+    "without an independent depth anchor, so the gate-4c gross-scale guard abstains on both. This "
     "sacrifices resolving a genuine ceiling reduction (the honest price of killing the deflating "
     "confound). If a future independent depth anchor makes this resolve, this xfail XPASSes and "
     "forces the bound to be re-examined.",

@@ -9,6 +9,35 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Fail-safe red-team ROUND 5 — P5: the SMALL perturbed-only multiplicative scale in
+  `differential` is UNGUARDABLE by OFF statistics; re-fixed BOUNDED (`NUDGE-LIM-016` re-sharpened;
+  supersedes P4's clean-gap claim).** The final sweep found a **small** uniform multiplicative
+  factor (`c ≈ 1.15–1.25`) on ONE context's PERTURBED cells (control clean; truth = no-difference)
+  fakes a confident **`gain-diff` / `ceiling-diff`** that slips the P4 gate 4c: it lands at
+  `off_scale` **inside** the genuine range (`ras_switch_1node`, 4 seeds → **HOLES: 3**). A prior fix
+  attempt (`779fc3a`) FAILED independent audit by claiming a false separating gap `[1.184, 1.231]`
+  (cut 1.20). **This round MEASURED (both regimes, 4 seeds) that no OFF-cluster statistic separates
+  the small scale** — a genuine ceiling/gain difference ALSO moves `off_scale` AND `off_shift` via
+  mode-occupancy shifts, so the confident-wrong confound (`off_scale` 1.08–1.28) overlaps the
+  genuine distribution (a genuine ceiling ×1.4 at `off_scale` 1.125 sits *above* a confident
+  confound c=1.15 at 1.099). **Re-fixed (measured, physically-grounded; additive in
+  `inference/differential.py`, frozen core untouched):** gate 4c now, scoped to the {n, v_max}
+  channels a scale is BIC-assigned to, (i) **abstains** on gain-diff AND ceiling-diff when either
+  context's OFF mode is not resolvably above zero — the scale-invariant `off_resolvability` (OFF
+  level ÷ spread of the clean control) below **0.25** (measured RT ≤ 0.136 vs TEST ≥ 0.374), where a
+  uniform scale is washed out; (ii) resolves a **ceiling-diff** only when its fitted `|log2 v_max
+  ratio| ≥ 0.60` in the resolvable regime (a scale surviving the `off_scale` band fakes only ≤ 0.48);
+  a resolvable **gain-diff** is trustworthy; (iii) still catches a GROSS scale via the `off_scale`
+  band `[0.80, 1.30]`, now on the gain channel too. **BOUNDED, not closed:** 0 confident-wrong both
+  regimes at 4 seeds (`differential_small_mult_gain_hole.py 4` + new
+  `differential_small_mult_testregime.py 4`, both HOLES: 0). The honest over-abstention price: a
+  SMALL genuine ceiling (< ~×1.5, strict-xfail lock) and the whole ceiling/gain channel in a
+  near-zero-basal regime; genuine LARGE ceilings, resolvable gain, threshold, and no-difference
+  preserved. Retracts the falsified P4 "clean gap / INFLATION CLOSED" wording everywhere (docstring,
+  `NUDGE-LIM-016`, FINDINGS §P4/§P5, Mechanism Card, STATE, this file). Regression-locked by
+  `test_decoy_small_multiplicative_scale_abstains` (both regimes) + the revised
+  `test_classify_gross_scale_guard_now_covers_the_gain_channel` (was the falsified
+  `test_classify_off_scale_guard_is_ceiling_scoped`) + `test_small_genuine_ceiling_is_sacrificed_to_P5_bound`.
 - **Fail-safe red-team ROUND 3 (design safety gate) + fix (`design/FAILSAFE_REDTEAM_3.md`,
   HOLE 3 → `NUDGE-LIM-013`).** A third adversarial pass found that `design()`'s bifurcation
   **safety gate** flagged `high_risk_of_instability` on a *relative* proximity rise only
@@ -45,7 +74,10 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   **ceiling-scoped** (a global scale is degenerate with `v_max` specifically), so a genuine
   gain/threshold difference reshapes the distribution and is **untouched** (no over-abstention).
   **INFLATION is CLOSED** — a clean measured gap (genuine ceiling ×1.4–×4 ≤ 1.18; every inflating
-  confound `c` ≥ 1.5 ≥ 1.43; midpoint 1.30 is the upper guard; `FINDINGS` §P4). **DEFLATION is
+  confound `c` ≥ 1.5 ≥ 1.43; midpoint 1.30 is the upper guard; `FINDINGS` §P4). *(CORRECTION,
+  superseded by P5 above: this "clean gap" holds only for LARGE factors; a SMALL factor
+  `c ≈ 1.1–1.25` lands INSIDE the genuine range and is not separable by `off_scale` — see the P5
+  entry. The band survives only as a gross-scale catch.)* **DEFLATION is
   BOUNDED** — a genuine ceiling *reduction* collapses the switch toward monostable and shrinks the
   OFF cluster into the same band as a deflating scale (indistinguishable), so the lower guard abstains
   on both, killing the deflating confound at the honest cost of no longer resolving a strong genuine

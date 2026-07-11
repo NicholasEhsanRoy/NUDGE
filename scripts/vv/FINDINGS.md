@@ -1405,6 +1405,89 @@ inflating + deflating) + the factor-1 positive control + the genuine-ceiling pos
 `test_genuine_ceiling_inflation_still_resolves_past_gate_4c` + the strict-xfail bound lock
 `test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound`.
 
+> **⚠️ SUPERSEDED IN PART BY §P5 (below).** P4's central claim — that `off_scale` gives a *clean
+> gap* separating a perturbed-only multiplicative scale from a genuine ceiling (genuine ≤ 1.18,
+> confound ≥ 1.43) — holds ONLY for LARGE factors (`c ≥ 1.5`, tested here). A P5 re-measurement of
+> the untested SMALL-factor interior (`c ∈ [1.10, 1.25]`) FALSIFIED the separation: a confident-wrong
+> confound lands at `off_scale` **1.08–1.28**, INSIDE the genuine-ceiling range (genuine ceiling
+> reaches `off_scale` 1.18 in the test regime), and a genuine ceiling ALSO moves `off_scale` and
+> `off_shift` via mode-occupancy. So gate 4c's `off_scale` band is NOT a clean separator; it survives
+> only as a GROSS-scale catch. The small-factor hole is closed by the P5 resolvability + magnitude
+> gates below. "INFLATION is CLOSED" is corrected to "the GROSS inflating scale is caught; the SMALL
+> inflating scale is BOUNDED (§P5)."
+
+### P5 — the SMALL perturbed-only multiplicative scale is UNGUARDABLE by OFF statistics (BOUNDED)
+
+**The hole (independently reproduced at the repro's DEFAULT 4 seeds).** `uv run python
+scripts/redteam/differential_small_mult_gain_hole.py 4` (RT regime, `ras_switch_1node`, basal=0.05,
+N=3000) → **HOLES: 3** (matching `runs/000000018`): a small uniform ×c on ONE context's PERTURBED
+cells (control clean; truth = no-difference) fakes a confident `gain-diff` / `ceiling-diff`. The
+prior fix attempt (`779fc3a`) failed audit by claiming a clean gap `[1.184, 1.231]` and a cut 1.20 —
+FALSIFIED. My independent fit sweeps (both regimes, 4 seeds each; steps as the repro/tests use) MEASURE
+that no OFF-cluster statistic separates the confound:
+
+| statistic | genuine ceiling (RT) | genuine ceiling (TEST) | confident-wrong confound | separable? |
+|---|---|---|---|---|
+| `off_scale` (OFF spread ratio) | ≤ 1.10 | ≤ 1.18 | 1.08–1.28 (RT) / 1.10–1.26 (TEST) | **NO — overlaps** |
+| `off_shift` (OFF location ratio) | 1.0–2.1 (×2/×4 inflate it) | 1.0–1.42 | 0.71–1.34 (RT) / 0.93–1.29 (TEST) | **NO — genuine ceiling moves it too** |
+
+The confound is genuinely degenerate with a small ceiling/gain difference: a genuine ceiling change
+*also* moves the OFF-cluster statistics via mode-occupancy shifts, so the confound's fingerprint sits
+inside the genuine distribution in BOTH regimes. `off_scale` fails (a genuine ceiling ×1.4 at
+`off_scale` 1.125 sits ABOVE a confident confound c=1.15 at 1.099); `off_shift` fails (a genuine
+ceiling ×2/×4 inflates it to 1.8–2.1, above the confound). **This is not separable by any OFF
+statistic — the P4 "measured gap" was an artifact of testing only large factors.**
+
+**The measured, physically-grounded fix (2 gates, scoped to the `n`/`v_max` channels a scale is
+BIC-assigned to).** A uniform scale corrupts the μ_off/μ_on mode ratio — and so fakes a *confident*
+gain/ceiling-diff no OFF statistic can separate — **precisely when the OFF mode sits near the
+observation-noise floor**: scaling μ_off ≈ 0 by c leaves it ≈ 0 (verified: in RT the confound wins
+BOTH the `n` and `v_max` channels; in TEST, where the OFF mode is resolvable, it only wins `v_max`
+and its `n`-assignments naturally abstain on the runner-up tie).
+
+1. **RESOLVABILITY gate.** Abstain on gain-diff AND ceiling-diff when either context's OFF mode is not
+   resolvably above zero — the *scale-invariant* ratio `off_resolvability` = (OFF-cluster level) ÷
+   (OFF-cluster spread) of each clean control, measured (5 seeds × 2 contexts, data-only): **RT ≤ 0.136
+   vs TEST ≥ 0.374** — a clean gap; the floor is its midpoint **0.25**. (This replaces an earlier
+   obs_sd-based floor, which was unreliable: `calibrate_from_wt` returns an ERRATIC obs_sd, 0.01–2.44
+   across contexts/seeds, not the generator's 0.5 — a measured gotcha.) Catches every RT confound
+   (near-zero basal); a genuine gain difference does not resolve in that regime anyway, so the only
+   sacrifice is a genuine ceiling difference in a near-zero-basal regime.
+2. **CEILING-MAGNITUDE gate.** In the resolvable regime the scale reads as a magnitude-BOUNDED ceiling
+   (the `off_scale` ≤ 1.30 band caps its ON shift), so its faked `|log2 v_max ratio|` stays small:
+   measured **≤ 0.48** for every escaping confound (`off_scale` ≤ 1.30) across both regimes, 4 seeds.
+   A genuine LARGE ceiling difference (×1.6 → 0.68, ×2 → 1.0, ×4 → 1.6) exceeds that reach. So NUDGE
+   resolves ceiling-diff only when `|log2 ratio| ≥ 0.60` (above the 0.48 confound max with margin,
+   below ×1.6); a SMALL genuine ceiling (< ~×1.5) is the honest sacrifice — inseparable from a bounded
+   scale. A resolvable gain-diff is trustworthy (a resolvable-OFF confound assigned to `n` ties out on
+   the runner-up, gate 4).
+3. The GROSS-scale `off_scale` band `[0.80, 1.30]` (the surviving part of P4) still catches a large
+   scale outright, now applied to the gain channel too.
+
+**Re-validation (through the shipped path, 4 seeds, BOTH regimes).**
+- **RT:** `differential_small_mult_gain_hole.py 4` → **HOLES: 0 across 0/4 seeds** (was 3). Every
+  seed×factor abstains `unresolved`.
+- **TEST:** `differential_small_mult_testregime.py 4` → **HOLES: 0** (basal=0.2 regime; caught by the
+  magnitude gate, `|log2| ≤ 0.48 < 0.60`).
+- **No over-abstention beyond the degeneracy:** genuine LARGE ceiling ×2.0 still resolves ceiling-diff
+  (`test_recovers_ceiling_difference`, `test_genuine_ceiling_inflation_still_resolves_past_gate_4c`,
+  |log2| ≈ 1.0), genuine gain ×0.55 still resolves gain-diff (`test_recovers_gain_difference`,
+  resolvable OFF), no-difference reads no-difference, threshold unchanged, the P1/P4 gates unchanged.
+
+**Verdict: BOUNDED, not closed (honest).** A per-context perturbed-only multiplicative scale cannot be
+separated from a *small* ceiling/gain difference from a single steady-state snapshot without an
+independent per-context perturbed-cell depth anchor. NUDGE abstains rather than emit a confident
+`*-diff` (0 confident-wrong, both regimes, 4 seeds). **Over-abstention scope (the honest price):**
+(a) a genuine SMALL ceiling difference (< ~×1.5) abstains everywhere
+(`test_small_genuine_ceiling_is_sacrificed_to_P5_bound`, strict-xfail); (b) the ENTIRE ceiling/gain
+channel abstains in a near-zero-basal (RT) regime (where a genuine gain difference does not resolve
+anyway). Genuine large ceilings, resolvable gain, threshold, and no-difference are preserved.
+
+Decoy: `test_decoy_small_multiplicative_scale_abstains` (RT + TEST × {1.15,1.20,1.25} × seeds{0,2})
++ the strict-xfail `test_small_genuine_ceiling_is_sacrificed_to_P5_bound` + the revised lock
+`test_classify_gross_scale_guard_now_covers_the_gain_channel` (was the falsified
+`test_classify_off_scale_guard_is_ceiling_scoped`).
+
 ## Temporal / Lotka–Volterra attribution (NUDGE-METHOD-012) — the extensibility thesis
 
 **The reframe.** NUDGE observes steady-state *snapshots*; the deferred Capability 4 (temporal)
