@@ -482,6 +482,43 @@ def build_server() -> Any:
         )
 
     @mcp.tool()
+    def differential_robust(
+        path: str,
+        circuit: str = "ras_switch_1node",
+        n: float = 6.0,
+        vmax: float = 2.5,
+        k: float = 1.0,
+        basal: float = 0.2,
+        steps: int = 150,
+    ) -> dict[str, Any]:
+        """ROBUST differential attribution — hardened against a per-condition technical confound.
+
+        Same four-array `.npz` contract as `differential` (`data_a` / `control_a` / `data_b` /
+        `control_b`, activity space), but hardened against the systemic failure mode the banded
+        `differential` guard has **measured blind spots** for: a per-context **affine technical
+        nuisance** (a scale/offset on ONE context's *perturbed* cells only — a batch / depth /
+        capture-efficiency difference, its control clean) that **aliases onto a mechanism** (a
+        scale looks like a raised ceiling `v_max`; an offset shifts the modes → threshold/gain).
+        A naive differential-expression read — and the banded `differential` at some confound
+        magnitudes — calls a confident mechanism difference where the truth is **no-difference**.
+
+        This uses the **Earn-Guard**: it re-fits each context's apparent knob difference against a
+        FREE per-context affine `(s, o)` and returns a positive `*-diff` ONLY if the biological
+        knob **earns** its BIC parameter over that affine null, in both directions — otherwise it
+        abstains (`no-difference` / `unresolved`). Because the whole affine confound family lies
+        inside the free-affine null's span, it abstains on it **continuously** (no calibrated
+        bands, no blind gaps; proven 0/24 confident-wrong on the exact red-team P1/P4/P5 repros).
+        Slower than `differential` (fits a reference + two augmented models per direction). Returns
+        the verdict, the knob it screened, the `earn` (profiled ΔBIC), and the fitted nuisance
+        `(s, o)`.
+        """
+        from nudge.service import differential_robust_file
+
+        return differential_robust_file(
+            path, circuit=circuit, n=n, vmax=vmax, k=k, basal=basal, steps=steps,
+        )
+
+    @mcp.tool()
     def constitutive(
         path: str = "",
         demo: bool = False,

@@ -1149,6 +1149,115 @@ def differential_file(
     )
 
 
+def _jsonsafe(x: float) -> float | None:
+    """NaN / ±inf → None so the verdict serializes cleanly over MCP/JSON."""
+    import math
+
+    return float(x) if isinstance(x, (int, float)) and math.isfinite(x) else None
+
+
+def differential_robust_arrays(
+    data_a: Any,
+    control_a: Any,
+    data_b: Any,
+    control_b: Any,
+    *,
+    circuit: str = "ras_switch_1node",
+    n: float = 6.0,
+    vmax: float = 2.5,
+    k: float = 1.0,
+    basal: float = 0.2,
+    k_modes: int = 2,
+    steps: int = 150,
+    earn_margin: float = 6.0,
+    cond_max: float = 100.0,
+    check_both: bool = True,
+) -> dict[str, Any]:
+    """ROBUST differential attribution — the affine-nuisance **Earn-Guard** (opt-in fail-safe).
+
+    Same four-array contract as :func:`differential_arrays`, but instead of the shipped
+    per-confound OFF-cluster bands — which have **measured blind spots** across the affine
+    confound family (``NUDGE-LIM-016``: a per-context multiplicative scale can land on the
+    threshold/gain channel or between the ceiling band's calibrated cuts, and slip) — this
+    uses the Earn-Guard (:func:`nudge.inference._proto_nuisance.guard_b_classify`). It re-fits
+    each context's apparent knob difference against a **free per-context affine nuisance**
+    ``(s, o)`` and returns a positive ``*-diff`` ONLY if the biological knob **earns** its BIC
+    parameter over that affine null, in BOTH directions. Because the whole per-condition affine
+    confound family lies inside the free-affine null's span, this abstains on it **continuously**
+    — one measured statistic, no calibrated bands, no blind gaps (proven **0/24 confident-wrong**
+    on the exact red-team P1/P4/P5 repros; ``scripts/vv/FINDINGS.md`` §EG). Slower than the banded
+    path (it fits a reference + two augmented models per direction); use it when robustness to a
+    perturbed-side technical confound matters more than latency.
+    """
+    import numpy as np
+
+    from nudge.inference._proto_nuisance import guard_b_classify
+    from nudge.inference.differential import Context
+
+    circ = _switch_circuit(circuit, n=n, vmax=vmax, k=k, basal=basal)
+    ctx_a = Context(
+        name="A", data=np.asarray(data_a, dtype=float), control=np.asarray(control_a, float)
+    )
+    ctx_b = Context(
+        name="B", data=np.asarray(data_b, dtype=float), control=np.asarray(control_b, float)
+    )
+    res = guard_b_classify(
+        ctx_a, ctx_b, circ, k_modes=k_modes, steps=steps,
+        earn_margin=earn_margin, cond_max=cond_max, check_both=check_both,
+    )
+    return {
+        "call": res.call,
+        "reason": res.reason,
+        "knob": res.knob,
+        "is_reliable": res.is_reliable,
+        "earn_bic": _jsonsafe(res.earn_bic),
+        "cond_number": _jsonsafe(res.cond_number),
+        "knob_identifiable": res.knob_identifiable,
+        "s_hat": _jsonsafe(res.s_hat),
+        "o_hat": _jsonsafe(res.o_hat),
+        "guard": "earn-guard (affine-nuisance robust; NUDGE-LIM-016 / "
+        "design/PERTURBED_CONFOUND_STRATEGY.md)",
+    }
+
+
+def differential_robust_file(
+    path: str,
+    *,
+    circuit: str = "ras_switch_1node",
+    n: float = 6.0,
+    vmax: float = 2.5,
+    k: float = 1.0,
+    basal: float = 0.2,
+    k_modes: int = 2,
+    steps: int = 150,
+    earn_margin: float = 6.0,
+    cond_max: float = 100.0,
+    check_both: bool = True,
+) -> dict[str, Any]:
+    """Robust (Earn-Guard) differential attribution from a ``.npz`` — the CLI / MCP entry.
+
+    Same ``.npz`` contract as :func:`differential_file` (``data_a`` / ``control_a`` /
+    ``data_b`` / ``control_b``). Uses the affine-nuisance Earn-Guard instead of the banded
+    default — abstains continuously over the per-condition affine confound family.
+    """
+    import numpy as np
+
+    with np.load(path) as npz:
+        missing = [k2 for k2 in ("data_a", "control_a", "data_b", "control_b")
+                   if k2 not in npz]
+        if missing:
+            raise KeyError(f"{path} is missing array(s) {missing}; need data_a/control_a"
+                           "/data_b/control_b")
+        arrays = {k2: np.asarray(npz[k2], dtype=float) for k2 in
+                  ("data_a", "control_a", "data_b", "control_b")}
+    return differential_robust_arrays(
+        arrays["data_a"], arrays["control_a"], arrays["data_b"], arrays["control_b"],
+        circuit=circuit, n=n, vmax=vmax, k=k, basal=basal,
+        k_modes=k_modes, steps=steps, earn_margin=earn_margin, cond_max=cond_max,
+        check_both=check_both,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # constitutive-reporter calibration control — the NUDGE-LIM-006 mitigation
 # (nudge.inference.constitutive, NUDGE-METHOD-011). A constitutive control drives
