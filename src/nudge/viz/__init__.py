@@ -173,8 +173,19 @@ def render(
     abstained. ``animate`` is accepted for API stability but not implemented in this slice.
     """
     if animate:
-        raise NotImplementedError(
-            "animation is a later viz slice (design §5.2); animate=True is not yet wired"
+        _require_matplotlib()
+        if out is None:
+            raise ValueError("animate=True requires an out= path (a .gif)")
+        from nudge.viz.animate import render_animation
+
+        kind = ctx.get("kind")
+        if kind is None and isinstance(result, dict):
+            kind = result.get("kind")
+        return render_animation(
+            result, out, kind=kind, theme=theme,
+            frames=int(ctx.get("anim_frames", 28)),
+            fps=int(ctx.get("anim_fps", 8)),
+            emit_code=emit_code, self_contained=self_contained, cli_call=cli_call,
         )
     rf = figure(result, theme=theme, **ctx)
 
