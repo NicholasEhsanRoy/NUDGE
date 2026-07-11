@@ -116,6 +116,35 @@ _WITH_NUDGE_TOOLS_DESIGN = (
     "below 1 is a reduction) and a `safety` report saying whether the intervention crosses the fold"
 )
 
+_TASK_LOTKA = """\
+You are an automated scientist working a FICTIONAL, synthetic test case (it is not real data and
+the answer is not in the literature — reason from the data + tools, as on a genuinely novel
+problem). A microbial community was tracked over time under an external perturbation (an antibiotic
+pulse), with REPLICATE trajectories for a reference community and a perturbed one. The data is in
+this directory ({data_files}) — an `.npz` with `reference` / `perturbed` (replicate × time ×
+species) abundance arrays plus the sampling grid (`t_obs`, `u_grid`, `obs_idx`, `dt`).
+
+Model it as a generalized Lotka–Volterra system dxᵢ/dt = xᵢ(αᵢ + Σⱼ βᵢⱼ·xⱼ + εᵢ·u(t)). Your task:
+FIT the model and TELL ME THE INTERACTION PARAMETERS (the βᵢⱼ self-limitation / cross terms), and
+say what the perturbation did — WITH honest uncertainty. If some parameters are not identifiable
+from this data, say so explicitly rather than report a confident value.
+
+Rules:
+- Do NOT search the web (it is disabled). Reason only from the data{tools_line}.
+- Keep an append-only REPORT.md in this directory: your approach, each fit / tool call and how you
+  read its output, and a final answer — the parameters WITH their identifiability / uncertainty, or
+  an explicit statement of which parameters are NOT identifiable and why.
+- Be honest and calibrated. Do NOT present an unidentifiable parameter as a confident estimate.
+"""
+
+_WITH_NUDGE_TOOLS_LOTKA = (
+    ", using the NUDGE tools via MCP — in particular `lotka`, which fits the gLV community and "
+    "reports which knob (growth α / interaction β / susceptibility ε) a perturbation moved AND the "
+    "IDENTIFIABILITY of the α⇄βᵢᵢ pair: the Laplace condition number, whether it is `degenerate`, "
+    "and — when it is — the null-space `degeneracy_direction` + a plain-language hint, instead of a "
+    "fabricated point estimate. Pass the `.npz` path"
+)
+
 _WITH_NUDGE_TOOLS_DIFF = (
     ", using the NUDGE tools via MCP. For a two-context comparison NUDGE offers `differential` "
     "(BIC-selects which switch knob — threshold / gain / ceiling — differs between the contexts, "
@@ -161,8 +190,10 @@ def main() -> int:
     elif (sandbox / ".mcp.json").exists():
         (sandbox / ".mcp.json").unlink()
 
-    templates = {"differential": _TASK_DIFFERENTIAL, "design": _TASK_DESIGN}
-    with_tools = {"differential": _WITH_NUDGE_TOOLS_DIFF, "design": _WITH_NUDGE_TOOLS_DESIGN}
+    templates = {"differential": _TASK_DIFFERENTIAL, "design": _TASK_DESIGN,
+                 "lotka": _TASK_LOTKA}
+    with_tools = {"differential": _WITH_NUDGE_TOOLS_DIFF, "design": _WITH_NUDGE_TOOLS_DESIGN,
+                  "lotka": _WITH_NUDGE_TOOLS_LOTKA}
     template = templates.get(args.surface, _TASK)
     tools_line = (with_tools.get(args.surface, _WITH_NUDGE_TOOLS) if with_nudge
                   else _WITHOUT_NUDGE_TOOLS)

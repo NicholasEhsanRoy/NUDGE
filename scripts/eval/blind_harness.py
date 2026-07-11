@@ -125,7 +125,8 @@ def _build_lotka(args: argparse.Namespace, agent_dir: Path) -> tuple[dict[str, A
     from nudge.inference.lotka_volterra import simulate_glv_perturbseq
 
     ds = simulate_glv_perturbseq(
-        n_species=args.n_species, mechanism=args.glv_mechanism, seed=args.seed
+        n_species=args.n_species, mechanism=args.glv_mechanism, seed=args.seed,
+        dense_transient=not args.glv_near_equilibrium,
     )
     # SCRUB: serialize ONLY the observable arrays; the baseline kinetics + ground_truth (the
     # answer) are NEVER written to the agent file.
@@ -320,6 +321,9 @@ def main() -> int:
     ap.add_argument("--glv-mechanism", default="susceptibility",
                     choices=["growth", "interaction", "susceptibility", "none"],
                     help="which gLV knob to move (susceptibility=the identifiable antibiotic axis)")
+    ap.add_argument("--glv-near-equilibrium", action="store_true",
+                    help="near-equilibrium sampling (no growth transient) → the α⇄βᵢᵢ degenerate "
+                    "regime NUDGE must abstain on")
     args = ap.parse_args()
 
     if args.list or not args.surface:

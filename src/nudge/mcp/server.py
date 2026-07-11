@@ -527,6 +527,31 @@ def build_server() -> Any:
         )
 
     @mcp.tool()
+    def lotka(path: str, target: int = -1, steps: int = 300) -> dict[str, Any]:
+        """Fit a generalized-Lotka–Volterra community + report which knob moved AND identifiability.
+
+        For time-series abundance data of an ecological community (or any gLV system)
+        `dxᵢ/dt = xᵢ(αᵢ + Σⱼ βᵢⱼxⱼ + εᵢ·u(t))`, `path` is an `.npz` with `reference` /
+        `perturbed` `(R, T, S)` replicate ensembles + `t_obs` / `u_grid` / `obs_idx` / `dt`.
+        NUDGE re-fits the community and attributes which single knob a perturbation moved —
+        **growth (α) / interaction (β) / susceptibility (ε)** — OR abstains.
+
+        **The point for a naive "just fit it and give me the interaction parameters β" request:**
+        gLV parameters are a canonical **sloppy / near-equilibrium-degenerate** problem — intrinsic
+        growth α and self-limitation βᵢᵢ trade off along `Kᵢ = −αᵢ/βᵢᵢ`, so a least-squares / ridge
+        fit returns a CONFIDENT but UNIDENTIFIABLE parameter estimate. NUDGE measures the α⇄βᵢᵢ
+        Laplace curvature and, when the pair is degenerate, returns `unresolved` with the condition
+        number, whether it is `degenerate`, the null-space **`degeneracy_direction`**, and a plain
+        hint — *the honest "these parameters are not separately identifiable; here is the exact
+        combination the data cannot pin, and the experiment that would"* — instead of a fabricated
+        point estimate (`NUDGE-LIM-020`). Pass `target` = a species index for a specific taxon, or
+        leave it at -1 to let NUDGE screen.
+        """
+        from nudge.service import lotka_file
+
+        return lotka_file(path, target=None if target < 0 else target, steps=steps)
+
+    @mcp.tool()
     def constitutive(
         path: str = "",
         demo: bool = False,

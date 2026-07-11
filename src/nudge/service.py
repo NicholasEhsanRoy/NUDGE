@@ -1557,3 +1557,51 @@ def lotka_demo(
         "n_replicates": f.n_replicates,
         "n_timepoints": f.n_timepoints,
     }
+
+
+def lotka_file(
+    path: str, *, target: int | None = None, steps: int = 300, n_sim: int = 30, seed: int = 0
+) -> dict[str, Any]:
+    """Fit + classify a gLV perturbation from a ``.npz`` of observable trajectories (CLI/MCP).
+
+    The ``.npz`` holds ``reference`` / ``perturbed`` ``(R, T, S)`` replicate ensembles + the
+    sampling arrays (``t_obs`` / ``u_grid`` / ``obs_idx`` / ``dt``) — NO kinetics/ground truth.
+    NUDGE re-fits the baseline internally, attributes which knob (**growth α / interaction β /
+    susceptibility ε**) the perturbation moved, and — critically for a "just fit it and give me the
+    parameters" request — reports the **identifiability** of the α⇄βᵢᵢ pair (Laplace condition
+    number, |corr|, whether it is DEGENERATE) plus the null-space **degeneracy_direction** + a
+    plain-language hint. Fail-safe: on a sloppy / near-equilibrium community it returns
+    ``unresolved`` with the measured degeneracy rather than a confident (unidentifiable) parameter
+    estimate (``NUDGE-LIM-020``).
+    """
+    import numpy as np
+
+    from nudge.inference.lotka_volterra import GLVDataset, _default_baseline, attribute_glv
+
+    with np.load(path) as z:
+        ref = np.asarray(z["reference"], dtype=float)
+        pert = np.asarray(z["perturbed"], dtype=float)
+        ds = GLVDataset(
+            reference=ref, perturbed=pert, t_obs=np.asarray(z["t_obs"], dtype=float),
+            u_grid=np.asarray(z["u_grid"], dtype=float), obs_idx=np.asarray(z["obs_idx"]),
+            dt=float(z["dt"]),
+            baseline=_default_baseline(ref.shape[2], np.random.default_rng(seed)),
+            ground_truth={},
+        )
+    res = attribute_glv(ds, target=target, steps=steps, n_sim=n_sim, seed=seed)
+    f = res.fit
+    dd = res.degeneracy_direction
+    return {
+        "call": res.call, "reason": res.reason, "is_reliable": res.is_reliable,
+        "status": getattr(res, "status", None),
+        "selected_knob": f.selected,
+        "bic": {k: _jsonsafe(v) for k, v in dict(f.bic).items()},
+        "fitted_delta": {k: _jsonsafe(v) for k, v in dict(f.delta).items()},
+        "identifiability": {
+            "cond_number": _jsonsafe(f.cond_number),
+            "abs_corr_alpha_beta": _jsonsafe(f.corr_alpha_beta),
+            "degenerate": bool(f.degenerate), "reason": f.identifiability_reason,
+        },
+        "degeneracy_direction": None if dd is None else [float(x) for x in np.asarray(dd)],
+        "human_readable_hint": res.human_readable_hint,
+    }

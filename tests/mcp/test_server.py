@@ -33,6 +33,7 @@ def test_server_registers_the_expected_tools() -> None:
         "multi_reporter",
         "differential",
         "differential_robust",
+        "lotka",
         "constitutive",
         "diagnose_abstention",
         "explain_abstention",
