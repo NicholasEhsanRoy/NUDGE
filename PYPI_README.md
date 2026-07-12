@@ -12,6 +12,20 @@ distinction the field's default linear models cannot make. Its defining property
 [MADDENING](https://github.com/Microrobotics-Simulation-Framework/MADDENING), a
 differentiable JAX graph-physics engine.
 
+Gene-regulatory circuits are what NUDGE was **initially built for** — and what it's named
+for — but that was only the first target. Its core is domain-general: a *compositional,
+differentiable ODE model plus a calibrated abstention gate*. Anywhere a mechanism hides in
+the **shape of a dynamical response** and a naive fit would over-claim, the same engine
+applies — and it already reaches well beyond gene circuits to **microbial community
+dynamics** (generalized Lotka–Volterra trajectory fits, `NUDGE-METHOD-012`), **protein
+aggregation kinetics** (amyloid fibrillization, `NUDGE-METHOD-013`), and **differentiable
+experimental design** (gradient-optimal experiments + matrix-free identifiability at scale,
+`NUDGE-METHOD-014`). Each new domain is a new module over a frozen core — never a rewrite.
+
+NUDGE originated at the **Built with Claude: Life Sciences** hackathon (July 2026), and is
+itself an experiment in Claude-assisted development — the git history is written to make
+that involvement auditable.
+
 ## Install
 
 ```bash
