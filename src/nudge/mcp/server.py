@@ -17,6 +17,8 @@ Tools:
   DIFFERENTIAL of candidate causes (never a positive hidden-node claim; NUDGE-LIM-015).
 - ``constitutive(...)`` — separate CIRCUIT ultrasensitivity from a NONLINEAR READOUT with a
   constitutive-reporter control (the NUDGE-LIM-006 mitigation); reject "no switch" or abstain.
+- ``render_figure(kind, ...)`` — render any NUDGE result to an honest figure (the abstention
+  overlay is stamped off the result's own verdict); returns paths + a size-capped inline PNG.
 - ``list_mechanisms()`` — the registered mechanism library.
 - ``get_mechanism_card(name)`` — the full Markdown card for a mechanism.
 
@@ -622,6 +624,59 @@ def build_server() -> Any:
             )
         return constitutive_file(
             path, circuit_n=circuit_n, h=readout_h, steps=steps, restarts=restarts
+        )
+
+    @mcp.tool()
+    def render_figure(
+        kind: str,
+        result_json: str = "",
+        demo: bool = False,
+        out_dir: str = "",
+        self_contained: bool = False,
+        animate: bool = False,
+        theme: str = "auto",
+    ) -> dict[str, Any]:
+        """Render a NUDGE result to an HONEST figure (the ``nudge.viz`` battery).
+
+        Draws any registered result ``kind`` (``dose_response`` / ``attribution`` /
+        ``identifiability`` / ``robustness`` / ``epistasis`` / ``differential`` /
+        ``multi_reporter`` / ``temporal`` / ``aggregation`` / ``constitutive`` /
+        ``diagnose`` / ``design`` / ``cross_modality`` / ``oed``) from a frozen result — it
+        NEVER re-fits and NEVER re-attributes. The **abstention overlay is stamped off the
+        result's own verdict**, so an abstention is drawn as an abstention: the picture can
+        never claim more than the text.
+
+        Provide EITHER ``result_json`` (a prior ``*_to_dict()`` / figure-data JSON string,
+        e.g. the output of the ``attribute`` / ``dose_response`` / ``differential`` tools) OR
+        ``demo=True`` for a zero-setup synthetic example of that kind. Writes to ``out_dir``
+        (a server-side path; a temp dir if empty) and returns the written paths + the honest
+        caption + the ``abstained`` flag + a size-capped inline ``png_base64`` (omitted, with
+        a reason, above the cap; GIFs are always path-only). Also returns ``code_path`` — the
+        standalone regenerating ``fig.py`` (the Claude Science provenance grain).
+        """
+        import json as _json
+        import tempfile
+
+        from nudge.service import render_result
+        from nudge.viz import _RENDERERS
+        from nudge.viz.demo import demo_result
+
+        if kind not in _RENDERERS:
+            return {"error": f"unknown figure kind {kind!r}", "known_kinds": sorted(_RENDERERS)}
+        if result_json:
+            result: Any = _json.loads(result_json)
+        elif demo:
+            result = demo_result(kind)
+        else:
+            return {"error": "provide result_json (a saved result) or demo=True"}
+
+        out_base = out_dir or tempfile.mkdtemp(prefix="nudge_viz_")
+        ext = ".gif" if animate else ".png"
+        out_path = f"{out_base.rstrip('/')}/{kind}{ext}"
+        return render_result(
+            kind, result, out=out_path, emit_code=True, theme=theme,
+            animate=animate, self_contained=self_contained, inline_png=not animate,
+            cli_call=f"render_figure({kind})",
         )
 
     return mcp

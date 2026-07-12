@@ -168,17 +168,21 @@ Highlights so far:
   D-/E-/CRLB objectives agree. Local OED (`NUDGE-LIM-024`): the gains are measured at the
   nominal θ₀, not extrapolated (`nudge oed`) — see
   [`notebooks/Optimal_Experimental_Design.ipynb`](notebooks/Optimal_Experimental_Design.ipynb).
-- **Honest figures — `nudge.viz`** (opt-in `[viz]` extra, first slice) — an additive,
+- **Honest figures — `nudge.viz`** (opt-in `[viz]` extra) — an additive,
   provenance-carrying figure layer that renders NUDGE's frozen result objects from one
-  `render(result, out=…)` call. It only *reads* results (never re-fits; never touches
-  `fit`/`core`), and the honesty is **structural**: `render()` applies the abstention
-  overlay itself off each result's own verdict, so a figure can never draw an abstention as
-  a confident call, and one-sided bounds draw as **open-ended arrows**, never error bars.
-  The flagship **dose-response dual panel** shows the real ESC-screen **OCT4 → switch**
-  (n≈6.7) beside the honest **NANOG → unresolved** in one frame. Every figure also ships a
-  standalone `fig.py` that regenerates it from the fit's output (no re-fit; **pixel-
-  identical**) — the Claude Science provenance grain. Opt-in on the CLI
-  (`nudge dose-response … --fig-out fig.png`), embedded in
+  `render(result, out=…)` call, with a renderer for every result type (dose-response,
+  attribution, identifiability/sloppiness, epistasis, differential, multi-reporter,
+  temporal/gLV, aggregation, constitutive, diagnose, design, OED, cross-modality,
+  robustness). It only *reads* results (never re-fits; never touches `fit`/`core`), and the
+  honesty is **structural**: `render()` applies the abstention overlay itself off each
+  result's own verdict, so a figure can never draw an abstention as a confident call, and
+  one-sided bounds draw as **open-ended arrows**, never error bars. The flagship
+  **dose-response dual panel** shows the real ESC-screen **OCT4 → switch** (n≈6.7) beside the
+  honest **NANOG → unresolved** in one frame. Every figure also ships a standalone `fig.py`
+  that regenerates it from the fit's output (no re-fit; **pixel-identical**) — the Claude
+  Science provenance grain. Reachable from the command line — `nudge viz KIND --demo --out
+  fig.png` (any kind; `--json FILE` replays a saved run) — the MCP `render_figure` tool, the
+  per-result CLI flag (`nudge dose-response … --fig-out fig.png`), and
   [`notebooks/OCT4_NANOG_Flagship.ipynb`](notebooks/OCT4_NANOG_Flagship.ipynb).
 
 **The fail-safe guarantee is adversarially red-teamed** across multiple rounds

@@ -1176,6 +1176,83 @@ def fibrillization(
             "(NUDGE-LIM-021).")
 
 
+@app.command("viz")
+def viz(
+    kind: str = typer.Argument(
+        ...,
+        help="figure kind to render (e.g. dose_response, attribution, identifiability, "
+        "robustness); pass an unknown kind to list them all.",
+    ),
+    demo: bool = typer.Option(
+        False, "--demo", help="render a zero-setup demo result for this kind (no input file)."
+    ),
+    json_in: str = typer.Option(
+        "", "--json", help="render a prior *_to_dict()/figure-data JSON file instead of --demo "
+        "(replays with NO re-fit)."
+    ),
+    out: str = typer.Option("", "--out", help="output PNG (or .gif with --animate); "
+                            "defaults to nudge_<kind>.png in the cwd."),
+    theme: str = typer.Option("auto", "--theme", help="auto | light | dark"),
+    animate: bool = typer.Option(
+        False, "--animate", help="render an animated GIF where the kind supports it."
+    ),
+    fig_code: bool = typer.Option(
+        True, "--fig-code/--no-fig-code",
+        help="also emit the standalone regenerating fig.py + data sidecar (provenance)."
+    ),
+    self_contained: bool = typer.Option(
+        False, "--self-contained", help="inline the data into fig.py (one portable file)."
+    ),
+) -> None:
+    """Render any NUDGE result to an honest figure (the ``nudge.viz`` battery).
+
+    Reuses the shared ``service.render_result`` seam, so the picture is drawn from a frozen
+    result (or its ``*_to_dict()`` dict) with NO re-fit, and the **abstention overlay is
+    stamped off the result's own verdict** — an abstention is drawn as an abstention. Give
+    ``--demo`` for a zero-setup synthetic example, or ``--json FILE`` to replay a saved run.
+    Every figure ships a standalone ``fig.py`` + data sidecar (``--no-fig-code`` to skip).
+    """
+    import json as _json
+
+    from nudge.viz import _RENDERERS
+    from nudge.viz.demo import demo_result, is_measured_demo
+
+    if kind not in _RENDERERS:
+        _echo(f"unknown figure kind {kind!r}. Known kinds:")
+        for k in sorted(_RENDERERS):
+            _echo(f"  {k}")
+        raise typer.Exit(code=2)
+
+    if json_in:
+        with open(json_in) as fh:
+            result: Any = _json.load(fh)
+        source = f"replay of {json_in}"
+    elif demo:
+        result = demo_result(kind)
+        source = "measured synthetic demo" if is_measured_demo(kind) else "illustrative demo"
+    else:
+        _echo("give either --demo (a synthetic example) or --json FILE (a saved result).")
+        raise typer.Exit(code=2)
+
+    ext = ".gif" if animate else ".png"
+    out_path = out or f"nudge_{kind}{ext}"
+    from nudge.service import render_result
+
+    res = render_result(
+        kind, result, out=out_path, emit_code=fig_code, theme=theme,
+        animate=animate, self_contained=self_contained,
+        cli_call=f"nudge viz {kind}" + (" --demo" if demo else ""),
+    )
+    _echo(f"nudge viz {kind}  ({source})")
+    _echo(f"  wrote: {res['png_path']}")
+    if res.get("code_path"):
+        _echo(f"  code:  {res['code_path']}")
+    if res.get("data_path"):
+        _echo(f"  data:  {res['data_path']}")
+    _echo(f"  caption: {res['caption']}")
+    _echo(f"  abstained: {res['abstained']}")
+
+
 def main() -> None:
     """Console-script entry point (kept for parity; ``app`` is the real entry)."""
     app()

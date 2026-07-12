@@ -155,6 +155,138 @@ def report_to_dict(report: Any) -> dict[str, Any]:
     }
 
 
+def _attribution_demo_op(n_wt: int, n_target: int, *, basal: float, seed: int) -> Any:
+    """One synthetic operating point (WT + target cells) for :func:`attribution_demo`.
+
+    Mirrors ``tests/inference/test_pipeline._op_adata``: IEG counts track a bimodal
+    activation over the 1-node RAS switch, with a depth-only non-marker gene.
+    """
+    import anndata as ad
+    import jax
+    import numpy as np
+    import pandas as pd
+
+    from nudge.circuits import ras_switch_1node
+    from nudge.inference.lyapunov import sample_lna_mixture
+
+    genes = ["IL2", "CD69", "EGR1", "ACTB"]
+    kw, kt = jax.random.split(jax.random.PRNGKey(seed))
+    wt = sample_lna_mixture(ras_switch_1node(basal=basal), n_wt, kw, scale=1.0)
+    tg = sample_lna_mixture(ras_switch_1node(basal=basal, n=3.0), n_target, kt, scale=1.0)
+    act = np.clip(np.concatenate([wt, tg])[:, 0], 0, None)
+    rng = np.random.default_rng(seed)
+    lib = rng.integers(1500, 3000, size=act.size).astype(float)
+    x = np.zeros((act.size, len(genes)), dtype=np.int32)
+    for g in range(3):
+        x[:, g] = rng.poisson(act * lib / 80.0)
+    x[:, 3] = rng.poisson(lib / 100.0)
+    cond = ["WT"] * n_wt + ["SOS1"] * n_target
+    obs = pd.DataFrame(
+        {"condition": pd.Categorical(cond), "total_counts": lib},
+        index=pd.Index([f"c{i}" for i in range(act.size)]),
+    )
+    return ad.AnnData(X=x, obs=obs, var=pd.DataFrame(index=pd.Index(genes)))
+
+
+def attribution_demo(*, steps: int = 150, min_cells: int = 200, seed: int = 0) -> dict[str, Any]:
+    """Synthesize a multi-operating-point screen + run the capstone attribution (no data file).
+
+    The zero-setup demo of the core attribution pipeline
+    (:func:`nudge.inference.pipeline.attribute_across_operating_points`): two usable
+    operating points (which the joint breaker can use to resolve a single knob) plus a
+    third with too few target cells (recorded as a **skip**, not dropped). Returns the
+    ``report_to_dict`` form — the exact honest report the CLI / MCP already surface — so
+    the ``attribution`` renderer draws the per-op verdict chips + the joint restricted-NLL
+    profile from genuine (synthetic) numbers, not a fabricated layout.
+    """
+    from nudge.circuits import ras_switch_1node
+    from nudge.inference.pipeline import attribute_across_operating_points
+
+    ops = {
+        "Stim8hr": _attribution_demo_op(1500, 1500, basal=0.05, seed=seed),
+        "Stim48hr": _attribution_demo_op(1500, 1500, basal=0.15, seed=seed + 1),
+        "Rest": _attribution_demo_op(1500, 40, basal=0.05, seed=seed + 2),  # too few → skip
+    }
+    report = attribute_across_operating_points(
+        ops, ras_switch_1node(), {"Activation": ("IL2", "CD69", "EGR1")}, "SOS1",
+        steps=steps, min_cells=min_cells, seed=seed,
+    )
+    return report_to_dict(report)
+
+
+def identifiability_demo(*, case: str = "sloppy", sigma: float = 0.01) -> dict[str, Any]:
+    """Diagnose a canonical model's identifiability + return the figure-data (no data file).
+
+    The zero-setup demo of the sloppiness diagnostic
+    (:func:`nudge.inference.sloppiness.analyze_model`), on the canonical models that
+    separate the three verdicts a condition-number-only test conflates:
+
+    - ``"sloppy"`` — a sum-of-exponentials: a Fisher spectrum spanning many decades
+      (individual parameters loose) yet tight predictions ⇒ **sloppy-but-predictive**
+      (NUDGE must NOT abstain);
+    - ``"unidentifiable"`` — ``A·e^{-(k1+k2)t}``: an exact structural null (only ``k1+k2``
+      enters) ⇒ **unidentifiable** (NUDGE abstains, naming the null direction);
+    - ``"well-constrained"`` — a linear model: a narrow spectrum ⇒ **well-constrained**.
+
+    Returns a figure-data dict the ``identifiability`` renderer consumes (the FIM spectrum
+    + the naive-vs-measured verdict), with every number MEASURED from the sensitivity
+    matrix, never asserted.
+    """
+    import jax
+    import numpy as np
+
+    from nudge.inference.sloppiness import (
+        analyze_model,
+        redundant_exponential_predict,
+        sum_of_exponentials_predict,
+        well_conditioned_predict,
+    )
+
+    t = np.linspace(0.05, 6.0, 60)
+    if case == "unidentifiable":
+        predict = redundant_exponential_predict(amp=1.0, k1=0.7, k2=0.9, t=t)
+        label = "A·e^{-(k1+k2)t}"
+    elif case in ("well-constrained", "well_constrained"):
+        predict, label = well_conditioned_predict(slope=2.0, offset=1.0, t=t), "linear model"
+    else:
+        predict = sum_of_exponentials_predict(
+            rates=[0.5, 1.3, 2.5, 4.5], amps=[1.0, 1.0, 1.0, 1.0], t=t
+        )
+        label = "sum-of-exponentials"
+    # The sloppiness diagnostic needs float64 to resolve the smallest FIM eigenvalues
+    # (float32 truncates the sloppy end); enable it locally and restore.
+    _prev_x64 = bool(getattr(jax.config, "jax_enable_x64", False))
+    jax.config.update("jax_enable_x64", True)
+    try:
+        report = analyze_model(predict, sigma=sigma)
+    finally:
+        jax.config.update("jax_enable_x64", _prev_x64)
+    nulls = report.null_directions
+    return {
+        "kind": "identifiability",
+        "label": label,
+        "call": report.label,
+        "verdict": report.label,
+        "reason": report.reason,
+        "param_names": list(report.param_names),
+        "fim_eigenvalues": [float(v) for v in np.asarray(report.fim_eigenvalues).ravel()],
+        "cond_number": _jsonsafe(report.cond_number),
+        "span_decades": _jsonsafe(report.spectral_span_decades),
+        "smallest_eigenvalue": float(report.smallest_eigenvalue),
+        "largest_eigenvalue": float(report.largest_eigenvalue),
+        "n_sloppy_dims": int(report.n_sloppy_dims),
+        "n_null_dims": int(report.n_null_dims),
+        "is_sloppy": bool(report.is_sloppy),
+        "predictive": bool(report.predictive),
+        "relative_prediction_std": _jsonsafe(report.relative_prediction_std),
+        "pred_rel_tol": 0.05,
+        "naive_verdict": report.naive_verdict,
+        "naive_is_wrong": bool(report.naive_is_wrong),
+        "sloppy_decade_threshold": 3.0,
+        "null_hint": (nulls[0].hint if nulls else ""),
+    }
+
+
 # --------------------------------------------------------------------------- #
 # dose-response attribution (the same K/n/v_max vocabulary, a dose axis instead
 # of single cells — a second measurement of one circuit; see inference.dose_response)

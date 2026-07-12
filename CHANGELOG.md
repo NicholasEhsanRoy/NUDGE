@@ -45,6 +45,39 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   CLOSED" wording is corrected everywhere (it was measured only on `c ≥ 1.5`) in the module
   docstring, `FINDINGS` §P4, `NUDGE-LIM-016`, `design/STATE.md`, and below. Frozen core untouched
   (`fit.py` / `core/` unchanged).
+- **`nudge.viz` figure battery — a renderer per mechanism result type, honest by
+  construction (`feat/viz-renderers`).** The opt-in figure layer grows from the single
+  flagship dose-response slice to the full surface: `attribution` (the core
+  `AttributionReport` across operating points — per-op verdict chips, first-class SKIP cells,
+  and the joint breaker's restricted-NLL profile), `identifiability` (the Fisher / sloppiness
+  eigenvalue spectrum + the *naive-vs-measured* verdict, so **sloppy-but-predictive** reads as
+  usable rather than an over-abstention — off `inference.sloppiness`), `epistasis`,
+  `differential`, `multi_reporter`, `temporal`/gLV, `aggregation`/fibrillization,
+  `constitutive`, `diagnose`, `design`, `oed`, `cross_modality` (which REUSES the
+  dose-response Hill panel), and `robustness` (the 0–1 bifurcation-proximity dial). Each
+  renderer reads only the frozen
+  result dataclass / its `*_to_dict()` / demo dict (never re-fits, never imports the fit
+  engine), ships a standalone `fig.py` + data sidecar (provenance replay), and — the
+  load-bearing guarantee — inherits the **automatic abstention overlay**: the render pipeline
+  stamps the hatch + "I CAN'T TELL" banner off each panel's OWN verdict, so a positive call
+  can never be drawn where the fit abstained (a per-kind test locks this). Added a shared
+  **collision-aware placement layer** (`viz/layout.py`) so the abstain banner, the K-line
+  label, and the legend land in data-free regions in both light and dark themes (fixing the
+  overlap complaint). Added an **animation engine** (`viz/animate.py`, `render(..., animate=
+  True)` → Pillow GIF, no ffmpeg): the flagship **constitutive-flip** shows the circuit-`n`
+  profile going FLAT → `n=1` rejected as the constitutive control switches on
+  (`NUDGE-LIM-006`), staying flat + hatched when the fit abstains. Cross-modality variant
+  abstentions (`non-responsive`, `inconclusive`) were added to the shared `ABSTAIN_CALLS` so
+  their overlay fires; the single-condition `gain_or_threshold` confound and the
+  `unidentifiable` sloppiness verdict were added too, so the attribution + identifiability
+  overlays fire. **CLI + MCP surface:** a `nudge viz KIND [--demo | --json FILE] [--out]
+  [--theme light|dark] [--animate] [--no-fig-code]` verb and a mirrored MCP `render_figure`
+  tool, both over the shared `service.render_result` seam (no duplicated render logic), plus a
+  zero-setup demo per kind (`nudge.viz.demo.demo_result`, reusing the genuine `service.*_demo()`
+  synthetic analyses where they exist — `attribution`/`identifiability`/`constitutive`/
+  `temporal`/`oed`/`aggregation`/`dose_response` — and illustrative layout examples for the
+  rest). Additive/opt-in — `fit.py`/`core/` untouched. `tests/viz/`, `tests/cli/test_cli.py`,
+  `tests/mcp/test_server.py`.
 
 - **Matrix-free identifiability / sloppiness diagnostic — scales past the dense-`jacfwd` OOM
   (`NUDGE-LIM-023`).** The sloppiness diagnostic (FIM = `JᵀJ/σ²` eigenspectrum →

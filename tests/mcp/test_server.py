@@ -40,6 +40,7 @@ def test_server_registers_the_expected_tools() -> None:
         "explain_abstention",
         "list_mechanisms",
         "get_mechanism_card",
+        "render_figure",
     }
 
 
@@ -64,3 +65,25 @@ def test_get_mechanism_card_tool() -> None:
     out = _unwrap(asyncio.run(call))
     text = out if isinstance(out, str) else str(out)
     assert "Hill" in text
+
+
+def test_render_figure_tool_demo() -> None:
+    """render_figure(demo=True) writes a PNG + returns the honest caption/abstained flag."""
+    pytest.importorskip("matplotlib")
+    server = build_server()
+    call = server.call_tool(
+        "render_figure", {"kind": "identifiability", "demo": True}
+    )
+    out = _unwrap(asyncio.run(call))
+    assert out["kind"] == "identifiability"
+    assert out["abstained"] is False  # sloppy-but-predictive is usable, not an abstention
+    assert out["png_path"] and out["png_base64"]  # small PNG inlines under the cap
+    import os
+
+    assert os.path.getsize(out["png_path"]) > 0
+
+
+def test_render_figure_tool_unknown_kind() -> None:
+    server = build_server()
+    out = _unwrap(asyncio.run(server.call_tool("render_figure", {"kind": "nope"})))
+    assert "error" in out and "known_kinds" in out

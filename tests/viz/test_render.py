@@ -117,6 +117,22 @@ def test_abstention_is_drawn_as_abstention(tmp_path: Path) -> None:
     assert any("CAN'T TELL" in b for b in banners), banners
 
 
+def test_no_effect_panel_hides_k_label_and_places_banner_clear(tmp_path: Path) -> None:
+    """Collision fix: an abstained panel must NOT assert a confident K under the banner.
+
+    A ``no-effect`` fit can still have ``spans_inflection=True``; the renderer must suppress
+    the "K … (inside range)" label there so it does not collide with the abstain banner in
+    the reserved top band (Phase-0 overlap fix), and the banner must still fire.
+    """
+    res, dose, resp = _abstention_result()
+    rf = viz.figure(res, dose=dose, response=resp, label="FLAT")
+    ax = rf.panels[0].ax
+    texts = [t.get_text() for t in ax.texts]
+    assert not any("inside range" in t for t in texts), texts
+    assert getattr(ax, "_nudge_abstained", False) is True
+    assert any("CAN'T TELL" in t for t in texts), texts
+
+
 def test_one_sided_bound_when_not_spanning(tmp_path: Path) -> None:
     """A K-past-the-dose-range (unresolved) panel draws the open-ended one-sided marker."""
     dose = np.linspace(0.0, 0.55, 15)
