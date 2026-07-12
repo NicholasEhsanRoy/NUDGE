@@ -273,7 +273,10 @@ It exposes the full modelling surface as tools — `attribute`, `dose_response`,
 `render_figure` — alongside the knowledge tools `explain_abstention`, `list_mechanisms`, and
 `get_mechanism_card`. The same stdio server registers as a **Local command**
 connector in Claude Desktop and the **Claude Science** workbench; a hosted
-(Streamable HTTP) deployment reaches claude.ai. Exact recipes:
+(Streamable HTTP) deployment reaches claude.ai. A step-by-step **Claude Science**
+walkthrough (connect + an α-synuclein / Parkinson's aggregation-kinetics case) is in
+[`docs/user_guide/claude_science.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/docs/user_guide/claude_science.md);
+the verified connection recipes are in
 [`design/INTEGRATION_FEASIBILITY.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/INTEGRATION_FEASIBILITY.md).
 
 ## Capabilities NOT provided
