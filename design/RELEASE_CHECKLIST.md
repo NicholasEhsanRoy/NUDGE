@@ -20,16 +20,24 @@ the honesty guarantee, not just green tests.
 - [x] Packaging metadata present: MIT `LICENSE`, `py.typed` (force-included in the wheel),
       classifiers, keywords, `project.urls`, console scripts (`nudge`, `nudge-mcp`).
 
-## Blocked-until-hardening (do NOT release before these)
+## Blocked-until-hardening — CLEARED (2026-07-12, PR #1 merged as `2a85b88`)
 
-- [ ] **Post-moat hardening loop green** — the newly-merged moat code (`inference/oed.py`,
-      the matrix-free additions in `inference/sloppiness.py`, the identifiability additions
-      in `inference/adjoint.py`) has NOT yet been through the red-team loop. Run the cloud
-      hardening loop (prompt: `design/hardening/POST_MOAT_LOOP_PROMPT.md`) on a **separate
-      branch** and merge only when red-team reports `HOLES_FOUND: 0` after a genuine full
-      sweep.
-- [ ] **Close the pre-existing open hole P5** (differential small-multiplicative confound,
-      `LIM-016`) — already queued in `design/hardening/LEDGER.md`; fold it into the loop.
+- [x] **Post-moat hardening loop green** — the cloud loop (rounds 6–7, runs `000000018`–
+      `000000026`) red-teamed the moat and found TWO confident-wrong holes, both fixed +
+      independently audited, ending with `HOLES_FOUND: 0` on a genuine full re-scan (STOP).
+      **P6** (matrix-free identifiability certified `well-constrained` on an isolated exact
+      Fisher-null because the fail-safe checked eigenpair-ness, not smallest-ness) → fixed by
+      routing `auto` through the exact dense-via-matvec reconstruction to `dense_below=2048` +
+      a one-sided inverse-iteration null probe above that, abstaining rather than asserting
+      (`NUDGE-LIM-023` sharpened to major). Repro `sloppiness_matrixfree_iterative_mislabel.py`
+      now reports 0/6 holes.
+- [x] **Close the pre-existing open hole P5** (differential small-multiplicative confound,
+      `LIM-016`) — fixed by generalising to the whole per-condition affine class: gate 4d adds
+      a free `(s,o)` nuisance on the perturbed context and abstains unless the winning knob
+      earns ≥6.0 ΔBIC over the affine null (audit PASS `runs/000000020`).
+- [x] **Re-verified after folding into main:** ruff / pyright / 5 doc checkers green;
+      **349 pytest passed / 0 failed**; the merged tree is byte-identical to the locally-gated
+      commit. **The release is UNBLOCKED** — only the release-time steps below remain.
 
 ## Release-time steps (once the branch is green, in order)
 
