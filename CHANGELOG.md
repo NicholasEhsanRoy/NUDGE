@@ -9,6 +9,14 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.1.0] — 2026-07-12
+
+### Added
+
 - **Fail-safe red-team FINAL-SWEEP — P5: a SMALL multiplicative perturbed-scale confound in
   `differential` FIXED; the free-affine EARN guard closes the whole affine confound class
   (`NUDGE-LIM-016` sharpened).** The final full sweep found the P4 gate 4c's measured blind gap: a
@@ -759,5 +767,8 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Known Limitations
 
-- See `docs/known_limitations.yaml` (`NUDGE-LIM-*`); the full decoy battery, Laplace
-  uncertainty, and real-data validation are not yet built. `design()` is a stub.
+- See `docs/known_limitations.yaml` for the tracked `NUDGE-LIM-*` bounds (each honest
+  gap is a documented, often decoy-locked limitation — not a hidden one). Genuinely
+  deferred for 0.1.0: real-data lock-ins for the newest capabilities (constitutive,
+  multi-reporter, differential, fibrillization, OED, the gLV temporal path) and
+  per-result provenance tracking (`provenance.py` is a Phase-0 stub schema).

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "nudge-bio"
 version = "0.1.0"
 description = "Node/edge Ultrasensitivity Diagnostic for Gene-regulatory Effects — mechanism attribution for Perturb-seq screens"
-readme = "README.md"
+readme = "PYPI_README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Nicholas Ehsan Roy" }]
@@ -73,8 +73,10 @@ dev = [
 ]
 
 [project.urls]
+Homepage = "https://github.com/NicholasEhsanRoy/NUDGE"
 Repository = "https://github.com/NicholasEhsanRoy/NUDGE"
 Issues = "https://github.com/NicholasEhsanRoy/NUDGE/issues"
+Changelog = "https://github.com/NicholasEhsanRoy/NUDGE/blob/main/CHANGELOG.md"
 
 [project.scripts]
 nudge = "nudge.cli:app"
