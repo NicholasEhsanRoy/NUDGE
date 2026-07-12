@@ -630,6 +630,15 @@ def _verified_smallest_eigsh(
     whose residual is below ``res_tol`` are trusted. Returns ``(evals, evecs, converged)`` for
     the trusted pairs; ``converged=False`` means the smallest end could NOT be certified (the
     caller must then fail safe — never assert identifiability it did not verify).
+
+    **The Rayleigh check verifies eigenpair-ness, NOT smallest-ness** (this is the load-bearing
+    caveat behind ``NUDGE-LIM-023`` / the P6 finding). ``eigsh(which='SA')`` uses a polynomial
+    filter that de-emphasises the smallest end; on an ISOLATED near-null in an otherwise
+    well-conditioned spectrum it converges to the well-conditioned cluster and MISSES the null,
+    and those returned pairs are *genuine* eigenpairs so they pass this residual check. A
+    ``converged=True`` here therefore does **not** license a ``well-constrained`` verdict: the
+    caller must ALSO run :func:`_smallest_eig_null_probe` (inverse iteration), which reliably
+    catches the missed null, and must abstain when neither route certifies the smallest end.
     """
     from scipy.sparse.linalg import ArpackNoConvergence, LinearOperator, eigsh
 
@@ -664,6 +673,83 @@ def _verified_smallest_eigsh(
     return kw, kv, True
 
 
+def _smallest_eig_null_probe(
+    matvec_np: Callable[[np.ndarray], np.ndarray],
+    n: int,
+    lam_max: float,
+    dtype: Any,
+    floor_ratio: float,
+    *,
+    eps_rel: float = 1e-3,
+    n_iter: int = 40,
+    cg_rtol: float = 1e-8,
+    res_tol: float = 1e-3,
+    seed: int = 0,
+) -> tuple[np.ndarray, float, bool]:
+    """Detect an ISOLATED (near-)null FIM eigenpair by **inverse iteration** (shift-invert via
+    CG) — the reliable complement to ``eigsh(which='SA')``, and the fix for the P6 /
+    ``NUDGE-LIM-023`` hole.
+
+    ``eigsh(which='SA')`` uses a polynomial filter that de-emphasises the smallest end and can
+    MISS an isolated near-zero eigenvalue, converging to the well-conditioned cluster and
+    mislabelling a rank-deficient model ``well-constrained``. Inverse iteration on
+    ``(FIM + eps·I)`` instead AMPLIFIES the FIM's smallest eigenvalue — the null is the strictly
+    dominant eigenpair of ``(FIM + eps·I)⁻¹`` (eigenvalue ``1/eps`` vs the next ``1/(λ₂+eps)``),
+    and power/inverse iteration reliably converges to a well-separated dominant eigenpair, so an
+    isolated null is caught. Matrix-free: each step is a CG solve driven by the FIM matvec, no
+    factorisation — cost ``O(n_params + n_obs)`` per matvec (MEASURED: ~150–800 matvecs, <0.3 s
+    to catch the P6 null that ``eigsh('SA')`` misses).
+
+    Returns ``(vector, rayleigh_quotient, found_null)``. ``found_null`` is True **only** when the
+    converged direction has Rayleigh quotient ``vᵀ·FIM·v ≤ floor_ratio·λ_max`` (the rank floor)
+    AND a small Rayleigh residual — a genuine, residual-verified near-null.
+
+    **One-sided certificate (the honest bound).** A low Rayleigh quotient PROVES a small
+    eigenvalue exists (⇒ a null / unidentifiable — safe). A large quotient does NOT prove
+    identifiability: on a dense *sloppy* small-end, inverse iteration overestimates ``λ_min``
+    (MEASURED: RQ ≈ 5 for a true ``λ_min ≈ 1.7e-6``), so its value is never trusted as an
+    accurate ``λ_min`` for a ``well-constrained`` / ``sloppy-but-predictive`` verdict. When no
+    null is found the caller must ABSTAIN, not assert identifiability.
+    """
+    from scipy.sparse.linalg import LinearOperator, cg
+
+    scale = max(float(lam_max), 1e-300)
+    eps = eps_rel * scale
+
+    def _shifted(x: np.ndarray) -> np.ndarray:  # (FIM + eps·I)·x, matrix-free
+        return matvec_np(x) + eps * x
+
+    shift = LinearOperator((n, n), matvec=_shifted, dtype=dtype)  # type: ignore  # noqa: PGH003
+    rng = np.random.default_rng(seed)
+    v = rng.standard_normal(n).astype(np.float64)
+    v /= np.linalg.norm(v)
+    maxiter = 10 * n
+    floor = floor_ratio * scale
+    rq = float("inf")  # Rayleigh quotient vᵀ·FIM·v — a MONOTONE-decreasing smallest-eig estimate
+    resid = 1.0
+    for _ in range(n_iter):
+        x, _info = cg(shift, v, rtol=cg_rtol, maxiter=maxiter)
+        nx = float(np.linalg.norm(x))
+        if nx == 0.0:
+            break
+        v = x / nx
+        av = matvec_np(v)
+        rq_prev = rq
+        rq = max(float(v @ av), 0.0)
+        resid = float(np.linalg.norm(av - rq * v)) / scale
+        # Stop only once the Rayleigh QUOTIENT (not just the eigen-residual) has settled: for a
+        # true null the quotient keeps shrinking geometrically PAST the point the residual is
+        # small (contamination b²·λ_cluster is still ≫ floor), so an early residual-only break
+        # would return a spuriously-large quotient and MISS the null. Break when the residual is
+        # small AND either the quotient reached the rank floor (a verified near-null) or it has
+        # plateaued (converged to a finite, non-null smallest eigenvalue — for a true null the
+        # per-step drop is many orders of magnitude, never a mere plateau).
+        if resid < res_tol and (rq <= floor or rq > 0.5 * rq_prev):
+            break
+    found_null = (resid < res_tol) and (rq <= floor)
+    return v.astype(np.float64), rq, found_null
+
+
 def sloppiness_diagnostic_matrixfree(
     predict_fn: Callable[[Array], Array],
     theta: np.ndarray | Sequence[float],
@@ -678,7 +764,7 @@ def sloppiness_diagnostic_matrixfree(
     naive_cond_threshold: float = 1e6,
     ridge: float = 1e-10,
     method: str = "auto",
-    dense_below: int = 256,
+    dense_below: int = 2048,
 ) -> SloppinessReport:
     """Matrix-free twin of :func:`sloppiness_diagnostic`: the SAME :class:`SloppinessReport`
     (label / null direction / spectrum / verdict) from a differentiable ``predict_fn`` —
@@ -692,28 +778,42 @@ def sloppiness_diagnostic_matrixfree(
       ``n_params × n_params`` FIM from ``n_params`` matvecs and ``eigh`` it. **Exact** full
       spectrum, so it matches :func:`sloppiness_diagnostic` bit-for-bit; O(n_params²) memory,
       but it *still* avoids the dense-J OOM (the matvec never forms J or the ``jacfwd`` tangent
-      fan-out). The recommended path whenever ``n_params`` is not enormous.
+      fan-out). The recommended path whenever ``n_params`` is not enormous. ``dense_below``
+      defaults to **2048** — MEASURED affordable (``scripts/vv/sloppiness_scaling.py`` /
+      FINDINGS §P6: exact reconstruct+``eigh`` ≈ 18 s / 0.7 GB peak at n=2048, recovering the
+      exact null every time), well past the old 256, so the whole realistic regime gets the
+      exact verdict. Raise it if you have the memory/time (n=4096 ≈ 42 s / 2 GB).
     - ``"iterative"`` (and ``"auto"`` when ``n_params > dense_below``) — an iterative
       eigensolver (Lanczos ``eigsh``) over the matvec ``LinearOperator``, O(n_params + n_obs)
       memory. Lanczos is reliable for the LARGEST eigenvalues (``λ_max`` + stiff directions).
-      The **smallest** eigenvalues of an ill-conditioned FIM are NOT reliably reachable by a
-      matrix-free Krylov method (measured: ``eigsh``/LOBPCG can return a large eigenvalue as
-      "smallest" and mislabel a rank-deficient model well-constrained), so the smallest end is
-      handled fail-safe:
+      The **smallest** eigenvalue of an ill-conditioned FIM is NOT reliably reachable by
+      ``eigsh(which='SA')`` — its polynomial filter de-emphasises the smallest end and can MISS
+      an isolated near-null, returning genuine-but-not-smallest pairs that pass a Rayleigh check,
+      which would mislabel a rank-deficient model well-constrained (``NUDGE-LIM-023`` / the P6
+      finding). So the smallest end is handled fail-safe along three lines, and the iterative
+      path **never** emits a ``well-constrained`` / ``sloppy-but-predictive`` verdict it cannot
+      certify:
 
         * ``n_params > n_obs`` ⇒ the FIM is rank-deficient **by shape** (rank ≤ n_obs) ⇒
           ``unidentifiable``, certified without any smallest-eigenvalue solve;
-        * otherwise the smallest eigenpairs are computed best-effort and **Rayleigh-residual
-          verified**; if none converge, the diagnostic **abstains** (``unidentifiable`` with an
-          explicit non-convergence reason) rather than assert identifiability it cannot verify.
+        * otherwise the true smallest eigenvalue is probed by **inverse iteration** (shift-invert
+          via CG, :func:`_smallest_eig_null_probe`), which AMPLIFIES the smallest eigenvalue and
+          reliably CATCHES an isolated near-null that ``eigsh('SA')`` misses (MEASURED, FINDINGS
+          §P6). A residual-verified near-null ⇒ ``unidentifiable`` (naming the null direction);
+        * if no null is found, the full smallest spectrum is still not certifiable matrix-free
+          (the probe is one-sided — a low Rayleigh quotient PROVES a null, but a large one does
+          NOT prove identifiability), so the diagnostic **abstains** (``unidentifiable`` with an
+          explicit "cannot certify the smallest eigenvalue" reason) rather than assert
+          identifiability it cannot verify.
 
-    **Honest bounds of the iterative path.** ``λ_max`` / the stiff spectrum are accurate; the
-    condition number / span use ``λ_min`` from the verified-smallest (or ``0`` for a shape
-    null). The prediction-variance propagation sums over the computed eigendirections only —
-    because parameter-space variance ``Σ = Σ_i v_iv_iᵀ/λ_i`` is dominated by the SMALLEST
-    eigenvalues, the reported ``max_prediction_std`` is a tight lower bound. ``fim_eigenvalues``
-    holds the computed subset, not the full spectrum, in the iterative case. For a definitive
-    verdict on a moderate ``n_params`` prefer ``method="dense"`` (exact).
+    **Honest bounds of the iterative path.** ``λ_max`` / the stiff spectrum are accurate; a
+    structural null is caught (via shape or the inverse-iteration probe), but the iterative path
+    **cannot** return a positive ``well-constrained`` / ``sloppy-but-predictive`` verdict — that
+    requires the exact smallest spectrum, so it abstains instead. The prediction-variance
+    propagation sums over the computed eigendirections only. ``fim_eigenvalues`` holds the
+    computed subset, not the full spectrum, in the iterative case. For a definitive
+    positive verdict on a moderate ``n_params`` use ``method="dense"`` (exact) or keep
+    ``n_params ≤ dense_below`` where ``"auto"`` already routes to the exact path.
     """
     theta_arr = np.asarray(theta, dtype=np.float64)
     n_theta = int(theta_arr.shape[0])
@@ -754,12 +854,33 @@ def sloppiness_diagnostic_matrixfree(
             evals = np.concatenate([[0.0], w_top])
             evecs = np.concatenate([np.zeros((n_theta, 1)), v_top], axis=1)
         else:
-            # HARD end: smallest eigenvalues, best-effort AND residual-verified.
-            w_sa, v_sa, smallest_certified = _verified_smallest_eigsh(
-                matvec_np, n_theta, n_eigs, lam_max, out_dtype
+            # HARD end: the smallest eigenvalue. eigsh(which='SA') CANNOT certify smallest-ness
+            # — on an ISOLATED near-null it converges to the well-conditioned cluster and MISSES
+            # the null, and the pairs it returns pass the Rayleigh check (they are genuine
+            # eigenpairs, just not the smallest), so trusting it mislabels a rank-deficient model
+            # well-constrained (the P6 / NUDGE-LIM-023 hole). Instead probe the true smallest by
+            # INVERSE ITERATION (shift-invert via CG), which amplifies the FIM's smallest
+            # eigenvalue and reliably catches an isolated null 'SA' misses (MEASURED).
+            null_vec, null_lam, null_found = _smallest_eig_null_probe(
+                matvec_np, n_theta, lam_max, out_dtype, floor_ratio=rank_rtol**2
             )
-            evals = np.concatenate([w_sa, w_top]) if w_sa.size else w_top
-            evecs = np.concatenate([v_sa, v_top], axis=1) if w_sa.size else v_top
+            if null_found:
+                # a residual-verified near-null (structural non-identifiability) — inject it with
+                # its concrete direction so the verdict is unidentifiable + names the null combo.
+                evals = np.concatenate([[max(null_lam, 0.0)], w_top])
+                evecs = np.concatenate([null_vec[:, None], v_top], axis=1)
+            else:
+                # No isolated null found. The FULL smallest spectrum is NOT certifiable
+                # matrix-free (eigsh('SA') is unreliable there; the probe is one-sided), so we
+                # cannot distinguish well-constrained / sloppy-but-predictive — gather the
+                # best-effort verified small pairs for the report and ABSTAIN (never assert
+                # identifiability we did not verify). smallest_certified drives the abstention.
+                w_sa, v_sa, _sa_ok = _verified_smallest_eigsh(
+                    matvec_np, n_theta, n_eigs, lam_max, out_dtype
+                )
+                smallest_certified = False
+                evals = np.concatenate([w_sa, w_top]) if w_sa.size else w_top
+                evecs = np.concatenate([v_sa, v_top], axis=1) if w_sa.size else v_top
         full_spectrum = False
     else:
         evals, evecs = _dense_spectrum_from_matvec(fim_mv, n_theta, theta_j.dtype)
@@ -828,16 +949,21 @@ def sloppiness_diagnostic_matrixfree(
 
     # --- the verdict (shared with the dense path) ------------------------------------- #
     if not smallest_certified:
-        # FAIL-SAFE: the iterative smallest-eigenvalue solve did not converge (the FIM is
-        # ill-conditioned; Lanczos/LOBPCG cannot certify the smallest eigenvalue matrix-free).
-        # We must NOT assert identifiability we could not verify — abstain instead.
+        # FAIL-SAFE: the smallest end could NOT be certified matrix-free. eigsh(which='SA') is
+        # unreliable at the smallest end of an ill-conditioned FIM (it can miss an isolated null),
+        # and the inverse-iteration null probe found NO verified near-null — but a one-sided probe
+        # that fails to find a null does NOT prove identifiability, and 'SA' alone cannot pin the
+        # true λ_min. So we CANNOT distinguish well-constrained / sloppy-but-predictive here and
+        # must NOT assert identifiability we could not verify — abstain instead.
         label = "unidentifiable"
         reason = (
-            "MATRIX-FREE ABSTENTION: the iterative smallest-eigenvalue solve did NOT converge "
-            f"at n_params={n_theta} (the Fisher matrix is ill-conditioned, and Lanczos/LOBPCG "
-            "cannot certify the smallest eigenvalue from matvecs alone). NUDGE will not claim "
-            "identifiability it has not verified — rerun with method='dense' for the exact "
-            "spectrum (feasible per-matvec; O(n_params²) memory), or add observations."
+            "MATRIX-FREE ABSTENTION: the smallest FIM eigenvalue could NOT be certified at "
+            f"n_params={n_theta} (eigsh(which='SA') is unreliable at the smallest end of an "
+            "ill-conditioned matrix, and the inverse-iteration null probe found no verified "
+            "near-null — a one-sided check that cannot, by itself, prove identifiability). NUDGE "
+            "will not claim identifiability it has not verified — rerun with method='dense' for "
+            "the exact spectrum (feasible per-matvec; O(n_params²) memory), raise dense_below, or "
+            "add observations."
         )
         fim_greedy_warning = None
     else:
@@ -900,7 +1026,7 @@ def analyze_model_matrixfree(
     pred_rel_tol: float = 0.05,
     naive_cond_threshold: float = 1e6,
     method: str = "auto",
-    dense_below: int = 256,
+    dense_below: int = 2048,
 ) -> SloppinessReport:
     """End-to-end matrix-free classify (twin of :func:`analyze_model`): read ``theta`` /
     ``param_names`` from the model (``predict_fn.theta0`` / ``.names`` when present) and run

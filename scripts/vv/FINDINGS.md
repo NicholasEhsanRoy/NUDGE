@@ -1405,6 +1405,99 @@ inflating + deflating) + the factor-1 positive control + the genuine-ceiling pos
 `test_genuine_ceiling_inflation_still_resolves_past_gate_4c` + the strict-xfail bound lock
 `test_genuine_ceiling_reduction_is_sacrificed_to_the_deflation_bound`.
 
+### P5 — a SMALL multiplicative perturbed-scale confound slips gate 4c; the free-affine EARN guard closes the whole affine class (hardening loop, `NUDGE-LIM-016` sharpened)
+
+**Correcting P4's overclaim first (honesty).** The §P4 verdict "INFLATION is CLOSED" was measured
+**only on large factors `c ≥ 1.5`**. It was not closed for the small-factor interior: the P4
+gate 4c is a per-magnitude BAND with two measured blind spots — (1) it is **ceiling-scoped**
+(never consults `off_scale` for a gain winner) and (2) its upper cut `1.30` sits *above* the
+genuine-ceiling maximum `1.18`, so the interval **`(1.18, 1.30]` is a blind gap** no genuine
+ceiling occupies but a small confound does. §P4 above is corrected to say gate 4c closes the
+LARGE-factor inflation only; the whole class is closed by gate 4d (this section).
+
+**The hole (independently reproduced through the shipped `attribute_differential`,
+`scripts/vv/p5_measure.py` + red-team `scripts/redteam/differential_small_mult_gain_hole.py`,
+default `ras_switch_1node`, N=3000, 2 seeds × {1.15, 1.20, 1.25}).** A **SMALL** uniform
+multiplicative factor `c ∈ [1.15, 1.25]` on ONE context's PERTURBED cells (control clean) on a
+`mechanism="none"` pair (truth = **no-difference**) slips BOTH gate 4b (`off_shift` ≈ 0.97–0.99,
+a factor scales the near-zero OFF baseline to near-zero) AND gate 4c two ways:
+
+```
+seed=0 c=1.15  shipped=gain-diff    best=n     off_scale=1.231   <HOLE (gate 4c ceiling-scoped; n winner)
+seed=0 c=1.20  shipped=gain-diff    best=n     off_scale=1.285   <HOLE (gate 4c ceiling-scoped; n winner)
+seed=1 c=1.25  shipped=ceiling-diff best=vmax  off_scale=1.279   <HOLE (off_scale in the (1.18,1.30] gap)
+```
+
+**3 confident-wrong across 2 seeds** through the shipped path (the red-team saw 8/4). At small `c`
+the joint LNA-BIC assigns the scale to the **gain (n)** channel (it compresses the modes' relative
+separation), which gate 4c never scopes; near `c = 1.25` the winner flips to `vmax` but `off_scale`
+can land ≤ 1.30. Either way NUDGE emitted a confident `*-diff` where the truth is no-difference.
+
+**The fix — guard the identifiability CLASS, not the confound magnitude (gate 4d, the STATE.md
+principle; prototyped + measured in `_proto_nuisance` / `design/PERTURBED_CONFOUND_STRATEGY.md`).**
+P1 (additive), P4 (large multiplicative), P5 (small multiplicative) are ONE thing: a per-condition
+**affine** `y = s·x + o` on one context's perturbed cells. Rather than add a fourth band, gate 4d
+adds `(s, o)` as a **free nuisance** on the perturbed context and asks ONE measured, threshold-free
+question before any positive `*-diff`: does the BIC-winning knob still **EARN** its parameter over
+a pure-affine null (the profiled ΔBIC `earn`, min over both directions — we don't know which
+context is confounded)? The whole confound family is BY CONSTRUCTION inside the free-affine null's
+span, so no `(s, o)` lets the bio knob earn.
+
+**The measured separator (the crux — a global goodness-of-fit gap, not another band).** `earn`
+separates the confound from a genuine mechanism with an enormous margin. **Honesty on the numbers
+(P5 audit, `runs/000000020`):** the **confound-side** magnitudes below (the safety-relevant
+separator) reproduce on the SHIPPED `attribute_differential`; the **genuine-side** magnitudes are
+from the prototype driver `scripts/vv/p5_measure.py` (steps=150) — an independent shipped-path
+re-measurement (steps=200) gives *lower* genuine values (e.g. ceiling ×1.4 ≈ +90 rather than
++116…+131) that remain **≫ the margin**, so nothing load-bearing depends on the exact magnitude
+(the shipped slow test locks only `earn > 6.0`, which holds with wide headroom):
+
+| condition (truth) | `earn` (profiled ΔBIC of the winner over a free affine) | gate-4d call |
+|---|---|---|
+| small-mult confound `c` = 1.15 / 1.20 / 1.25 (both seeds) | **−7.5 … −2.1** (all < 0) | **no-difference** ✓ |
+| genuine **gain** ×0.55 (when it resolves) | **+59.3 … +96.6** | gain-diff (preserved) |
+| genuine **ceiling** ×1.4 | **+116 … +131** | ceiling-diff (preserved) |
+| genuine **ceiling** ×2.0 | **+584 … +616** | ceiling-diff (preserved) |
+| clean `none` (no confound) | −7.1 … −7.5 (already `no-difference` at the base fit) | no-difference |
+
+Margin **6.0** (a BIC "strong" threshold) sits in the plateau between the confound ceiling (−2.1)
+and the genuine floor (+59.3). It is a single margin on a global fit statistic — **not** a
+per-confound calibrated band, so there is no "next magnitude" to slip. (The local Fisher/Laplace
+condition number is NOT the discriminator — it saturates on the unit mismatch between the
+count-unit offset `o` and the log-scale knob; the degeneracy that matters is global, answered by
+the integrated `earn`; `_proto_nuisance` §3.5.)
+
+**Re-validation (through the shipped `attribute_differential`, `scripts/vv/p5_measure.py 2`).**
+- **The 3 confident-wrong → `no-difference`** (0 confident-wrong; all 6 confound cases across 2
+  seeds × 3 factors abstain, `earn` ∈ [−7.5, −2.1]). Re-run:
+  `uv run python scripts/vv/p5_measure.py 2`.
+- **No over-abstention — every positive control still resolves:** genuine `ceiling-diff` ×1.4 /
+  ×2.0 (`earn` +116 … +616), genuine `gain-diff` ×0.55 (`earn` +59). Measured **0 over-abstentions
+  on genuine** in the same run. The existing positive-control slow tests
+  (`test_recovers_ceiling_difference`, `test_genuine_ceiling_earns_over_the_affine_nuisance`,
+  `test_genuine_gain_earns_over_the_affine_nuisance`) run through gate 4d and stay green.
+- **No regression on P1/P4:** the additive (4b) and large-multiplicative (4c) decoys abstain at
+  their own gate BEFORE the earn refit runs (so they never even pay for it), unchanged.
+
+**Verdict: the whole UNIFORM per-condition affine class (P1/P4/P5) is CLOSED** (0 confident-wrong,
+every positive preserved, no blind gap). **Honest residual BOUNDs (documented, not "solved"):**
+(1) a **NON-uniform** perturbed-side scale (confined strictly to above-median / ON cells) is
+observationally *identical* to a genuine ceiling and cannot be separated by any readout-only
+method — it needs an independent **inert-feature anchor** (housekeeping / spike-in) that estimates
+`(s, o)` directly (`design/PERTURBED_CONFOUND_STRATEGY.md`, `_proto_nuisance` guard A); without
+one NUDGE abstains on both a genuine ceiling and such a scale. (2) The gate-4c DEFLATION
+ceiling-reduction sacrifice (a strong genuine ceiling reduction is degenerate with a deflating
+scale) is unchanged. NUDGE still requires each context's control to come from the same library as
+its perturbed cells.
+
+Decoy + locks: `test_decoy_small_multiplicative_perturbed_scale_abstains` (the 3 exact
+confident-wrong cases) + `test_decoy_small_multiplicative_factor_one_is_no_difference` (the
+paired factor-1 control) + the gate-4d no-over-abstention locks
+`test_genuine_ceiling_earns_over_the_affine_nuisance` /
+`test_genuine_gain_earns_over_the_affine_nuisance` + the fast gate-4d contract tests
+(`test_classify_gain_winner_absorbed_by_affine_abstains` and siblings, which replaced the
+now-falsified `test_classify_off_scale_guard_is_ceiling_scoped`).
+
 ## Temporal / Lotka–Volterra attribution (NUDGE-METHOD-012) — the extensibility thesis
 
 **The reframe.** NUDGE observes steady-state *snapshots*; the deferred Capability 4 (temporal)
@@ -1887,6 +1980,122 @@ matvec path; the O(n_params) iterative path is the flat-memory option for enormo
 where the shape rank-deficiency carries the verdict. Guarded by
 `tests/inference/test_sloppiness_matrixfree.py` (fast: dense==matrix-free on the validated
 cases + the `fim_matvec` action; slow: the gLV shape-null + iterative fail-safe).
+
+> **Sharpened by P6 (below).** The claim above — that Rayleigh-residual verification (line 2)
+> keeps the iterative path "never confidently wrong" — held for a *data-driven* gLV null (many
+> near-null directions, where `eigsh` either finds a genuine small eigenvalue or fails to
+> converge → abstain) but **NOT for an ISOLATED exact null in an otherwise well-conditioned
+> spectrum**: there `eigsh('SA')` converges *past* the null to the well-conditioned cluster and
+> the pairs it returns are genuine eigenpairs, so they pass the Rayleigh residual — the check
+> verifies eigenpair-*ness*, not smallest-*ness*. See §P6 for the confident-wrong this exposed
+> and the measured fix.
+
+## §P6 — the isolated-null certification gap: `eigsh('SA')` verifies eigenpair-ness, not smallest-ness (`NUDGE-LIM-023`)
+
+**The confident-wrong (reproduced, 6/6).** On a well-conditioned linear map `y = M·θ` with the
+LAST column set equal to the FIRST (so `p0` and `p{last}` enter only via their sum — a provable
+Fisher-zero in the `(1,0,…,0,−1)` direction, `n_params ≤ n_obs` so the shape-null certificate
+does not apply), the **iterative** path — and `method="auto"` whenever `n_params > dense_below`
+— labelled the model `well-constrained` (`n_null=0`, *"every parameter individually
+identifiable"*), while `method="dense"` and the `jacfwd`-SVD oracle correctly returned
+`unidentifiable (n_null=1)`. This is the single most dangerous mislabel (unidentifiable →
+well-constrained), breaking the module's own stated fail-safe. Verified 6/6 across seeds at full
+float64 (x64 on — NOT the float32 caveat), via `method="auto"` (n=300) and `method="iterative"`
+(n=40):
+
+| case | before (shipped) | dense oracle |
+|---|---|---|
+| auto, n=300, seeds 0/1/2 | `well-constrained` n_null=0, λ_min≈1.8e2 | `unidentifiable` n_null=1 |
+| iterative, n=40, seeds 0/1/2 | `well-constrained` n_null=0, λ_min≈1.3–1.8e3 | `unidentifiable` n_null=1 |
+
+**Root cause.** `eigsh(which='SA')` uses a polynomial filter that de-emphasises the smallest
+end; on an isolated near-zero in an otherwise tight cluster it converges to the **cluster** and
+misses the zero. The returned pairs are *genuine* eigenpairs, so the Rayleigh residual
+(`‖FIM·v−λv‖/λ_max`) passes → the old `_verified_smallest_eigsh` reported `smallest_certified=
+True`, `λ_min` was set large/wrong, `computed_null=0`, verdict → `well-constrained`. The check
+verified the wrong property.
+
+**The fix, MEASURED on three lines** (`src/nudge/inference/sloppiness.py`, additive; frozen core
+untouched):
+
+1. **Shape-null** (unchanged): `n_params > n_obs` ⇒ rank-deficient by shape ⇒ `unidentifiable`.
+2. **`auto` defers to the EXACT dense-via-matvec reconstruction up to `dense_below=2048`**
+   (raised from 256). It rebuilds the `n×n` FIM from `n` matvecs and `eigh`'s it — still never
+   forming `J` or the `jacfwd` tangent fan-out (the OOM was the `n_obs·n_params` fan-out, not the
+   `n×n` FIM). MEASURED cost + exact-null recovery on the P6 family (structural-null linear map,
+   isolated subprocess peak RSS):
+
+   | n_params | wall (reconstruct+`eigh`) | peak RSS | `n×n` FIM bytes | `n_null` (truth 1) |
+   |---|---|---|---|---|
+   | 256 | 0.5 s | 324 MB | 0.5 MB | **1 ✓** |
+   | 1024 | 7.0 s | 445 MB | 8.4 MB | **1 ✓** |
+   | 2000 | 18.2 s | 722 MB | 32 MB | **1 ✓** |
+   | 3000 | 21.7 s | 1202 MB | 72 MB | **1 ✓** |
+   | 4096 | 42.2 s | 1973 MB | 134 MB | **1 ✓** |
+
+   The exact path recovers the null at **every** size. `dense_below=2048` is set from this
+   measurement: ~18 s / 0.7 GB peak — safe on a ~15 GB box with margin for a real ODE's larger
+   vmap fan-out, and 8× the old 256, so the whole realistic/default regime gets the exact verdict
+   (the repro's n=300 now routes to dense). Raise it (or use `method="dense"`) for n up to ~4096
+   (~42 s / 2 GB) when the memory/time is available.
+3. **Above `dense_below` (or explicit `method="iterative"`): an INVERSE-ITERATION null probe**
+   (`_smallest_eig_null_probe`, shift-invert `(FIM+εI)⁻¹` via CG, matrix-free). Inverse iteration
+   **amplifies** the FIM's smallest eigenvalue (a null is the strictly dominant eigenpair of the
+   inverse), so it reliably CATCHES the isolated null `eigsh('SA')` misses. MEASURED vs
+   `eigsh('SA')` and the exact `eigh`:
+
+   | model (n) | truth λ_min | `eigsh('SA')` smallest | inverse-iter RQ | probe verdict |
+   |---|---|---|---|---|
+   | P6 null (300) | 1.4e-11 | **1.84e2 (MISSES)** | **~1.8e-10** | null ✓ |
+   | P6 null (40) | 0.0 | **1.66e3 (MISSES)** | **~1.1e-12** | null ✓ |
+   | well-conditioned full-rank (300) | 1.82e2 | 1.82e2 | 1.85e2 | no null ✓ |
+   | sloppy sum-of-exp (12) | 1.68e-6 | 1.68e-6 | 5.0 (overest.) | no null ✓ |
+
+   (**Honesty correction** — P6 audit `runs/000000023` + orchestrator re-measurement, seeds 0–2 ×
+   n∈{40,300}: the inverse-iter RQ figures were originally recorded as ~1e-19 — below float64's
+   cancellation floor `λ_max·ε ≈ 6e-12`, and non-reproducing. The measured probe RQ is ~1e-12
+   (n=40) … ~2e-10 (n=300), **orders of magnitude below the rank floor** `rank_rtol²·λ_max ≈ 3e-10`
+   — which is the load-bearing, reproducing separation from the well-conditioned control's ~1.8e2.)
+
+   Cost: ~150–800 matvecs, <0.3 s. A residual-verified near-null (Rayleigh quotient ≤ rank floor)
+   ⇒ `unidentifiable`, naming the direction. The probe is used **one-sided only**: a low quotient
+   PROVES a null (safe), but the sloppy row shows a large quotient does NOT prove identifiability
+   (inverse iteration overestimates λ_min on a dense small-end), so when no null is found the path
+   **ABSTAINS** (`unidentifiable`, "cannot certify the smallest eigenvalue") — never asserts a
+   positive verdict it cannot verify. **Trace-completeness** (`tr FIM = Σλ`) was evaluated and
+   **rejected**: a missed *zero* changes the trace by 0, so it is blind to the P6 case (MEASURED).
+
+**After the fix (0/6 confident-wrong).** Re-running the repro: all 6 cases → `unidentifiable`
+`n_null=1` (the probe catches the null, `λ_min ≈ 1e-12`), matching the dense oracle. Positive
+controls (no over-abstention): well-conditioned full-rank n=300 → `well-constrained`; canonical
+sloppy sum-of-exp → `sloppy-but-predictive`; both via the affordable dense path; dense==auto
+label agreement preserved.
+
+**CLOSED vs BOUNDED (honest).** **CLOSED:** the isolated-structural-null mislabel — 0/6
+confident-wrong via the DEFAULT `method="auto"` (n=300) and explicit `method="iterative"` (n=40,
+n=3000); positive controls resolve; dense==auto agreement holds. **BOUNDED (locked):** above
+`dense_below`, with no shape-null and no isolated null found, the iterative path CANNOT return a
+positive `well-constrained` / `sloppy-but-predictive` verdict — it **over-abstains**
+(`unidentifiable`); this is the fail-safe direction (never a confident-wrong), and the exact
+positive verdict is recoverable on demand via `method="dense"` or by raising `dense_below`
+(measured: well-conditioned n=3000 `auto`→abstain, `dense`→`well-constrained`). The probe reports
+ONE null direction even when the true null space is higher-dimensional (label correct; null
+*count* can be undercounted in the iterative path — exact counts need `method="dense"`).
+
+**Reproduce (for the audit).**
+```
+# hole closed — exits 1 ("holes: 0/6") after the fix (exit 0 = hole still present):
+uv run python scripts/redteam/sloppiness_matrixfree_iterative_mislabel.py
+# regression + positive controls + strict-xfail decoy:
+uv run --extra ci pytest -q tests/inference/test_sloppiness_p6_structural_null.py \
+  tests/inference/test_sloppiness_matrixfree.py -m "x64 or slow or not slow"
+```
+
+Guarded by `tests/inference/test_sloppiness_p6_structural_null.py` (P6 null across seeds/sizes →
+`unidentifiable`; positive controls; a strict-xfail decoy locking the huge-regime over-abstention
+bound) and `tests/inference/test_sloppiness_matrixfree.py` (dense==matrix-free + iterative
+fail-safe).
+
 ## Optimal Experimental Design — the differentiability moat (`NUDGE-METHOD-014`, `NUDGE-LIM-024`)
 
 **The white-box advantage a black-box ODE solver cannot offer, MEASURED.** Everywhere else
