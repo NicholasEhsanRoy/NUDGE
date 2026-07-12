@@ -29,7 +29,8 @@ MCP sandbox*. Three constraints shape the setup:
 So the reliable recipe is to install NUDGE **on a system path** and point the connector at
 the console script there — its shebang self‑selects the correct Python and dependencies, and
 nothing points back into `~`. NUDGE is published on PyPI as **`nudge-bio`**; the MCP server
-needs the `[mcp]` extra.
+needs the `[mcp]` extra, and the `[viz]` extra so the `render_figure` tool can draw the figure
+server‑side (install `nudge-bio[mcp,viz]`).
 
 ---
 
@@ -40,7 +41,7 @@ Python, and all dependencies then live under `/opt` — no part of it reaches in
 
 ```bash
 sudo python3 -m venv /opt/nudge
-sudo /opt/nudge/bin/pip install "nudge-bio[mcp]"
+sudo /opt/nudge/bin/pip install "nudge-bio[mcp,viz]"
 # sanity (does not block):
 /opt/nudge/bin/python -c "from nudge.mcp.server import build_server; build_server(); print('MCP OK')"
 ```
@@ -69,7 +70,7 @@ site‑packages) is on a sandbox‑visible system path.
 
 ### No‑sudo alternative: keep a home install, grant read access
 
-If you'd rather install with `pipx` (`pipx install "nudge-bio[mcp]"`), the binary lands under
+If you'd rather install with `pipx` (`pipx install "nudge-bio[mcp,viz]"`), the binary lands under
 `~/.local` — invisible by default. Grant the sandbox read‑only access to it in the connector
 `config.toml`, then point the command at `~/.local/bin/nudge-mcp`:
 
@@ -86,7 +87,7 @@ user_read_paths = [
 ### Option A (try first if you like): plain `python3 -m`
 
 If you installed into the *same* interpreter the runtime's `python3` resolves to
-(`pip install "nudge-bio[mcp]"`), you can skip the absolute path:
+(`pip install "nudge-bio[mcp,viz]"`), you can skip the absolute path:
 
 | Field | Value |
 |---|---|
@@ -105,7 +106,7 @@ No prior install; the server pip‑installs itself on first launch. Needs the ru
 | Field | Value |
 |---|---|
 | **Command** | `python3` |
-| **Args** | `-c` · `import importlib.util,subprocess,sys; importlib.util.find_spec('nudge') or subprocess.check_call([sys.executable,'-m','pip','install','-q','nudge-bio[mcp]']); import nudge.mcp.server as s; s.main()` |
+| **Args** | `-c` · `import importlib.util,subprocess,sys; importlib.util.find_spec('nudge') or subprocess.check_call([sys.executable,'-m','pip','install','-q','nudge-bio[mcp,viz]']); import nudge.mcp.server as s; s.main()` |
 
 ---
 
@@ -216,6 +217,7 @@ capability handles that path too.
 | `Connection closed … command not found inside the MCP sandbox` / `exec: …/.local/bin/nudge-mcp: not found` | the binary is under `~`, which the sandbox can't see | Option B — install into `/opt` (system path), **or** grant the home dir via `[sandbox] user_read_paths` |
 | `No module named nudge` | the runtime's `python3` isn't your install target | Option B — point at the absolute `/opt/nudge/bin/nudge-mcp` path (shebang self‑selects Python) |
 | Tools load, but `fibrillization` can't read the file | sandbox file visibility (home not visible) | put the CSV on a visible path (`/opt/nudge/data/…`), grant it via `user_read_paths`, or use the connector's writable directory |
+| `render_figure` returns a *string* (an install hint), not an image | the `[viz]` extra (matplotlib) isn't installed, so the figure can't be drawn server‑side | `sudo /opt/nudge/bin/pip install --upgrade "nudge-bio[mcp,viz]"` and restart the connector |
 | First tool call is slow | JAX compile‑cache warm‑up on server start | expected once; subsequent calls are fast (the server is long‑lived) |
 
 ## The remote (hosted) alternative
