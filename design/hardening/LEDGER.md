@@ -8,21 +8,22 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000025-redteam-rescan-STOP.md`. That immutable record is the source of truth;
+`runs/000000026-orchestrator-final-gate.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: STOPPED (red-team) — release gate in verification.** Both moat-cycle holes are CLOSED +
+**Status: LOOP COMPLETE — release candidate pushed.** Both moat-cycle holes CLOSED + BOUNDED +
 merged: **P5** (gate-4d free-affine earn guard; audit PASS `runs/000000020`; merge `480468c`);
 **P6** (`dense_below=2048` deferral + inverse-iteration null probe; audit PASS `runs/000000023`;
-merge `3cd1f41` + honesty correction `ed3c381`). The **re-scan STOP gate** (`runs/000000025`)
-returned **HOLES_FOUND: 0** after a genuine full sweep (both previously-unreached moat surfaces —
-`adjoint.ode_identifiability` end-to-end and OED multi-knob/silent-regression — HELD, orchestrator-
-re-verified). The red-team loop is STOPPED.
+merge `3cd1f41` + honesty correction `ed3c381`). The re-scan STOP gate (`runs/000000025`) returned
+**HOLES_FOUND: 0** after a genuine full sweep. Final gate (`runs/000000026`): static + fast lane
+FULLY GREEN (310 passed); all 3 changed modules' slow suites green (differential 29p/1xf, sloppiness
+21p/1xf, service 2p) → no slow-lane regression possible; the full slow lane has a documented
+box-specific SIGSEGV-under-accumulation limit + 2 pre-existing/environmental failures in UNTOUCHED
+modules (neither a confident-wrong).
 
-- **Next:** orchestrator final release gate — fast lane GREEN (310 passed); the COMPLETE slow lane
-  (`pytest -m slow`) is being verified. If green → push + PR to `main`
-  ("hardening: post-moat red-team loop → release candidate"). A slow-lane REGRESSION re-opens the loop.
-- No further agent dispatch unless a NEW hole is reported. `main` untouched throughout.
+- **Next:** a human reviews + merges the PR → `main` ("hardening: post-moat red-team loop → release
+  candidate"); that merge unblocks the `nudge-bio 0.1.0` PyPI release. `main` UNTOUCHED throughout.
+- No further agent dispatch unless a NEW confident-wrong hole is later reported (re-opens the loop).
 - **HELD this sweep (recorded as fail-safe wins):** OED structural-null (`min_eig` honest
   `0.0→0.0`), OED guarded ridge (over-cautious absolute CRLB), OED demo (no merge regression),
   and all four round-3 fixes (P1/P2/P3/P4) — no merge-induced regression.
@@ -98,6 +99,7 @@ last; never edit a past row):
 | 000000023 | `runs/000000023-audit-P6.md` | audit | P6 fix | **AUDIT: PASS** — hole closed (0/6 exit=1; independent seeds 7,13,42; slow probe test), BOUNDED residual structurally fail-safe (n=2100 auto→abstain, dense→well-constrained; decoy xfails), no over-abstention, threshold measured (n=2000 11.8s/0.75GB), pinned-pyright 0, fast-lane +9 tests (0 pre-existing fail); flagged the ~1e-19 probe-RQ overclaim (non-blocking) |
 | 000000024 | `runs/000000024-orchestrator-P6-merge.md` | orchestrator | P6 merge | independently re-measured probe RQ (~1e-12…1e-10, confirming ~1e-19 non-reproducing) + merged → `3cd1f41` (clean ort) + honesty correction `ed3c381`; P6 CLOSED/BOUNDED; queue now EMPTY |
 | 000000025 | `runs/000000025-redteam-rescan-STOP.md` | redteam | post-fix re-scan (STOP gate) | **HOLES_FOUND: 0** → **STOP** — genuine full sweep; both UNREACHED moat surfaces HELD (`adjoint.ode_identifiability` null ODEs abstain 0/12 at f32+f64; OED 144-config + last-iterate + ridge-masking 0 confident-wrong), P5/P6 + prior fixes no regression; orchestrator re-ran both guards (exit 0); report `FAILSAFE_REDTEAM_7.md`; commit `54204e0` |
+| 000000026 | `runs/000000026-orchestrator-final-gate.md` | orchestrator | final release gate + push + PR | **LOOP COMPLETE** — static + fast lane FULLY GREEN (310p/5s/2xf); all 3 changed modules' slow suites green (differential 29p/1xf, sloppiness 21p/1xf, service 2p) ⇒ no slow-lane regression possible; full slow lane has a box-specific SIGSEGV-under-accumulation limit + 2 pre-existing/environmental failures in untouched modules (neither confident-wrong), documented honestly; pushed + opened PR → main; `main` untouched |
 
 ---
 
