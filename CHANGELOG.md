@@ -9,6 +9,14 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.3.0] — 2026-07-13
+
+### Added
+
 - **Two GENERAL-PURPOSE MCP tools — `identifiability` and `oed` — over a model registry
   (`nudge.inference.model_registry`; `NUDGE-METHOD-015`, `NUDGE-LIM-027`).** Expose NUDGE's
   matrix-free identifiability (`NUDGE-LIM-023`) and gradient OED (`NUDGE-METHOD-014`,
