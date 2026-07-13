@@ -1458,3 +1458,63 @@ anomalies:
       default is byte-for-byte preserved). When it fires the tool abstains on the finite-factor
       claim (reports a LOWER BOUND + an unbounded true CRLB) rather than fabricating a number — a
       fail-safe outcome, never a confident-wrong.
+
+  - anomaly_id: NUDGE-LIM-030
+    title: Dynamic model ingestion (model_path / model_code) EXECUTES arbitrary user Python in the
+      server process — a local, trusted-input convenience, not safe for untrusted / multi-tenant use
+    description: >-
+      The general identifiability and oed tools (nudge.mcp.server; nudge.service.identifiability_tool
+      / .oed_tool) can now analyse a user's OWN differentiable model file, not only a registered
+      model NAME (NUDGE-LIM-027). Two alternative sources are accepted alongside the registry name:
+      model_path (an absolute path to a Python file) and model_code (that Python source inline), with
+      precedence model_code > model_path > model and exactly one required to resolve (supplying more
+      than one is refused with a clear error, never a silent guess). The file is loaded by
+      nudge.inference.model_loader: from a path via importlib.util.spec_from_file_location +
+      module_from_spec + exec_module (with the file's own directory placed on sys.path for the
+      duration, so a sibling import resolves — exactly as it would under `python your_model.py`),
+      or from a string via exec() into a fresh, uniquely-named synthetic module namespace that is NOT
+      left in sys.modules (no cross-call leak). It then calls the file's by-convention builder —
+      nudge_identifiability(n_free, seed, sigma) -> {predict_fn, theta0, param_names, sigma} for
+      identifiability, or nudge_oed(target, sigma, seed) -> {observe, theta0, param_names, phi_bounds,
+      sigma} for OED — validating the returned dict has the required keys (naming any missing one)
+      and that param_names matches theta0's length, then wraps it into the same IdentifiabilityProblem
+      / DesignProblem the registered models use. The model file needs NO `nudge` import (it returns
+      plain JAX callables / numpy arrays); predict_fn(theta) must be JAX-autodiff-differentiable in
+      theta (RAW positive params, so θ·∂/∂θ is the log-sensitivity) and observe(theta, phi) diff in
+      both. THE LIMITATION (security, load-bearing): loading a model_path / model_code EXECUTES
+      ARBITRARY USER PYTHON in the NUDGE process — module-body statements and the builder call both
+      run with the server's privileges, exactly like running `python your_model.py` yourself. This is
+      a LOCAL, TRUSTED-INPUT convenience (a scientist analysing their own model on their own machine
+      / their own connector), and it is NOT SAFE for untrusted or multi-tenant input: a hostile model
+      file can read/write files, spawn processes, exfiltrate data, etc. NUDGE does not sandbox it. On
+      a hosted connector the file must be staged onto a server-visible path the operator controls
+      (e.g. /opt/nudge/data) and passed as an absolute path; do not accept model_path / model_code
+      from an unauthenticated caller. THE INTERFACE CONTRACT is the honest boundary of what NUDGE
+      guarantees: NUDGE runs its REAL matrix-free Fisher / gradient-OED analysis on whatever
+      differentiable forward model the file returns and reports whatever it MEASURES — it does not,
+      and cannot, verify the model file is a faithful representation of the user's system (a wrong
+      forward model yields a correct identifiability verdict about the WRONG model). Correctness of
+      the SCIENCE therefore rests on the user's model file; correctness of the ANALYSIS (the
+      fail-safes NUDGE-LIM-023 matrix-free rank-deficiency abstention and NUDGE-LIM-024 local OED)
+      is preserved on any ingested model. The registry-name path (model=...) is UNCHANGED and
+      executes no user code beyond the shipped builders. Numerical parity is MEASURED: analysing the
+      shipped scripts/demo_ab/ad_qsp_model.py by model_path reproduces the registered ad_qsp verdict
+      (sloppy-but-predictive) and FIM eigenspectrum to machine precision (smallest eigenvalue
+      1.33e-05, cond 7.6e8, identical to ~1e-9), the OED ×259 CRLB lift and the NUDGE-LIM-029
+      rank-deficiency guard reproduce exactly, and ad_qsp_nlme_model.py reproduces the coupled/
+      arrowhead ad_qsp_nlme unidentifiable fail-safe (smallest eigenvalue 0.0). Related:
+      NUDGE-LIM-027 (the registry-scope boundary this relaxes), NUDGE-LIM-023 / NUDGE-LIM-024 (the
+      analysis fail-safes preserved on any ingested model), NUDGE-METHOD-014 / NUDGE-METHOD-015.
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is an operational-security boundary, not a correctness hazard of the diagnostic itself:
+      the analysis fail-safes ride along on any ingested model (NUDGE-LIM-023 abstains rather than
+      assert an identifiability it cannot certify; NUDGE-LIM-024 marks OED as a local design
+      recommendation, not an attribution verdict), and the source-resolution refuses an ambiguous /
+      absent source rather than guessing. The safety-relevant part is the arbitrary-code execution:
+      model_path / model_code run user Python with the server's privileges and are NOT sandboxed, so
+      they must be treated exactly like `python your_model.py` — used only on trusted, first-party
+      input, and on a hosted connector only against operator-staged files (never an unauthenticated
+      caller's path/source). The docstrings on both tools and the connector guide state this loudly;
+      the registry-name path executes no user code and is the safe default.

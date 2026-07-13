@@ -122,6 +122,27 @@ a plain `import nudge` path). Plus a self-contained A/B "without-NUDGE" package 
 the AD-QSP forward model + synthetic cohort with NO `nudge` dependency, for a fair raw-agent
 comparison). Additive; frozen `fit.py`/`core/` untouched.
 
+**DYNAMIC MODEL INGESTION — the `identifiability` / `oed` tools analyse a USER'S OWN model file
+(`feat/dynamic-model-ingestion`; `NUDGE-LIM-030`).** Both tools now take a model from THREE sources
+(precedence `model_code` > `model_path` > `model`; exactly one, else a clear error): a registry
+name (unchanged), an absolute `model_path`, or inline `model_code`. A user file needs **no `nudge`
+import** — it exposes `nudge_identifiability(n_free, seed, sigma) -> {predict_fn, theta0,
+param_names, sigma}` and/or `nudge_oed(target, sigma, seed) -> {observe, theta0, param_names,
+phi_bounds, sigma}`, wrapped by `inference/model_loader.py` into the same problem types the registry
+uses (loaded via `spec_from_file_location`/`exec_module`, or `exec` into a fresh un-leaked synthetic
+module; the file's dir goes on `sys.path` so sibling imports resolve). This makes the with-vs-without
+A/B **symmetric** (both arms operate on the same shared model file). Two shipped standalone JAX
+model files (`scripts/demo_ab/ad_qsp_model.py`, `ad_qsp_nlme_model.py`) mirror `mechanisms/ad_qsp`
+verbatim, so **`model_path`-loaded == registry to machine precision** (MEASURED: `ad_qsp`
+identifiability smallest-eig `1.333289792042631e-05` / cond `7.6e8` bit-identical; OED
+`crlb_improvement 259.4437892475365` bit-identical + the `NUDGE-LIM-029` guard fires on `naive=[0,12]`;
+`ad_qsp_nlme` `unidentifiable`, smallest-eig `0.0`, bit-identical). **Honesty (`NUDGE-LIM-030`):**
+`model_path`/`model_code` EXECUTE arbitrary user Python in-process (like `python your_model.py`) —
+local, trusted-input convenience, NOT sandboxed / multi-tenant-safe; the registry-name path executes
+no user code. `tests/inference/test_model_loader.py` (10 fast) + `tests/mcp/test_dynamic_model_ingestion.py`
+(5 fast + 5 slow parity); `docs/user_guide/claude_science.md` documents `model_path` + host-staging
+into `/opt/nudge/data`. Additive; frozen `fit.py`/`core/` untouched.
+
 **Efficiency / scaling layer — adjoint gradients + MATRIX-FREE identifiability (Depth, 20%).**
 Two additive, opt-in modules that make NUDGE's mechanistic-ODE work scale to large networks
 without ever materializing the O(N²) objects an ad-hoc script would. (1) `inference/adjoint.py`

@@ -2114,9 +2114,47 @@ def _null_directions_to_list(report: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _resolve_model_source(
+    model: str, model_path: str | None, model_code: str | None
+) -> dict[str, Any]:
+    """Resolve which model source the ``identifiability`` / ``oed`` tools should use.
+
+    Exactly one of ``model`` (a registry name), ``model_path`` (an absolute path to a user model
+    file), or ``model_code`` (inline Python source) must be given. Precedence, when only one is
+    supplied, is ``model_code`` > ``model_path`` > ``model``; supplying more than one is an
+    ambiguous request and returns an ``{"error": ...}`` dict (never a silent guess). Returns
+    ``{"kind": "registry"|"dynamic", ...}`` on success (with ``label`` / ``path`` / ``code`` as
+    relevant) or ``{"error": ...}``.
+    """
+    provided = [
+        name for name, v in (
+            ("model_code", model_code), ("model_path", model_path), ("model", model)
+        ) if v
+    ]
+    if not provided:
+        return {"error": "no model source given: pass exactly one of model (a registry name), "
+                         "model_path (an absolute path to a model file), or model_code (inline "
+                         "source)."}
+    if len(provided) > 1:
+        return {"error": f"ambiguous model source: {provided} were all given; pass exactly one "
+                         "(precedence would be model_code > model_path > model, but supplying "
+                         "more than one is refused to avoid a silent guess)."}
+    if model_code:
+        return {"kind": "dynamic", "code": model_code, "path": None,
+                "label": "<inline model_code>"}
+    if model_path:
+        import os
+
+        return {"kind": "dynamic", "code": None, "path": model_path,
+                "label": os.path.basename(model_path)}
+    return {"kind": "registry", "name": model}
+
+
 def identifiability_tool(
-    model: str,
+    model: str = "",
     *,
+    model_path: str | None = None,
+    model_code: str | None = None,
     free: list[str] | None = None,
     n_free: int = 0,
     method: str = "auto",
@@ -2129,43 +2167,75 @@ def identifiability_tool(
 ) -> dict[str, Any]:
     """Which parameters of a differentiable ODE model are identifiable / sloppy / unrecoverable?
 
-    The general identifiability verb over the model registry
-    (:mod:`nudge.inference.model_registry`): builds the model BY NAME, runs the REAL
-    matrix-free Fisher-information diagnostic
-    (:func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree`), and returns the
-    verdict (``well-constrained`` / ``sloppy-but-predictive`` / ``unidentifiable``), the named
-    null directions, the honest fail-safe bound (``NUDGE-LIM-023``: the matrix-free path never
-    asserts an identifiability it cannot certify — it abstains instead), and — unless
-    ``with_figure=False`` — the FIM-spectrum figure via the shared render seam (inline base64 +
-    the regenerating ``fig.py`` + data sidecar when ``NUDGE_ENV=cloud``).
+    The general identifiability verb: it runs the REAL matrix-free Fisher-information diagnostic
+    (:func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree`) over a model taken from
+    THREE alternative sources (precedence ``model_code`` > ``model_path`` > ``model``; exactly one
+    must resolve):
+
+    - ``model`` — a name from the registry (:mod:`nudge.inference.model_registry`);
+    - ``model_path`` — an absolute path to a user Python file exposing ``nudge_identifiability``;
+    - ``model_code`` — that same Python source inline.
+
+    The dynamic (``model_path`` / ``model_code``) route EXECUTES arbitrary user Python in-process
+    (``NUDGE-LIM-030``: local, trusted-input only) via :mod:`nudge.inference.model_loader`. It
+    returns the verdict (``well-constrained`` / ``sloppy-but-predictive`` / ``unidentifiable``),
+    the named null directions, the honest fail-safe bound (``NUDGE-LIM-023``: the matrix-free path
+    never asserts an identifiability it cannot certify — it abstains instead), and — unless
+    ``with_figure=False`` — the FIM-spectrum figure via the shared render seam.
 
     ``free`` restricts to a named parameter subset; ``n_free`` is the population-/dimension-scale
     knob (``glv`` / ``linear_pathway`` / ``ad_qsp``); ``method`` ∈ ``auto`` / ``dense`` /
-    ``iterative``; ``sigma`` overrides the observation noise. Everything is MEASURED at θ₀; the
-    registry scope is ``NUDGE-LIM-027``.
+    ``iterative``; ``sigma`` overrides the observation noise. Everything is MEASURED at θ₀.
     """
     import jax
 
-    from nudge.inference.model_registry import build_identifiability_problem, get_model
     from nudge.inference.sloppiness import sloppiness_diagnostic_matrixfree
 
-    try:
-        entry = get_model(model)
-    except KeyError as exc:
-        return {"error": str(exc),
-                "registered": [m["name"] for m in _registry_models()]}
-    if not entry.supports_identifiability:
-        supported = [m["name"] for m in _registry_models() if m["supports_identifiability"]]
-        return {"error": f"model {model!r} does not support the identifiability tool",
-                "supported": supported}
+    src = _resolve_model_source(model, model_path, model_code)
+    if "error" in src:
+        return {**src, "registered": [m["name"] for m in _registry_models()]}
+
     # The FIM's smallest eigenvalues need float64 (float32 truncates the sloppy end); the ODE
     # builders also allocate their trajectories at build time, so enable x64 around BOTH.
     _prev = bool(getattr(jax.config, "jax_enable_x64", False))
     jax.config.update("jax_enable_x64", True)
     try:
-        problem = build_identifiability_problem(
-            model, free=free, n_free=n_free, sigma=sigma, seed=seed
-        )
+        if src["kind"] == "registry":
+            from nudge.inference.model_registry import (
+                build_identifiability_problem,
+                get_model,
+            )
+
+            try:
+                entry = get_model(model)
+            except KeyError as exc:
+                return {"error": str(exc),
+                        "registered": [m["name"] for m in _registry_models()]}
+            if not entry.supports_identifiability:
+                supported = [m["name"] for m in _registry_models()
+                             if m["supports_identifiability"]]
+                return {"error": f"model {model!r} does not support the identifiability tool",
+                        "supported": supported}
+            problem = build_identifiability_problem(
+                model, free=free, n_free=n_free, sigma=sigma, seed=seed
+            )
+            model_label, domain = model, entry.domain
+            registry_scope, dynamic = "NUDGE-LIM-027", False
+        else:
+            from nudge.inference.model_loader import load_identifiability_problem
+            from nudge.inference.model_registry import restrict_identifiability_problem
+
+            try:
+                problem = load_identifiability_problem(
+                    path=src["path"], code=src["code"], n_free=n_free, seed=seed, sigma=sigma
+                )
+                if free:
+                    problem = restrict_identifiability_problem(problem, free)
+            except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                return {"error": f"failed to load model from {src['label']}: {exc}"}
+            model_label = src["label"]
+            domain = str(problem.meta.get("domain", "user model"))
+            registry_scope, dynamic = "NUDGE-LIM-030", True
         report = sloppiness_diagnostic_matrixfree(
             problem.predict_fn, problem.theta0, problem.sigma,
             problem.param_names, method=method,
@@ -2174,11 +2244,13 @@ def identifiability_tool(
         jax.config.update("jax_enable_x64", _prev)
 
     abstained = report.label == "unidentifiable"
-    label = f"{model} ({entry.domain})"
+    label = f"{model_label} ({domain})"
     out: dict[str, Any] = {
         "tool": "identifiability",
-        "model": model,
-        "domain": entry.domain,
+        "model": model_label,
+        "source": src["kind"],
+        "dynamic_ingestion": dynamic,
+        "domain": domain,
         "n_params": problem.n_params,
         "param_names": list(problem.param_names),
         "method": method,
@@ -2200,10 +2272,15 @@ def identifiability_tool(
         "null_directions": _null_directions_to_list(report),
         "fim_greedy_warning": report.fim_greedy_warning,
         "limitation": "NUDGE-LIM-023",
-        "registry_scope": "NUDGE-LIM-027",
+        "registry_scope": registry_scope,
         "meta": {k: _jsonsafe(v) if isinstance(v, float) else v
                  for k, v in problem.meta.items()},
     }
+    if dynamic:
+        out["dynamic_ingestion_note"] = (
+            "loaded a user model file (model_path/model_code) — executes arbitrary Python "
+            "in-process; local trusted-input only (NUDGE-LIM-030)."
+        )
     if with_figure:
         out["figure"] = render_result(
             "identifiability",
@@ -2213,7 +2290,7 @@ def identifiability_tool(
             theme=fig_theme,
             self_contained=fig_self_contained,
             transport=transport,
-            cli_call=f"identifiability(model={model!r})",
+            cli_call=f"identifiability(model={model_label!r})",
         )
     return out
 
@@ -2295,8 +2372,10 @@ def _oed_animation_block(problem: Any, res: Any, *, t_bounds: tuple[float, float
 
 
 def oed_tool(
-    model: str,
+    model: str = "",
     *,
+    model_path: str | None = None,
+    model_code: str | None = None,
     target: str | None = None,
     objective: str = "d_opt",
     n_obs: int = 8,
@@ -2313,18 +2392,25 @@ def oed_tool(
 ) -> dict[str, Any]:
     """Design the experiment that best resolves a confounded parameter of an ODE model.
 
-    The general OED verb over the model registry: builds a differentiable
-    :class:`~nudge.inference.oed.DesignProblem` BY NAME, gradient-ascends the measurement
-    schedule to the optimal design (:func:`nudge.inference.oed.optimize_design`), and returns
-    the optimal design + the **MEASURED** identifiability gain (the target parameter's CRLB
-    factor and the FIM smallest-eigenvalue lift — never asserted), the local-OED caveat
-    (``NUDGE-LIM-024``), and — unless ``with_figure=False`` — the 95%-ellipse-collapse GIF via
-    the shared render seam (inline base64 + the regenerating ``fig.py`` + sidecar when
-    ``NUDGE_ENV=cloud``).
+    The general OED verb: it builds a differentiable
+    :class:`~nudge.inference.oed.DesignProblem` from THREE alternative sources (precedence
+    ``model_code`` > ``model_path`` > ``model``; exactly one must resolve) —
 
-    ``target`` selects the parameter to resolve (default: the model's ``default_oed_target``);
-    ``objective`` ∈ ``d_opt`` / ``a_opt`` / ``e_opt`` / ``crlb``; ``naive`` overrides the naive
-    'baseline+end' schedule; ``sigma`` overrides the observation noise.
+    - ``model`` — a name from the registry (:mod:`nudge.inference.model_registry`);
+    - ``model_path`` — an absolute path to a user Python file exposing ``nudge_oed``;
+    - ``model_code`` — that same Python source inline —
+
+    then gradient-ascends the measurement schedule to the optimal design
+    (:func:`nudge.inference.oed.optimize_design`) and returns the optimal design + the
+    **MEASURED** identifiability gain (the target parameter's CRLB factor and the FIM
+    smallest-eigenvalue lift — never asserted), the local-OED caveat (``NUDGE-LIM-024``), and —
+    unless ``with_figure=False`` — the 95%-ellipse-collapse GIF via the shared render seam. The
+    dynamic (``model_path`` / ``model_code``) route EXECUTES arbitrary user Python in-process
+    (``NUDGE-LIM-030``: local, trusted-input only) via :mod:`nudge.inference.model_loader`.
+
+    ``target`` selects the parameter to resolve (default: the model's ``default_oed_target``, or
+    the first parameter for a loaded model); ``objective`` ∈ ``d_opt`` / ``a_opt`` / ``e_opt`` /
+    ``crlb``; ``naive`` overrides the naive 'baseline+end' schedule; ``sigma`` overrides the noise.
 
     **Rank-deficient-naive honesty (``NUDGE-LIM-029``).** If the naive baseline does not
     identify the target — its FIM smallest eigenvalue sits at/below its own relative-ridge
@@ -2340,21 +2426,44 @@ def oed_tool(
     """
     import numpy as np
 
-    from nudge.inference.model_registry import build_oed_problem, get_model
     from nudge.inference.oed import optimize_design
 
-    try:
-        entry = get_model(model)
-    except KeyError as exc:
-        return {"error": str(exc),
-                "registered": [m["name"] for m in _registry_models()]}
-    if not entry.supports_oed:
-        return {"error": f"model {model!r} does not support the OED tool",
-                "supported": [m["name"] for m in _registry_models() if m["supports_oed"]]}
-    problem = build_oed_problem(model, target=target, sigma=sigma, seed=seed)
-    tgt = target or entry.default_oed_target or problem.param_names[0]
+    src = _resolve_model_source(model, model_path, model_code)
+    if "error" in src:
+        return {**src, "registered": [m["name"] for m in _registry_models()]}
+
+    if src["kind"] == "registry":
+        from nudge.inference.model_registry import build_oed_problem, get_model
+
+        try:
+            entry = get_model(model)
+        except KeyError as exc:
+            return {"error": str(exc),
+                    "registered": [m["name"] for m in _registry_models()]}
+        if not entry.supports_oed:
+            return {"error": f"model {model!r} does not support the OED tool",
+                    "supported": [m["name"] for m in _registry_models() if m["supports_oed"]]}
+        problem = build_oed_problem(model, target=target, sigma=sigma, seed=seed)
+        default_target = entry.default_oed_target
+        model_label, domain = model, entry.domain
+        registry_scope, dynamic = "NUDGE-LIM-027", False
+    else:
+        from nudge.inference.model_loader import load_oed_problem
+
+        try:
+            problem = load_oed_problem(
+                path=src["path"], code=src["code"], target=target, sigma=sigma, seed=seed
+            )
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            return {"error": f"failed to load model from {src['label']}: {exc}"}
+        default_target = None  # no registry default; fall back to the first parameter
+        model_label = src["label"]
+        domain = str(problem.meta.get("domain", "user model"))
+        registry_scope, dynamic = "NUDGE-LIM-030", True
+
+    tgt = target or default_target or problem.param_names[0]
     if tgt not in problem.param_names:
-        return {"error": f"unknown target {tgt!r} for model {model!r}",
+        return {"error": f"unknown target {tgt!r} for model {model_label!r}",
                 "param_names": list(problem.param_names)}
     lo, hi = problem.phi_bounds
     naive_design = (
@@ -2369,8 +2478,10 @@ def oed_tool(
     corr_init = _fim_corr(fim_init)
     out: dict[str, Any] = {
         "tool": "oed",
-        "model": model,
-        "domain": entry.domain,
+        "model": model_label,
+        "source": src["kind"],
+        "dynamic_ingestion": dynamic,
+        "domain": domain,
         "objective": objective,
         "target_parameter": res.target_name,
         "param_names": list(problem.param_names),
@@ -2401,16 +2512,21 @@ def oed_tool(
             "gains are computed, not asserted; a design recommendation, never a mechanism call."
         ),
         "limitation": "NUDGE-LIM-024",
-        "registry_scope": "NUDGE-LIM-027",
+        "registry_scope": registry_scope,
     }
+    if dynamic:
+        out["dynamic_ingestion_note"] = (
+            "loaded a user model file (model_path/model_code) — executes arbitrary Python "
+            "in-process; local trusted-input only (NUDGE-LIM-030)."
+        )
     if with_figure:
         anim_block = _oed_animation_block(
             problem, res, t_bounds=(lo, hi), n_frames=n_frames
         )
         fig_data = {
             "kind": "oed",
-            "label": f"{model} OED",
-            "model": model,
+            "label": f"{model_label} OED",
+            "model": model_label,
             "objective": objective,
             "target_parameter": res.target_name,
             "call": "",
@@ -2428,7 +2544,7 @@ def oed_tool(
         out["figure"] = render_result(
             "oed", fig_data, out=None, emit_code=True, theme=fig_theme,
             self_contained=fig_self_contained, animate=True, transport=transport,
-            anim_frames=n_frames, cli_call=f"oed(model={model!r})",
+            anim_frames=n_frames, cli_call=f"oed(model={model_label!r})",
         )
     return out
 

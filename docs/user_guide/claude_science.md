@@ -248,8 +248,25 @@ identifiable / sloppy / unrecoverable from the matrix-free Fisher spectrum (and 
 it can't certify — `NUDGE-LIM-023`), returning the FIM-spectrum figure inline; `oed(model, target,
 …)` gradient-designs the measurement schedule that best resolves a confounded parameter, returning
 the **measured** CRLB / eigenvalue lift (local OED, `NUDGE-LIM-024`) and the ellipse-collapse GIF
-inline. Both are heavy → run them via `job_submit`. Arbitrary (unregistered) models remain a plain
-`import nudge` library path (`NUDGE-LIM-027`).
+inline. Both are heavy → run them via `job_submit`.
+
+**Analyse your OWN model file (`model_path` / `model_code`).** Beyond the registry names, both
+tools accept a user model file directly: `identifiability(model_path="/opt/nudge/data/my_model.py")`
+or inline `identifiability(model_code="…")` (precedence `model_code` > `model_path` > `model`; supply
+exactly one). The file needs **no `nudge` import** — it defines `nudge_identifiability(n_free=0,
+seed=0, sigma=None) -> {"predict_fn", "theta0", "param_names", "sigma"}` (with `predict_fn(theta)`
+JAX-autodiff-differentiable in RAW positive params) and/or `nudge_oed(target=None, sigma=None,
+seed=0) -> {"observe", "theta0", "param_names", "phi_bounds", "sigma"}`. NUDGE runs its real
+matrix-free Fisher / gradient-OED analysis on whatever differentiable model the file returns. The
+shipped `scripts/demo_ab/ad_qsp_model.py` / `ad_qsp_nlme_model.py` are worked examples (they mirror
+the registered `ad_qsp` models to machine precision). **Security + host staging (`NUDGE-LIM-030`):**
+`model_path` / `model_code` **execute arbitrary Python in the server process** — a local,
+trusted-input convenience (like `python your_model.py`), NOT sandboxed and NOT safe for untrusted
+callers. Because the connector's shared directory is mounted read-only and the home dir isn't
+visible, stage the model file onto a server-visible path exactly like a data file —
+`sudo mkdir -p /opt/nudge/data && sudo cp my_model.py /opt/nudge/data/` (or grant its directory via
+`user_read_paths`) — and pass that **absolute** path. Arbitrary models are also always reachable via
+the plain `import nudge` library path (`NUDGE-LIM-027`).
 
 ---
 

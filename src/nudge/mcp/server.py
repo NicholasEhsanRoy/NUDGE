@@ -862,7 +862,9 @@ def build_server() -> Any:
 
     @mcp.tool()
     def identifiability(
-        model: str,
+        model: str = "",
+        model_path: str = "",
+        model_code: str = "",
         free: str = "",
         n_free: int = 0,
         method: str = "auto",
@@ -871,29 +873,41 @@ def build_server() -> Any:
     ) -> dict[str, Any]:
         """Which parameters of a differentiable ODE model are identifiable / sloppy / unrecoverable?
 
-        A GENERAL identifiability tool: it takes a model **by reference** (a name from
-        ``list_models`` — e.g. ``glv`` / ``linear_pathway`` / ``ad_qsp`` / ``logistic``, plus
-        the canonical ``sum_of_exponentials`` / ``redundant_exponential`` / ``well_conditioned``
-        toys), runs NUDGE's REAL **matrix-free Fisher-information** diagnostic
-        (:func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree`), and returns
+        A GENERAL identifiability tool. Point it at a model from ANY of three sources (precedence
+        ``model_code`` > ``model_path`` > ``model``; supply exactly one):
+
+        - ``model`` — a name from ``list_models`` (``glv`` / ``linear_pathway`` / ``ad_qsp`` /
+          ``logistic``, plus the canonical ``sum_of_exponentials`` / ``redundant_exponential`` /
+          ``well_conditioned`` toys);
+        - ``model_path`` — an ABSOLUTE path to your OWN Python model file, or
+        - ``model_code`` — that Python source inline.
+
+        A user model file needs **no ``nudge`` import**: it defines
+        ``nudge_identifiability(n_free=0, seed=0, sigma=None)`` returning
+        ``{"predict_fn", "theta0", "param_names", "sigma"}`` where ``predict_fn(theta) ->
+        observations`` is JAX-autodiff-differentiable in ``theta`` (RAW positive params). NUDGE
+        then runs its REAL **matrix-free Fisher-information** diagnostic
+        (:func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree`) on it and returns
         whatever it MEASURES — never a hardcoded answer.
 
-        Returns the verdict — ``well-constrained`` (every parameter individually identifiable),
-        ``sloppy-but-predictive`` (loose parameters but tight predictions — NUDGE must NOT
-        abstain), or ``unidentifiable`` (a structural null / rank-deficiency — NUDGE **abstains**
-        and NAMES the unrecoverable parameter combination) — the FIM spectrum (condition number,
-        spectral span, smallest/largest eigenvalue), the named ``null_directions``, and the
-        honest fail-safe bound (``NUDGE-LIM-023``: the matrix-free path never asserts an
-        identifiability it cannot certify — it abstains instead).
+        **Security (``NUDGE-LIM-030``).** ``model_path`` / ``model_code`` EXECUTE arbitrary user
+        Python in the server process — exactly like running ``python your_model.py`` yourself. A
+        LOCAL, trusted-input convenience; NOT safe for untrusted / multi-tenant input. On a hosted
+        connector, stage the file onto a server-visible path (e.g. ``/opt/nudge/data``) and pass
+        that absolute path.
+
+        Returns the verdict — ``well-constrained`` / ``sloppy-but-predictive`` (NUDGE must NOT
+        abstain) / ``unidentifiable`` (NUDGE **abstains** and NAMES the unrecoverable parameter
+        combination) — the FIM spectrum, the named ``null_directions``, and the honest fail-safe
+        bound (``NUDGE-LIM-023``: the matrix-free path never asserts an identifiability it cannot
+        certify — it abstains instead).
 
         ``free`` restricts to a comma-separated parameter subset (the rest held at nominal);
-        ``n_free`` is the population-/dimension-scale knob (``glv`` / ``linear_pathway`` /
-        ``ad_qsp`` — how many parameters are jointly estimated, which drives a sparse-data model
-        into honest rank-deficiency); ``method`` ∈ ``auto`` / ``dense`` / ``iterative``;
-        ``sigma`` overrides the observation noise (omit / NaN → the model default). With
-        ``with_figure`` the FIM-spectrum figure rides back via the render seam (inline base64 +
-        the regenerating ``fig.py`` + data sidecar under ``NUDGE_ENV=cloud``). Can be slow at
-        scale → prefer ``job_submit("identifiability", …)``.
+        ``n_free`` is the population-/dimension-scale knob (how many parameters are jointly
+        estimated); ``method`` ∈ ``auto`` / ``dense`` / ``iterative``; ``sigma`` overrides the
+        observation noise (omit / NaN → the model default). With ``with_figure`` the FIM-spectrum
+        figure rides back via the render seam. Can be slow at scale → prefer
+        ``job_submit("identifiability", …)``.
         """
         import math
 
@@ -902,6 +916,8 @@ def build_server() -> Any:
         free_list = [s.strip() for s in free.split(",") if s.strip()]
         return _run(
             model,
+            model_path=model_path or None,
+            model_code=model_code or None,
             free=free_list or None,
             n_free=n_free,
             method=method,
@@ -911,7 +927,9 @@ def build_server() -> Any:
 
     @mcp.tool()
     def oed(
-        model: str,
+        model: str = "",
+        model_path: str = "",
+        model_code: str = "",
         target: str = "",
         objective: str = "d_opt",
         n_obs: int = 8,
@@ -922,12 +940,27 @@ def build_server() -> Any:
     ) -> dict[str, Any]:
         """Design the experiment that best resolves a confounded parameter of an ODE model.
 
-        A GENERAL gradient optimal-experimental-design tool: it takes a model **by reference**
-        (a name from ``list_models`` supporting OED — ``logistic`` / ``glv`` / ``ad_qsp``),
-        builds a differentiable :class:`~nudge.inference.oed.DesignProblem`, and
-        gradient-ascends the measurement schedule to the design that best resolves the target
-        parameter (:func:`nudge.inference.oed.optimize_design`) — the white-box advantage a
-        black-box solver can't offer (``∂criterion/∂φ`` by autodiff through the ODE solve).
+        A GENERAL gradient optimal-experimental-design tool. Point it at a model from ANY of three
+        sources (precedence ``model_code`` > ``model_path`` > ``model``; supply exactly one):
+
+        - ``model`` — a name from ``list_models`` supporting OED (``logistic`` / ``glv`` /
+          ``ad_qsp``);
+        - ``model_path`` — an ABSOLUTE path to your OWN Python model file, or
+        - ``model_code`` — that Python source inline.
+
+        A user model file needs **no ``nudge`` import**: it defines
+        ``nudge_oed(target=None, sigma=None, seed=0)`` returning
+        ``{"observe", "theta0", "param_names", "phi_bounds", "sigma"}`` where ``observe(theta,
+        phi)`` is JAX-differentiable in both. NUDGE builds a differentiable
+        :class:`~nudge.inference.oed.DesignProblem` from it and gradient-ascends the measurement
+        schedule to the design that best resolves the target parameter
+        (:func:`nudge.inference.oed.optimize_design`) — the white-box advantage a black-box solver
+        can't offer (``∂criterion/∂φ`` by autodiff through the ODE solve).
+
+        **Security (``NUDGE-LIM-030``).** ``model_path`` / ``model_code`` EXECUTE arbitrary user
+        Python in the server process — a LOCAL, trusted-input convenience (like ``python
+        your_model.py``); NOT safe for untrusted / multi-tenant input. On a hosted connector, stage
+        the file onto a server-visible path (e.g. ``/opt/nudge/data``) and pass that absolute path.
 
         Returns the optimal measurement schedule and the **MEASURED** identifiability gain — the
         target parameter's Cramér–Rao-bound factor (``crlb_improvement``) and the FIM
@@ -960,6 +993,8 @@ def build_server() -> Any:
         naive_list = [float(s) for s in naive.split(",") if s.strip()]
         return _run(
             model,
+            model_path=model_path or None,
+            model_code=model_code or None,
             target=target or None,
             objective=objective,
             n_obs=n_obs,
