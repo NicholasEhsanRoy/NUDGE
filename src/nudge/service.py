@@ -2056,6 +2056,373 @@ def oed_animation_demo(
     }
 
 
+# --------------------------------------------------------------------------- #
+# GENERAL identifiability + OED tools (over the model registry — nudge.inference
+# .model_registry). Thin orchestration: build a problem BY NAME, run the REAL
+# matrix-free FIM diagnostic / gradient OED, return whatever it measures (incl.
+# honest abstentions) + the provenance-carrying figure. NOT demo-specific: any
+# registered differentiable model, ≥3 across domains, works identically.
+# --------------------------------------------------------------------------- #
+def _sloppiness_figuredata(report: Any, label: str) -> dict[str, Any]:
+    """Serialise a ``SloppinessReport`` to the ``identifiability`` renderer's figure-data dict.
+
+    The same shape :func:`identifiability_demo` emits, so the shared ``identifiability``
+    renderer draws the FIM spectrum + naive-vs-measured verdict from MEASURED numbers.
+    """
+    import numpy as np
+
+    nulls = report.null_directions
+    # The renderer wants real floats (it draws inf/nan as "∞ (structural null)"), NOT None —
+    # so keep inf/nan here rather than route through _jsonsafe.
+    return {
+        "kind": "identifiability",
+        "label": label,
+        "model_label": label,
+        "call": report.label,
+        "verdict": report.label,
+        "reason": report.reason,
+        "param_names": list(report.param_names),
+        "fim_eigenvalues": [float(v) for v in np.asarray(report.fim_eigenvalues).ravel()],
+        "cond_number": float(report.cond_number),
+        "span_decades": float(report.spectral_span_decades),
+        "spectral_span_decades": float(report.spectral_span_decades),
+        "smallest_eigenvalue": float(report.smallest_eigenvalue),
+        "largest_eigenvalue": float(report.largest_eigenvalue),
+        "n_sloppy_dims": int(report.n_sloppy_dims),
+        "n_null_dims": int(report.n_null_dims),
+        "is_sloppy": bool(report.is_sloppy),
+        "predictive": bool(report.predictive),
+        "relative_prediction_std": _jsonsafe(report.relative_prediction_std),
+        "pred_rel_tol": 0.05,
+        "naive_verdict": report.naive_verdict,
+        "naive_is_wrong": bool(report.naive_is_wrong),
+        "sloppy_decade_threshold": 3.0,
+        "null_hint": (nulls[0].hint if nulls else ""),
+    }
+
+
+def _null_directions_to_list(report: Any) -> list[dict[str, Any]]:
+    """The named null (unrecoverable) directions of an ``unidentifiable`` verdict — the
+    ACTIONABLE half: which parameter combination the data cannot pin, in plain language."""
+    out: list[dict[str, Any]] = []
+    for nd in report.null_directions:
+        out.append({
+            "param_loadings": {k: round(float(v), 4) for k, v in nd.param_loadings.items()},
+            "prediction_sensitivity": _jsonsafe(nd.prediction_sensitivity),
+            "hint": nd.hint,
+        })
+    return out
+
+
+def identifiability_tool(
+    model: str,
+    *,
+    free: list[str] | None = None,
+    n_free: int = 0,
+    method: str = "auto",
+    sigma: float | None = None,
+    seed: int = 0,
+    with_figure: bool = True,
+    fig_theme: str = "auto",
+    fig_self_contained: bool = False,
+    transport: str | None = None,
+) -> dict[str, Any]:
+    """Which parameters of a differentiable ODE model are identifiable / sloppy / unrecoverable?
+
+    The general identifiability verb over the model registry
+    (:mod:`nudge.inference.model_registry`): builds the model BY NAME, runs the REAL
+    matrix-free Fisher-information diagnostic
+    (:func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree`), and returns the
+    verdict (``well-constrained`` / ``sloppy-but-predictive`` / ``unidentifiable``), the named
+    null directions, the honest fail-safe bound (``NUDGE-LIM-023``: the matrix-free path never
+    asserts an identifiability it cannot certify — it abstains instead), and — unless
+    ``with_figure=False`` — the FIM-spectrum figure via the shared render seam (inline base64 +
+    the regenerating ``fig.py`` + data sidecar when ``NUDGE_ENV=cloud``).
+
+    ``free`` restricts to a named parameter subset; ``n_free`` is the population-/dimension-scale
+    knob (``glv`` / ``linear_pathway`` / ``ad_qsp``); ``method`` ∈ ``auto`` / ``dense`` /
+    ``iterative``; ``sigma`` overrides the observation noise. Everything is MEASURED at θ₀; the
+    registry scope is ``NUDGE-LIM-027``.
+    """
+    import jax
+
+    from nudge.inference.model_registry import build_identifiability_problem, get_model
+    from nudge.inference.sloppiness import sloppiness_diagnostic_matrixfree
+
+    try:
+        entry = get_model(model)
+    except KeyError as exc:
+        return {"error": str(exc),
+                "registered": [m["name"] for m in _registry_models()]}
+    if not entry.supports_identifiability:
+        supported = [m["name"] for m in _registry_models() if m["supports_identifiability"]]
+        return {"error": f"model {model!r} does not support the identifiability tool",
+                "supported": supported}
+    # The FIM's smallest eigenvalues need float64 (float32 truncates the sloppy end); the ODE
+    # builders also allocate their trajectories at build time, so enable x64 around BOTH.
+    _prev = bool(getattr(jax.config, "jax_enable_x64", False))
+    jax.config.update("jax_enable_x64", True)
+    try:
+        problem = build_identifiability_problem(
+            model, free=free, n_free=n_free, sigma=sigma, seed=seed
+        )
+        report = sloppiness_diagnostic_matrixfree(
+            problem.predict_fn, problem.theta0, problem.sigma,
+            problem.param_names, method=method,
+        )
+    finally:
+        jax.config.update("jax_enable_x64", _prev)
+
+    abstained = report.label == "unidentifiable"
+    label = f"{model} ({entry.domain})"
+    out: dict[str, Any] = {
+        "tool": "identifiability",
+        "model": model,
+        "domain": entry.domain,
+        "n_params": problem.n_params,
+        "param_names": list(problem.param_names),
+        "method": method,
+        "sigma": float(problem.sigma),
+        "verdict": report.label,
+        "abstained": abstained,
+        "reason": report.reason,
+        "cond_number": _jsonsafe(report.cond_number),
+        "spectral_span_decades": _jsonsafe(report.spectral_span_decades),
+        "smallest_eigenvalue": _jsonsafe(report.smallest_eigenvalue),
+        "largest_eigenvalue": _jsonsafe(report.largest_eigenvalue),
+        "n_sloppy_dims": int(report.n_sloppy_dims),
+        "n_null_dims": int(report.n_null_dims),
+        "is_sloppy": bool(report.is_sloppy),
+        "predictive": bool(report.predictive),
+        "relative_prediction_std": _jsonsafe(report.relative_prediction_std),
+        "naive_verdict": report.naive_verdict,
+        "naive_is_wrong": bool(report.naive_is_wrong),
+        "null_directions": _null_directions_to_list(report),
+        "fim_greedy_warning": report.fim_greedy_warning,
+        "limitation": "NUDGE-LIM-023",
+        "registry_scope": "NUDGE-LIM-027",
+        "meta": {k: _jsonsafe(v) if isinstance(v, float) else v
+                 for k, v in problem.meta.items()},
+    }
+    if with_figure:
+        out["figure"] = render_result(
+            "identifiability",
+            _sloppiness_figuredata(report, label),
+            out=None,
+            emit_code=True,
+            theme=fig_theme,
+            self_contained=fig_self_contained,
+            transport=transport,
+            cli_call=f"identifiability(model={model!r})",
+        )
+    return out
+
+
+def _registry_models() -> list[dict[str, Any]]:
+    from nudge.inference.model_registry import list_models
+
+    return list_models()
+
+
+def _naive_oed_schedule(t_min: float, t_max: float, n_obs: int) -> Any:
+    """A realistic sparse 'baseline + end of study' schedule — clusters at the two ends and
+    MISSES the informative transient, so the confounded parameter pair is near-singular. This
+    is the naive design the gradient OED is measured *against* (not a hand-picked degenerate)."""
+    import numpy as np
+
+    h = n_obs // 2
+    span = t_max - t_min
+    return np.concatenate([
+        np.linspace(t_min, t_min + 0.05 * span, h),
+        np.linspace(t_max - 0.05 * span, t_max, n_obs - h),
+    ])
+
+
+def _oed_animation_block(problem: Any, res: Any, *, t_bounds: tuple[float, float],
+                         n_frames: int) -> dict[str, Any]:
+    """The ``oed`` animator's frame sequence: the design-φ trajectory + the 2×2 confidence
+    ellipse collapse over the gradient steps, for ANY 2-parameter :class:`DesignProblem`.
+
+    Generalises :func:`oed_animation_demo` off the model registry: it re-instantiates nothing,
+    only READS the captured φ-history (``optimize_design(..., capture_phi=True)``) and, per
+    checkpoint, recomputes ``FIM(φ)⁻¹`` → the 95% ellipse. A representative observed-biomarker
+    trajectory is drawn as the backdrop the measurement times slide over.
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from nudge.inference.oed import fisher_information
+
+    chi2_95 = 5.991
+    steps = int(res.n_steps)
+    idx = np.unique(np.linspace(0, steps - 1, num=min(n_frames, steps)).round().astype(int))
+    frames: list[dict[str, Any]] = []
+    for i in idx:
+        phi = res.phi_history[int(i)]
+        fim = fisher_information(problem, phi)
+        p = fim.shape[0]
+        scale = max(float(np.trace(fim)) / p, 1e-30)
+        cov = np.linalg.inv(fim + 1e-8 * scale * np.eye(p))
+        evals, evecs = np.linalg.eigh(cov)
+        evals = np.clip(evals, 0.0, None)
+        frames.append({
+            "step": int(i),
+            "phi": [float(x) for x in np.sort(phi)],
+            "ellipse": {
+                "width": float(2.0 * np.sqrt(chi2_95 * evals[1])),
+                "height": float(2.0 * np.sqrt(chi2_95 * evals[0])),
+                "angle": float(np.degrees(np.arctan2(evecs[1, 1], evecs[0, 1]))),
+            },
+            "target_crlb": _jsonsafe(float(np.diag(cov)[res.target_index])),
+        })
+    # a representative observed-biomarker trajectory the samples slide over (first output).
+    # Use the observe map's own working dtype (no float64 override) so it doesn't warn when
+    # x64 is off — the FIM numbers above are assembled precisely in numpy float64 regardless.
+    lo, hi = t_bounds
+    theta0_j = jnp.asarray(np.asarray(problem.theta0, dtype=np.float64))
+    fine = jnp.asarray(np.linspace(lo, hi, 120), dtype=theta0_j.dtype)
+    n_out = int(np.asarray(problem.observe(theta0_j, fine[:1])).shape[0])
+    obs = np.asarray(problem.observe(theta0_j, fine)).reshape(len(fine), n_out)
+    traj_x = np.exp(obs[:, 0])  # undo the log-observation transform for the backdrop
+    return {
+        "param_labels": list(problem.param_names),
+        "theta0": [float(x) for x in np.asarray(problem.theta0, dtype=np.float64)],
+        "t_bounds": [float(lo), float(hi)],
+        "traj_t": [float(x) for x in np.asarray(fine)],
+        "traj_x": [float(x) for x in traj_x],
+        "frames": frames,
+    }
+
+
+def oed_tool(
+    model: str,
+    *,
+    target: str | None = None,
+    objective: str = "d_opt",
+    n_obs: int = 8,
+    steps: int = 400,
+    learning_rate: float = 0.2,
+    sigma: float | None = None,
+    naive: list[float] | None = None,
+    seed: int = 0,
+    with_figure: bool = True,
+    n_frames: int = 24,
+    fig_theme: str = "auto",
+    fig_self_contained: bool = False,
+    transport: str | None = None,
+) -> dict[str, Any]:
+    """Design the experiment that best resolves a confounded parameter of an ODE model.
+
+    The general OED verb over the model registry: builds a differentiable
+    :class:`~nudge.inference.oed.DesignProblem` BY NAME, gradient-ascends the measurement
+    schedule to the optimal design (:func:`nudge.inference.oed.optimize_design`), and returns
+    the optimal design + the **MEASURED** identifiability gain (the target parameter's CRLB
+    factor and the FIM smallest-eigenvalue lift — never asserted), the local-OED caveat
+    (``NUDGE-LIM-024``), and — unless ``with_figure=False`` — the 95%-ellipse-collapse GIF via
+    the shared render seam (inline base64 + the regenerating ``fig.py`` + sidecar when
+    ``NUDGE_ENV=cloud``).
+
+    ``target`` selects the parameter to resolve (default: the model's ``default_oed_target``);
+    ``objective`` ∈ ``d_opt`` / ``a_opt`` / ``e_opt`` / ``crlb``; ``naive`` overrides the naive
+    'baseline+end' schedule; ``sigma`` overrides the observation noise.
+    """
+    import numpy as np
+
+    from nudge.inference.model_registry import build_oed_problem, get_model
+    from nudge.inference.oed import optimize_design
+
+    try:
+        entry = get_model(model)
+    except KeyError as exc:
+        return {"error": str(exc),
+                "registered": [m["name"] for m in _registry_models()]}
+    if not entry.supports_oed:
+        return {"error": f"model {model!r} does not support the OED tool",
+                "supported": [m["name"] for m in _registry_models() if m["supports_oed"]]}
+    problem = build_oed_problem(model, target=target, sigma=sigma, seed=seed)
+    tgt = target or entry.default_oed_target or problem.param_names[0]
+    if tgt not in problem.param_names:
+        return {"error": f"unknown target {tgt!r} for model {model!r}",
+                "param_names": list(problem.param_names)}
+    lo, hi = problem.phi_bounds
+    naive_design = (
+        np.asarray(naive, dtype=float) if naive
+        else _naive_oed_schedule(lo, hi, n_obs)
+    )
+    res = optimize_design(
+        problem, naive_design, objective=objective, target=tgt, steps=steps,
+        learning_rate=learning_rate, seed=seed, capture_phi=with_figure,
+    )
+    fim_init, fim_opt = res.fim_init, res.fim_opt
+    corr_init = _fim_corr(fim_init)
+    out: dict[str, Any] = {
+        "tool": "oed",
+        "model": model,
+        "domain": entry.domain,
+        "objective": objective,
+        "target_parameter": res.target_name,
+        "param_names": list(problem.param_names),
+        "phi_init": [float(x) for x in np.sort(res.phi_init)],
+        "phi_opt": [float(x) for x in np.sort(res.phi_opt)],
+        "criterion_init": _jsonsafe(res.criterion_init),
+        "criterion_opt": _jsonsafe(res.criterion_opt),
+        "target_crlb_init": _jsonsafe(res.target_crlb_init),
+        "target_crlb_opt": _jsonsafe(res.target_crlb_opt),
+        "crlb_improvement": _jsonsafe(res.crlb_improvement),
+        "min_eig_init": _jsonsafe(res.min_eig_init),
+        "min_eig_opt": _jsonsafe(res.min_eig_opt),
+        "min_eig_improvement": _jsonsafe(res.min_eig_improvement),
+        "cond_init": _jsonsafe(float(np.linalg.cond(fim_init))),
+        "cond_opt": _jsonsafe(float(np.linalg.cond(fim_opt))),
+        "naive_correlation": _jsonsafe(corr_init),
+        "measured_note": (
+            "MEASURED at the nominal θ₀ — the optimal design and the CRLB / smallest-eigenvalue "
+            "gains are computed, not asserted; a design recommendation, never a mechanism call."
+        ),
+        "limitation": "NUDGE-LIM-024",
+        "registry_scope": "NUDGE-LIM-027",
+    }
+    if with_figure:
+        anim_block = _oed_animation_block(
+            problem, res, t_bounds=(lo, hi), n_frames=n_frames
+        )
+        fig_data = {
+            "kind": "oed",
+            "label": f"{model} OED",
+            "model": model,
+            "objective": objective,
+            "target_parameter": res.target_name,
+            "call": "",
+            "reason": "",
+            "phi_init": out["phi_init"],
+            "phi_opt": out["phi_opt"],
+            "target_crlb_init": out["target_crlb_init"],
+            "target_crlb_opt": out["target_crlb_opt"],
+            "crlb_improvement": out["crlb_improvement"],
+            "min_eig_init": out["min_eig_init"],
+            "min_eig_opt": out["min_eig_opt"],
+            "min_eig_improvement": out["min_eig_improvement"],
+            "animation": anim_block,
+        }
+        out["figure"] = render_result(
+            "oed", fig_data, out=None, emit_code=True, theme=fig_theme,
+            self_contained=fig_self_contained, animate=True, transport=transport,
+            anim_frames=n_frames, cli_call=f"oed(model={model!r})",
+        )
+    return out
+
+
+def _fim_corr(fim: Any) -> float:
+    """The off-diagonal correlation of a 2×2 FIM (the confound strength), else NaN."""
+    import numpy as np
+
+    f = np.asarray(fim, dtype=float)
+    if f.shape != (2, 2):
+        return float("nan")
+    denom = float(np.sqrt(f[0, 0] * f[1, 1]))
+    return float(f[0, 1] / denom) if denom > 0 else float("nan")
+
+
 def robustness_animation_demo(
     *, k: float = 1.0, vmax: float = 2.0, basal: float = 0.05,
     n_hi: float = 6.0, n_lo: float = 1.5, n_frames: int = 24,

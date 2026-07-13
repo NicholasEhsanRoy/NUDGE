@@ -19,6 +19,12 @@ Tools:
   constitutive-reporter control (the NUDGE-LIM-006 mitigation); reject "no switch" or abstain.
 - ``render_figure(kind, ...)`` — render any NUDGE result to an honest figure (the abstention
   overlay is stamped off the result's own verdict); returns paths + a size-capped inline PNG.
+- ``identifiability(model, ...)`` — which parameters of a differentiable ODE model (BY NAME
+  from a general registry) are identifiable / sloppy / unrecoverable — the matrix-free FIM
+  diagnostic + the honest abstention (``NUDGE-LIM-023``) + the FIM-spectrum figure.
+- ``oed(model, target, ...)`` — gradient-design the experiment that best resolves a confounded
+  parameter of a registered ODE model; the MEASURED CRLB / eigenvalue lift + the ellipse GIF.
+- ``list_models()`` — the general model registry the two tools above operate over.
 - ``list_mechanisms()`` — the registered mechanism library.
 - ``get_mechanism_card(name)`` — the full Markdown card for a mechanism.
 
@@ -66,6 +72,7 @@ _JOB_EXECUTOR: Any = None  # a lazily-created ThreadPoolExecutor
 HEAVY_TOOLS = frozenset({
     "attribute", "fibrillization", "constitutive", "differential", "differential_robust",
     "multi_reporter", "lotka", "design", "synergy", "cross_modality", "render_figure",
+    "identifiability", "oed",
 })
 
 
@@ -177,8 +184,9 @@ NUDGE_MCP_INSTRUCTIONS = (
     "artifact's provenance. GIFs are size-disciplined and fall back to a static preview above "
     "the inline cap (never truncated). MCP resource URIs are not dereferenceable here.\n\n"
     "Long calls: the host kills any single tool call over ~60s. Run heavy tools (attribute, "
-    "fibrillization, constitutive, differential, multi_reporter, lotka, design, and a slow "
-    "render_figure demo) as a background job: job_submit(tool, args_json) returns a job_id in "
+    "fibrillization, constitutive, differential, multi_reporter, lotka, design, identifiability, "
+    "oed, and a slow render_figure demo) as a background job: job_submit(tool, args_json) "
+    "returns a job_id in "
     "<1s; poll job_status(job_id) until 'done' (with the real result) or 'error'. Fast tools "
     "(list_mechanisms, dose_response, explain_abstention, get_mechanism_card, "
     "diagnose_abstention) can be called directly."
@@ -834,6 +842,122 @@ def build_server() -> Any:
             kind, result, out=out_path, emit_code=True, theme=theme,
             animate=animate, self_contained=self_contained,
             cli_call=f"render_figure({kind})",
+        )
+
+    @mcp.tool()
+    def list_models() -> list[dict[str, Any]]:
+        """List the differentiable models the ``identifiability`` / ``oed`` tools can analyse.
+
+        The general model registry (:mod:`nudge.inference.model_registry`): each entry is a
+        differentiable ODE / forward model across a domain (microbiome ecology, reaction
+        kinetics, clinical pharmacology, population dynamics, canonical sloppiness toys) with
+        which tools it supports. Both tools take a model **by name** from this list and run the
+        REAL analysis — not a hardcoded answer. Register your own in a few lines
+        (:func:`nudge.inference.model_registry.register_model`); arbitrary models remain a
+        plain ``import nudge`` library path (``NUDGE-LIM-027``).
+        """
+        from nudge.inference.model_registry import list_models as _list
+
+        return _list()
+
+    @mcp.tool()
+    def identifiability(
+        model: str,
+        free: str = "",
+        n_free: int = 0,
+        method: str = "auto",
+        sigma: float = float("nan"),
+        with_figure: bool = True,
+    ) -> dict[str, Any]:
+        """Which parameters of a differentiable ODE model are identifiable / sloppy / unrecoverable?
+
+        A GENERAL identifiability tool: it takes a model **by reference** (a name from
+        ``list_models`` — e.g. ``glv`` / ``linear_pathway`` / ``ad_qsp`` / ``logistic``, plus
+        the canonical ``sum_of_exponentials`` / ``redundant_exponential`` / ``well_conditioned``
+        toys), runs NUDGE's REAL **matrix-free Fisher-information** diagnostic
+        (:func:`nudge.inference.sloppiness.sloppiness_diagnostic_matrixfree`), and returns
+        whatever it MEASURES — never a hardcoded answer.
+
+        Returns the verdict — ``well-constrained`` (every parameter individually identifiable),
+        ``sloppy-but-predictive`` (loose parameters but tight predictions — NUDGE must NOT
+        abstain), or ``unidentifiable`` (a structural null / rank-deficiency — NUDGE **abstains**
+        and NAMES the unrecoverable parameter combination) — the FIM spectrum (condition number,
+        spectral span, smallest/largest eigenvalue), the named ``null_directions``, and the
+        honest fail-safe bound (``NUDGE-LIM-023``: the matrix-free path never asserts an
+        identifiability it cannot certify — it abstains instead).
+
+        ``free`` restricts to a comma-separated parameter subset (the rest held at nominal);
+        ``n_free`` is the population-/dimension-scale knob (``glv`` / ``linear_pathway`` /
+        ``ad_qsp`` — how many parameters are jointly estimated, which drives a sparse-data model
+        into honest rank-deficiency); ``method`` ∈ ``auto`` / ``dense`` / ``iterative``;
+        ``sigma`` overrides the observation noise (omit / NaN → the model default). With
+        ``with_figure`` the FIM-spectrum figure rides back via the render seam (inline base64 +
+        the regenerating ``fig.py`` + data sidecar under ``NUDGE_ENV=cloud``). Can be slow at
+        scale → prefer ``job_submit("identifiability", …)``.
+        """
+        import math
+
+        from nudge.service import identifiability_tool as _run
+
+        free_list = [s.strip() for s in free.split(",") if s.strip()]
+        return _run(
+            model,
+            free=free_list or None,
+            n_free=n_free,
+            method=method,
+            sigma=None if math.isnan(sigma) else sigma,
+            with_figure=with_figure,
+        )
+
+    @mcp.tool()
+    def oed(
+        model: str,
+        target: str = "",
+        objective: str = "d_opt",
+        n_obs: int = 8,
+        steps: int = 400,
+        sigma: float = float("nan"),
+        naive: str = "",
+        with_figure: bool = True,
+    ) -> dict[str, Any]:
+        """Design the experiment that best resolves a confounded parameter of an ODE model.
+
+        A GENERAL gradient optimal-experimental-design tool: it takes a model **by reference**
+        (a name from ``list_models`` supporting OED — ``logistic`` / ``glv`` / ``ad_qsp``),
+        builds a differentiable :class:`~nudge.inference.oed.DesignProblem`, and
+        gradient-ascends the measurement schedule to the design that best resolves the target
+        parameter (:func:`nudge.inference.oed.optimize_design`) — the white-box advantage a
+        black-box solver can't offer (``∂criterion/∂φ`` by autodiff through the ODE solve).
+
+        Returns the optimal measurement schedule and the **MEASURED** identifiability gain — the
+        target parameter's Cramér–Rao-bound factor (``crlb_improvement``) and the FIM
+        smallest-eigenvalue lift (``min_eig_improvement``), plus the naive-design confound
+        correlation and the condition-number before/after — **computed, never asserted**. It is
+        a design *recommendation*, not an attribution verdict, so it can't emit a confident-wrong
+        mechanism call. Local OED: valid near the nominal θ₀ (``NUDGE-LIM-024``).
+
+        ``target`` selects the parameter to resolve (default: the model's confounded target,
+        e.g. ``log_k_on`` for ``ad_qsp``); ``objective`` ∈ ``d_opt`` / ``a_opt`` / ``e_opt`` /
+        ``crlb``; ``n_obs`` the number of measurement times; ``naive`` overrides the naive
+        'baseline+end' schedule (comma-separated times); ``sigma`` overrides the observation
+        noise. With ``with_figure`` the 95%-confidence-ellipse-collapse GIF rides back inline
+        (base64 + ``fig.py`` + sidecar under ``NUDGE_ENV=cloud``). Slow → prefer
+        ``job_submit("oed", …)``.
+        """
+        import math
+
+        from nudge.service import oed_tool as _run
+
+        naive_list = [float(s) for s in naive.split(",") if s.strip()]
+        return _run(
+            model,
+            target=target or None,
+            objective=objective,
+            n_obs=n_obs,
+            steps=steps,
+            sigma=None if math.isnan(sigma) else sigma,
+            naive=naive_list or None,
+            with_figure=with_figure,
         )
 
     _register_job_tools(mcp)

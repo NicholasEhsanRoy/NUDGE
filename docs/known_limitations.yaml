@@ -1264,3 +1264,43 @@ anomalies:
       claims about the published constants. The full published network is retained verbatim in
       _proctor2013.py precisely so the faithful ground truth and the demo-scaled tractable
       model are both auditable and never conflated.
+
+  - anomaly_id: NUDGE-LIM-027
+    title: The identifiability / OED MCP tools operate over a NAMED model registry, not arbitrary user models
+    description: >-
+      The general `identifiability` and `oed` MCP tools (nudge.mcp.server; nudge.service
+      .identifiability_tool / .oed_tool) drive NUDGE's matrix-free Fisher-information
+      diagnostic (NUDGE-LIM-023) and gradient optimal experimental design (NUDGE-METHOD-014,
+      NUDGE-LIM-024) over a general MODEL REGISTRY (nudge.inference.model_registry) — a
+      name→builder table populated with several genuinely different differentiable models
+      across domains (glv — microbiome ecology; linear_pathway — reaction kinetics; ad_qsp —
+      clinical pharmacology; logistic — population dynamics; plus the canonical
+      sum_of_exponentials / redundant_exponential / well_conditioned toys). Both tools take a
+      model BY NAME from that registry and run the REAL analysis (never a hardcoded answer),
+      which is what makes the capability demonstrably general rather than demo-specific — it
+      works identically on ≥3 different models, and returns whatever it measures, including
+      honest abstentions (the well_conditioned decoy must NOT be flagged sloppy; the
+      redundant_exponential decoy must abstain `unidentifiable`). The BOUND: the tools reach a
+      model only through the registry. An arbitrary user model that is not registered cannot be
+      analysed by the `identifiability(model=...)` / `oed(model=...)` string interface. This is
+      a convenience-surface scope, not a capability limit: any differentiable
+      `predict_fn(theta) -> observations` or `observe(theta, phi)` forward model can be analysed
+      directly via the `import nudge` library path
+      (nudge.inference.sloppiness.analyze_model_matrixfree /
+      nudge.inference.oed.optimize_design), and registering a model to expose it through the
+      tools is a few lines (nudge.inference.model_registry.register_model; documented in the
+      module docstring + the Mechanism Cards). NUDGE never fabricates a verdict for an unknown
+      model name — it returns an explicit error listing the registered models — so the
+      registry scope cannot produce a confident-wrong answer. Related: NUDGE-LIM-023
+      (matrix-free identifiability fail-safe), NUDGE-LIM-024 (local OED), NUDGE-METHOD-014.
+    severity: minor
+    safety_relevance: not_safety_relevant
+    safety_relevance_rationale: >-
+      Purely a scope/ergonomics boundary of the string-keyed tool interface, not a correctness
+      hazard: an unregistered model name returns an explicit error (the list of registered
+      models), never a fabricated verdict, and the underlying diagnostics carry their own
+      fail-safes (NUDGE-LIM-023 abstains rather than assert un-certified identifiability;
+      NUDGE-LIM-024 marks OED as a local design recommendation, not an attribution verdict). The
+      decoy models in the registry (well_conditioned must not read as sloppy; redundant_exponential
+      must abstain) are the standing check that the general tool returns the correct verdict per
+      model rather than a demo-tuned constant.
