@@ -20,8 +20,8 @@ from typing import Any
 
 import numpy as np
 
-from nudge.viz._util import get, verdict_color
-from nudge.viz.base import Panel, RenderedFigure, is_abstention
+from nudge.viz._util import ease, get, verdict_color
+from nudge.viz.base import AnimationSpec, Panel, RenderedFigure, abstain_overlay, is_abstention
 from nudge.viz.theme import apply_theme
 
 
@@ -143,4 +143,129 @@ def build(obj: Any, *, theme: str = "auto") -> RenderedFigure:
     ]
     return RenderedFigure(
         fig=fig, panels=panels, kind="multi_reporter", caption=_caption(d), data=d
+    )
+
+
+def build_animation(obj: Any, *, theme: str = "auto", frames: int = 28) -> AnimationSpec:
+    """Animate the joint panel RESOLVING as reporters are added one at a time
+    (``NUDGE-METHOD-008``; the identifiability force-multiplier, in motion).
+
+    Frame variable ``k`` = the number of reporters included, sweeping 1 → ``n_reporters``
+    with a short hold at the end (GIF frame → ``k`` exactly as the reference animators map
+    frame → checkpoint). Left panel: the reporters popping in one at a time with their
+    independent-fit R². Right panel: a **mechanism-resolution landscape** over the four
+    hypotheses {no-effect, threshold, gain, ceiling}, whose bars start FLAT / near-equal at
+    ``k=1`` (the single-reporter K⇄v_max / gain⇄threshold degeneracy — ambiguous) and SHARPEN
+    toward the real, peaked-at-``winner`` shape as ``k`` → ``n``, so the winner visibly lights
+    up only once the joint panel over-determines the shared latent.
+
+    Reads ONLY the frozen result dict (``multi_reporter_data``) — it never re-fits. Honesty is
+    the same as the static path: the abstention overlay fires off the result's OWN ``call`` (an
+    ``off-model`` panel — no single shared latent — hatches every frame; a resolved ``ceiling``
+    does not, because the JOINT genuinely resolved), and ``abstained`` is stamped off that same
+    verdict. The single→joint story is carried by the flat→peaked bars + labels, never a faked
+    per-frame verdict.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    pal = apply_theme(theme)
+    d = multi_reporter_data(obj)
+    call = d["call"]
+    abst = is_abstention(call)
+    color = verdict_color(call, pal)
+    reps = d["reporters"]
+    n = max(int(d["n_reporters"]), len(reps), 1)
+
+    # Mechanism-resolution landscape: lower restricted-loss ⇒ taller "resolution" bar. The
+    # k=1 shape is FLAT (every bar at the mean — the single-reporter degeneracy); the k=n
+    # shape is the real, peaked-at-winner shape (normalised so the winner reaches 1.0). Frames
+    # interpolate flat → peaked, so the landscape visibly sharpens as reporters accumulate.
+    hyps = ["no_effect", "threshold", "gain", "ceiling"]
+    hyp_labels = ["no-effect", "threshold\n(K)", "gain\n(n)", "ceiling\n(A)"]
+    raw = [_f(d["losses"].get(h)) for h in hyps]
+    finite = [v for v in raw if np.isfinite(v)]
+    max_loss = max(finite) if finite else 1.0
+    target = [(max_loss - v) if np.isfinite(v) else 0.0 for v in raw]
+    peak = max(target)
+    target = [t / peak for t in target] if peak > 0 else target  # winner → 1.0
+    flat = sum(target) / len(target)  # the degenerate, near-equal single-reporter shape
+    winner = d["winner"].lower()
+
+    fig, (ax_rep, ax_land) = plt.subplots(1, 2, figsize=(10.6, 4.4))
+    hold = max(frames // 5, 2)
+    span = max(frames - hold, 1)
+
+    def draw(i: int) -> None:
+        frac = min(i, frames - hold) / span
+        k = min(int(round(frac * (n - 1))) + 1, n)
+        w = ease(frac)
+        resolved = (k >= n) and not abst
+        bars = [(1.0 - w) * flat + w * t for t in target]
+
+        # left — reporters accumulate one at a time (ghosted slots wait to be filled)
+        ax_rep.clear()
+        for j in range(n):
+            r2 = _f(reps[j].get("r2_independent")) if j < len(reps) else float("nan")
+            if j < k and np.isfinite(r2):
+                ax_rep.barh(j, r2, height=0.55, color=pal["muted"], alpha=0.9, zorder=3)
+                ax_rep.text(min(r2 + 0.02, 1.12), j, f"{r2:.2f}", va="center", fontsize=8,
+                            color=pal["text"], zorder=4)
+            elif j < k:  # included but no per-reporter R² available
+                ax_rep.barh(j, 1.0, height=0.55, color=pal["muted"], alpha=0.25, zorder=2)
+            else:  # a not-yet-added slot
+                ax_rep.barh(j, 1.0, height=0.55, color=pal["grid"], alpha=0.4, zorder=1)
+        ax_rep.set_yticks(range(n))
+        ax_rep.set_yticklabels(
+            [str(reps[j].get("name", f"R{j}")) if j < len(reps) else f"R{j}" for j in range(n)],
+            fontsize=8)
+        ax_rep.set_xlim(0.0, 1.15)
+        ax_rep.set_ylim(-0.6, n - 0.4)
+        ax_rep.invert_yaxis()
+        ax_rep.set_xlabel("R²  (independent fit)")
+        ax_rep.set_title(f"{k} of {n} reporters", fontweight="bold", color=pal["text"])
+
+        # right — the mechanism-resolution landscape sharpening flat → peaked-at-winner
+        ax_land.clear()
+        xs = np.arange(len(hyps))
+        colors = [
+            color if (h == winner and resolved)
+            else pal["grid"] if h == "no_effect"
+            else pal["muted"]
+            for h in hyps
+        ]
+        ax_land.bar(xs, bars, color=colors, alpha=0.95, zorder=3, width=0.62)
+        ax_land.set_xticks(xs)
+        ax_land.set_xticklabels(hyp_labels, fontsize=8)
+        ax_land.set_ylim(0.0, 1.2)
+        ax_land.set_ylabel("resolution score  (taller = better fit ⇒ more resolved)")
+        ax_land.set_title("mechanism-resolution landscape", fontweight="bold",
+                          color=pal["text"])
+        if resolved and winner in hyps:
+            wi = hyps.index(winner)
+            ax_land.text(wi, bars[wi] + 0.04, "winner", ha="center", va="bottom",
+                         fontsize=9, fontweight="bold", color=color, zorder=6)
+        if abst:
+            abstain_overlay(ax_land, call, d["reason"], palette=pal)
+        else:
+            msg = "single reporter — degenerate" if k < n else "joint panel — resolved"
+            ax_land.text(0.5, 0.95, msg, transform=ax_land.transAxes, ha="center", va="top",
+                         fontsize=8.5, color=pal["muted"], zorder=6)
+
+    fig.suptitle(f"{d['label']}  —  joint attribution as reporters accumulate",
+                 fontweight="bold", color=pal["text"], fontsize=13)
+    fig.tight_layout()
+    anim = FuncAnimation(
+        fig, draw, frames=frames, interval=1000 // 8, blit=False,  # type: ignore[arg-type]
+    )
+    if abst:
+        caption = (f"{d['label']} → {call.upper()} — reporters add but the joint panel can't "
+                   f"resolve ({d['reason'][:60] or 'not jointly resolvable'})")
+    else:
+        caption = (f"{d['label']} → {call.upper()}: {n} reporters added one at a time; the "
+                   f"resolution landscape sharpens to the winner ({d['winner']}, knob margin "
+                   f"{d['knob_margin']:.2f})")
+    return AnimationSpec(
+        fig=fig, anim=anim, caption=caption, abstained=abst,
+        data=dict(obj) if isinstance(obj, dict) else d,
     )

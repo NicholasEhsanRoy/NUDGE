@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 
 from nudge.viz._util import get, verdict_color
-from nudge.viz.base import Panel, RenderedFigure, is_abstention
+from nudge.viz.base import AnimationSpec, Panel, RenderedFigure, abstain_overlay, is_abstention
 from nudge.viz.theme import apply_theme
 
 _CHANNEL_LABELS = {
@@ -144,3 +144,92 @@ def build(obj: Any, *, theme: str = "auto") -> RenderedFigure:
     return RenderedFigure(
         fig=fig, panels=panels, kind="robustness", caption=_caption(d), data=d
     )
+
+
+def _draw_well(ax: Any, x: np.ndarray, frame: dict[str, Any], pal: dict[str, str],
+               u_max: float, color: str) -> None:
+    """Draw the 1-node potential well U(x) for one frame (two basins → one at the fold)."""
+    u = np.asarray(frame["U"], dtype=float)
+    ax.plot(x, u, color=color, lw=2.6, zorder=3)
+    ax.fill_between(x, u, u_max * 1.15, color=pal["surface"], zorder=2)
+    for state, label in frame.get("fixed_points", []):
+        xf = float(state)
+        uf = float(np.interp(xf, x, u))
+        if label == "stable":
+            ax.plot([xf], [uf], "o", color=color, ms=11, zorder=5)  # a basin (a ball rests)
+        elif "saddle" in label:
+            ax.plot([xf], [uf], "x", color=pal["gain"], ms=10, mew=2.5, zorder=5)  # barrier
+    ax.set_xlim(float(x[0]), float(x[-1]))
+    ax.set_ylim(-0.04 * (u_max or 1.0), 1.15 * (u_max or 1.0))
+    ax.set_xlabel("activity x")
+    ax.set_ylabel("potential U(x)  (balls rest in wells)")
+    ax.set_title(f"potential landscape   (Hill n = {frame['n']:.2f})", fontweight="bold",
+                 color=pal["text"])
+
+
+def build_animation(obj: Any, *, theme: str = "auto", frames: int = 28) -> AnimationSpec:
+    """Animate a 1-node switch swept TOWARD its fold: the proximity dial climbing 0→1 and the
+    channels rising while the potential well flattens from two basins to one
+    (``NUDGE-METHOD-006`` / ``NUDGE-LIM-012``; the tipping point, in motion).
+
+    Reads the enriched ``animation`` block (``service.robustness_animation_demo``: a sweep of
+    ``n`` toward the fold with the per-frame dial + channels + potential ``U(x)``) and draws
+    it — it never re-fits. Near the fold the dial is a **one-sided lower bound** (the LNA
+    breaks down there), drawn as an open-ended arrow; the overlay fires on the
+    ``unresolved`` / ``not-bistable`` frames.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    pal = apply_theme(theme)
+    anim = obj.get("animation", {}) if isinstance(obj, dict) else {}
+    fr_list = anim.get("frames", [])
+    if not fr_list:
+        raise ValueError("robustness animation needs the enriched 'animation' block "
+                         "(use service.robustness_animation_demo / "
+                         "demo_result('robustness', animate=True))")
+    x = np.asarray(anim.get("x", []), dtype=float)
+    u_max = float(anim.get("u_max", 1.0)) or 1.0
+    n_cp = len(fr_list)
+    final_abst = is_abstention(str(fr_list[-1].get("call", "")))
+
+    fig = plt.figure(figsize=(11.0, 4.6))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.45, 1.0], height_ratios=[1.0, 1.0])
+    ax_well = fig.add_subplot(gs[:, 0])
+    ax_dial = fig.add_subplot(gs[0, 1])
+    ax_ch = fig.add_subplot(gs[1, 1])
+    hold = max(frames // 5, 2)
+
+    def draw(i: int) -> None:
+        ci = min(int(round(min(i, frames - hold) / max(frames - hold, 1) * (n_cp - 1))),
+                 n_cp - 1)
+        fr = fr_list[ci]
+        fd = {
+            "label": "1-node switch", "call": str(fr.get("call", "")),
+            "reason": str(fr.get("reason", "")),
+            "proximity": _f(fr.get("proximity")),
+            "one_sided": bool(fr.get("one_sided", False)),
+            "channels": {k: _f(v) for k, v in dict(fr.get("channel_proximities", {})).items()},
+        }
+        color = verdict_color(fd["call"], pal)
+        for a in (ax_well, ax_dial, ax_ch):
+            a.clear()
+        _draw_well(ax_well, x, fr, pal, u_max, color)
+        _draw_dial(ax_dial, fd, pal, color)
+        _draw_channels(ax_ch, fd, pal, color)
+        if is_abstention(fd["call"]):
+            abstain_overlay(ax_dial, fd["call"], fd["reason"], one_sided=fd["one_sided"],
+                            palette=pal)
+
+    fig.suptitle("robustness dial — sweeping a switch toward its fold", fontweight="bold",
+                 color=pal["text"], fontsize=13)
+    fig.tight_layout()
+    anim_obj = FuncAnimation(
+        fig, draw, frames=frames, interval=1000 // 8, blit=False,  # type: ignore[arg-type]
+    )
+    last = fr_list[-1]
+    caption = (f"1-node switch swept to the fold → {str(last.get('call','')).upper()} "
+               f"(proximity {'≥ ' if last.get('one_sided') else ''}"
+               f"{_f(last.get('proximity')):.2f}; two basins → one; NUDGE-LIM-012)")
+    return AnimationSpec(fig=fig, anim=anim_obj, caption=caption, abstained=final_abst,
+                         data=dict(obj) if isinstance(obj, dict) else {})

@@ -54,7 +54,7 @@ JAX graph-physics engine) — reuses its `ift_linear_solve` primitive and
 | OED (differentiability moat) | ✅ (synthetic) | **Gradient-based Optimal Experimental Design `inference/oed.py` (`NUDGE-METHOD-014`, `NUDGE-LIM-024`) — the white-box advantage a black-box ODE solver can't offer.** Everywhere else NUDGE differentiates a *fit loss* w.r.t. *parameters*; this differentiates an *identifiability criterion* w.r.t. the *experiment*. Because the forward model is differentiable, the Fisher Information `FIM(φ)=J(φ)ᵀJ(φ)/σ²` (`J=∂observe/∂θ` by autodiff through a self-contained RK4 `lax.scan`; touches neither `fit.py` nor `core/`) is a differentiable function of a design parameter φ (the measurement times), so `∂criterion/∂φ` is available by autodiff and we **gradient-ASCEND φ to the exact optimal experiment φ\***. Criteria: D-opt `log det FIM`, A-opt `−tr FIM⁻¹`, E-opt `λ_min`, and a **targeted reciprocal-CRLB** `−log[FIM⁻¹]_ii` for one sloppy parameter. **Makes the gLV α⇄βᵢᵢ directional abstention (`NUDGE-METHOD-012`) EXACT** — "sample the transient to break the tie" becomes a computed schedule. **MEASURED** (logistic growth, target α, m=8 times): naive near-equilibrium design near-singular (cond 136, min-eig 54, CRLB(α)=7.3e-3); φ\* puts samples in the transient → **CRLB(α) 31.5× better, FIM min-eig 17.8× better, cond→9.5**; all three objectives resolve it; gLV community **600×**. White-box vs black-box honestly: on a 1-D knob the gradient's zero-crossing lands on a 200-pt grid's optimum (t1≈3.70), while a structured grid guaranteeing the optimum over m free times costs `rᵐ` evals (m=8→65k/1.7M; m=16→4.3e9/2.8e12) — the moat is the scaling. **Local OED (`NUDGE-LIM-024`):** the optimum + gains are MEASURED at the nominal θ₀, not extrapolated; guarded-ridge inverse (never understates the CRLB); grid baseline shipped to CHECK the gradient. It's a design *recommendation*, not an attribution verdict → can't emit a confident-wrong mechanism call. 7 fast + 5 slow tests (`tests/inference/test_oed.py`). `nudge oed --model {logistic,glv} --objective {d_opt,a_opt,e_opt,crlb}` CLI + `service.oed_demo` + Mechanism Card (`NUDGE-METHOD-014`) + `notebooks/Optimal_Experimental_Design.ipynb` + the **unified moat demo `notebooks/4_Differentiable_OED_Moat.ipynb`** (ties the OED gradient to matrix-free scale in one story: naive design near-singular → `∂(D-opt)/∂φ` resolves α 31.3×/31.5× → the same FIM computed matrix-free stays flat where dense OOMs); FINDINGS "Optimal Experimental Design". Real-data lock-in deferred (`needs_data`). Additive/opt-in. |
 | Stretch | ◑ | **N-D saddle finder + toggle representation DONE** (attribution is 1-D only — see below); **constitutive-reporter calibration control SHIPPED** (`inference/constitutive.py`, `NUDGE-METHOD-011`, `NUDGE-LIM-018`) — the `NUDGE-LIM-006` mitigation: a control drives the reporter at KNOWN doses (bypassing the circuit) and anchors the readout using READOUT params ONLY (gradient-proven no leak), then a profile over circuit `n` WITHOUT vs WITH the control breaks the degeneracy — WITHOUT it the `n`-profile is FLAT (span ≈0.001, can't tell a switch exists); WITH it "no switch" (n=1) is REJECTED for a true switch (Δloss ≈0.026 ≫ span) → `biological-switch`, while the LIM-006 hazard (a linear circuit) ABSTAINS `unresolved` — 0 confident-wrong on the clean-control validation, never a bare knob, never point-IDs `n` (needs a 2nd anchor; `NUDGE-LIM-018`). **ADVERSARIALLY BOUNDED (`NUDGE-LIM-019`, red-team round 2):** the `biological-switch` verdict is valid ONLY when the control shares the circuit population's capture scale — a control-vs-population capture-efficiency mismatch re-anchors the reporter and re-opens LIM-006 (locked as a strict-xfail decoy; Option B robustness fix designed in `design/CONSTITUTIVE_CONTROL.md`). `nudge constitutive` CLI + `constitutive` MCP tool + `service.constitutive_file` + Mechanism Card + `notebooks/Constitutive_Control.ipynb` (design in `design/CONSTITUTIVE_CONTROL.md`); **Claude integration layer BUILT** — `nudge` typer CLI (`cli.py`) + shared `service.py`/`knowledge.py`, FastMCP stdio server (`mcp/server.py`, `nudge-mcp`, `.mcp.json`) exposing `attribute`/`explain_abstention`/`list_mechanisms`/`get_mechanism_card`, the Mechanism-Card knowledge base (`docs/mechanism_cards/`, 17 cards incl. `dose_response_attribution` + `multi_reporter` + `hidden_node_abstention` + validator), and Agent Skills (`nudge-attribute`/`nudge-explain`/`mechanism-card`); feasibility + recipes in `design/INTEGRATION_FEASIBILITY.md`, ontology vision in `design/ONTOLOGY.md`. **`design/invert.py` — the flagship `design()` — is now BUILT (see Phase 4 (f) above; `NUDGE-METHOD-007`).** Still homes-reserved: `zero_order.py`, `data/loaders/tier{1,2}.py` (tier2 landed), docs site, `scripts/ai/` |
 
-**Visualization layer — `nudge.viz` (opt-in `[viz]` extra), FIRST SLICE landed (Demo, 30%).**
+**Visualization layer — `nudge.viz` (opt-in `[viz]` extra), FULL renderer + ANIMATION battery landed (Demo, 30%).**
 An additive, provenance-carrying figure module (`src/nudge/viz/`: `theme`/`base`/`provenance`/
 `dose_response` + a `render()` dispatcher) that turns the frozen result dataclasses (and their
 `*_to_dict()` dicts — dual-input) into honest figures. It only READS results — never touches
@@ -70,9 +70,34 @@ provenance grain. Wired via `service.render_result()` + an opt-in `--fig-out/--f
 flag on `nudge dose-response` (default text output UNCHANGED); embedded in
 `notebooks/OCT4_NANOG_Flagship.ipynb` (re-executed headless, 0 errors). Tests in `tests/viz/`
 (incl. the honesty test: a known abstention → `FigureResult.abstained==True` + overlay drawn).
-matplotlib moved to `[viz]`; `[dev]` depends on it. **Deferred** (designed in
-`design/VISUALIZATION_DESIGN.md`, later slices): the ~11 other renderers, the LIM-006
-constitutive-flip **animation**, the MCP `render_figure` tool.
+matplotlib moved to `[viz]`; `[dev]` depends on it. **Now BUILT beyond slice 1:** a renderer
+per result type (`attribution`/`identifiability`/`epistasis`/`differential`/`multi_reporter`/
+`temporal`/`aggregation`/`constitutive`/`diagnose`/`design`/`oed`/`cross_modality`/
+`robustness`) + a **collision-aware placement layer** (`viz/layout.py`), the MCP
+`render_figure` tool, and a zero-setup demo per kind (`viz/demo.py`).
+
+**0.2.0 — MCP transport hardening + the animation battery (`feat/0.2.0-mcp-transport-and-animators`).**
+Two things, both proven against the live Claude Science connector. **(a) Inline-base64 figure
+transport** (`service.render_result` + `mcp render_figure` + `viz/inline.py`): file-path
+delivery is structurally impossible in Claude Science (shared dir mounted read-only → `EROFS`;
+the connector's temp is invisible to the client) and MCP `resources/read` isn't bridged, so a
+figure can only return as **inline base64**. `NUDGE_ENV=cloud` → inline (`image_base64` +
+`mime_type` + the `code`/`data` provenance inline as text); else → path
+(`NUDGE_ARTIFACT_DIR`/tempdir, `png_path` back-compat alias). GIFs get a size discipline
+(downscale + frame-limit + tight palette + a **never-inflate guard** + a ~1.5 MB cap → a
+static final-frame PNG preview above it, never a silent truncation). Plus an **async job
+pattern** (`mcp job_submit`/`job_status`) for the ~60 s connector cap (a fit / OED / the ~64 s
+constitutive demo): submit returns a `job_id` in <1 s (ThreadPoolExecutor; JAX drops the GIL),
+poll to `done`/`error`. Verified end-to-end via a local MCP client, both env modes.
+**(b) The animation battery** (`viz/animate.py` → a generic `build_animation` dispatch): 10
+animators (`constitutive` flip · `oed` ellipse-collapse · `robustness` fold-sweep + potential
+well · `aggregation` **gauge orbit** · `temporal` pulse-divergence · `multi_reporter`
+SINGLE→JOINT · `identifiability` sloppy-vs-stiff · `design` trajectory + safety dial ·
+`dose_response`/`cross_modality` Hill sweep), each stamping the abstention overlay **per-frame
+off the result's own verdict** and shipping the fig.py+sidecar replay. Enriched-demo helpers
+(`service.{oed,robustness,fibrillization,temporal}_animation_demo`) compute the frame
+sequences; viz only READS. Docs: `docs/user_guide/claude_science.md` (the EROFS/inline finding
++ the `/usr/bin/env NUDGE_ENV=cloud …` trick + the job pattern + agent notes).
 
 **Efficiency / scaling layer — adjoint gradients + MATRIX-FREE identifiability (Depth, 20%).**
 Two additive, opt-in modules that make NUDGE's mechanistic-ODE work scale to large networks

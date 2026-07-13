@@ -14,6 +14,59 @@ from typing import Any
 TOPOLOGIES = ("1node", "2node", "toggle")
 
 
+#: Cap on the inline provenance ``data`` text (sidecar JSON). Animation sidecars carry a
+#: whole frame sequence, so cap the inlined copy; the full sidecar is always on disk.
+_DATA_TEXT_CAP = 200_000
+
+
+def _read_text_capped(path: str | None, cap: int) -> tuple[str | None, bool]:
+    """Read a text file, capped. Returns ``(text_or_None, truncated)``."""
+    if not path:
+        return None, False
+    try:
+        from pathlib import Path
+
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover - defensive
+        return None, False
+    if len(text) > cap:
+        return text[:cap] + f"\n… (truncated at {cap:,} chars; full sidecar on disk)", True
+    return text, False
+
+
+def _resolve_transport(transport: str | None) -> str:
+    """Resolve the figure transport: explicit override, else the ``NUDGE_ENV`` toggle.
+
+    ``NUDGE_ENV=cloud`` → ``inline`` (the Claude Science reality: the connector can only
+    deliver a figure as inline base64); anything else → ``path`` (write a file the local
+    client can read). Default (env unset) is ``path`` — safe for a local host / the CLI.
+    """
+    if transport in ("inline", "path"):
+        return transport
+    import os
+
+    return "inline" if os.environ.get("NUDGE_ENV", "").strip().lower() == "cloud" else "path"
+
+
+def _artifact_dir(out: str | None) -> str:
+    """The directory to write a figure into for PATH transport.
+
+    ``NUDGE_ARTIFACT_DIR`` (if set) wins — it lets a host pin a client-visible directory;
+    otherwise the caller's ``out`` directory; otherwise the system temp dir.
+    """
+    import os
+    import tempfile
+
+    env_dir = os.environ.get("NUDGE_ARTIFACT_DIR", "").strip()
+    if env_dir:
+        return env_dir
+    if out:
+        d = os.path.dirname(out)
+        if d:
+            return d
+    return tempfile.gettempdir()
+
+
 def render_result(
     kind: str,
     result_or_dict: Any,
@@ -23,47 +76,99 @@ def render_result(
     theme: str = "auto",
     self_contained: bool = False,
     animate: bool = False,
-    inline_png: bool = False,
+    inline_png: bool = False,  # deprecated; transport now governs inlining (kept for compat)
     cli_call: str | None = None,
+    transport: str | None = None,
     **ctx: Any,
 ) -> dict[str, Any]:
     """Render a NUDGE result to a figure — the one place CLI + MCP share the figure path.
 
     Lazy-imports the opt-in :mod:`nudge.viz` (raising the friendly ``[viz]``-extra install
-    message if absent), dispatches on ``kind``, and returns the ``FigureResult`` as a
-    plain dict (paths + honest caption + ``abstained`` flag + optional size-capped inline
-    PNG). ``ctx`` carries any renderer inputs the serialized dict lacks — e.g. the raw
-    ``dose`` / ``response`` points for the dose-response scatter. The abstention overlay
-    is applied by :mod:`nudge.viz` off the result's own verdict; this seam never re-fits.
+    message if absent), dispatches on ``kind``, and returns a transport-aware dict. Two
+    transports (``NUDGE_ENV=cloud`` → ``inline``, else ``path``; override with
+    ``transport=``):
+
+    - **inline** (Claude Science): the image travels as size-disciplined **base64**
+      (``image_base64`` + ``mime_type``) — GIFs downscaled / frame-limited / never-inflated
+      and capped, falling back to a static final-frame preview or a ``too large`` note.
+      Provenance (``code`` = the regenerating ``fig.py``; ``data`` = the sidecar, capped)
+      always rides along inline.
+    - **path** (local hosts / the CLI): the figure is written to ``NUDGE_ARTIFACT_DIR``
+      (fallback: the caller's dir, then the system temp dir) and its ``image_path`` /
+      ``code_path`` / ``data_path`` are returned.
+
+    ``ctx`` carries any renderer inputs the serialized dict lacks (e.g. the raw ``dose`` /
+    ``response`` points). The abstention overlay is applied by :mod:`nudge.viz` off the
+    result's own verdict; this seam never re-fits.
     """
+    import os
+
     import nudge.viz as viz
+
+    resolved = _resolve_transport(transport)
+    ext = ".gif" if animate else ".png"
+
+    if resolved == "inline":
+        import tempfile
+
+        write_dir = tempfile.mkdtemp(prefix="nudge_viz_")  # staging only (base64'd, not returned)
+        write_path = os.path.join(write_dir, f"{kind}{ext}")
+    else:
+        write_dir = _artifact_dir(out)
+        os.makedirs(write_dir, exist_ok=True)
+        basename = os.path.basename(out) if out else f"{kind}{ext}"
+        write_path = os.path.join(write_dir, basename)
 
     fr = viz.render(
         result_or_dict,
-        out,
+        write_path,
         kind=kind,
         emit_code=emit_code,
         theme=theme,
         self_contained=self_contained,
         animate=animate,
-        inline_png=inline_png,
+        inline_png=False,
         cli_call=cli_call,
         **ctx,
     )
-    return {
+
+    mime_type = "image/gif" if (fr.path or write_path).endswith(".gif") else "image/png"
+    code_text, _ = _read_text_capped(fr.code_path, _DATA_TEXT_CAP)
+    data_text, data_trunc = _read_text_capped(fr.data_path, _DATA_TEXT_CAP)
+
+    common: dict[str, Any] = {
+        "transport": resolved,
+        "kind": fr.kind,
+        "caption": fr.caption,
+        "abstained": fr.abstained,
+        "mime_type": mime_type,
+        "code": code_text,
+        "data": data_text,
+        "data_truncated": data_trunc,
+    }
+
+    if resolved == "inline":
+        from nudge.viz.inline import prepare_inline_image
+
+        image_bytes = b""
+        if fr.path:
+            with open(fr.path, "rb") as fh:
+                image_bytes = fh.read()
+        common.update(prepare_inline_image(image_bytes, mime_type))
+        common["image_path"] = None  # the staging file is invisible to the client
+        common["png_path"] = None
+        return common
+
+    # PATH transport: return the written paths (png_path kept as a back-compat alias).
+    common.update({
+        "image_path": fr.path,
         "png_path": fr.path,
         "code_path": fr.code_path,
         "data_path": fr.data_path,
-        "png_base64": fr.png_base64,
-        "png_base64_omitted_reason": (
-            None
-            if (fr.png_base64 is not None or not inline_png)
-            else "exceeds inline cap; read png_path"
-        ),
-        "caption": fr.caption,
-        "abstained": fr.abstained,
-        "kind": fr.kind,
-    }
+        "image_base64": None,
+        "image_base64_omitted_reason": f"path transport; read image_path ({fr.path})",
+    })
+    return common
 
 
 def build_circuit(topology: str) -> Any:
@@ -418,6 +523,7 @@ def dose_response_file(
             emit_code=fig_code,
             theme=fig_theme,
             self_contained=fig_self_contained,
+            transport="path",  # the CLI --fig flag writes a local file
             dose=dose,
             response=response,
             label=fig_label or (target or "dose-response"),
@@ -1702,6 +1808,58 @@ def lotka_demo(
     }
 
 
+def temporal_animation_demo(
+    *, mechanism: str = "susceptibility", n_species: int = 3, n_replicates: int = 40,
+    steps: int = 250, n_sim: int = 30, seed: int = 0,
+) -> dict[str, Any]:
+    """Temporal / gLV demo enriched for the ANIMATION: the community integrating under the
+    antibiotic pulse, perturbed vs reference DIVERGING (``NUDGE-METHOD-012``).
+
+    Simulates a reference vs perturbed gLV community, returns the per-timepoint mean
+    trajectories + the pulse window + the honest attribution verdict, and the animator
+    (viz/temporal.py) sweeps a time cursor so the perturbed community visibly diverges from
+    the reference as the drug pulse hits (susceptibility → the identifiable positive). Only
+    READS the simulated trajectories + the fit's verdict; near-equilibrium growth is the
+    degenerate α⇄βᵢᵢ case NUDGE abstains on (``NUDGE-LIM-020``).
+    """
+    import numpy as np
+
+    from nudge.inference.lotka_volterra import attribute_glv, simulate_glv_perturbseq
+
+    ds = simulate_glv_perturbseq(
+        n_species=n_species, n_replicates=n_replicates, mechanism=mechanism,
+        dense_transient=True, seed=seed,
+    )
+    res = attribute_glv(ds, steps=steps, n_sim=n_sim, seed=seed)
+    ref = np.asarray(ds.reference, dtype=float).mean(axis=0)   # (T, S)
+    pert = np.asarray(ds.perturbed, dtype=float).mean(axis=0)  # (T, S)
+    t = np.asarray(ds.t_obs, dtype=float)
+    gt = dict(ds.ground_truth)
+    pulse = gt.get("pulse_window", (float("nan"), float("nan")))
+    target = int(gt.get("target", 0))
+
+    return {
+        "kind": "temporal",
+        "label": "gLV community under an antibiotic pulse",
+        "call": res.call,
+        "reason": res.reason,
+        "selected_knob": res.fit.selected,
+        "identifiability": {
+            "cond_number": _jsonsafe(res.fit.cond_number),
+            "degenerate": bool(res.fit.degenerate),
+        },
+        "animation": {
+            "t": [float(v) for v in t],
+            "reference": [[float(v) for v in row] for row in ref],
+            "perturbed": [[float(v) for v in row] for row in pert],
+            "pulse_window": [float(pulse[0]), float(pulse[1])],
+            "target": target,
+            "species_labels": [f"taxon {i}" + (" (target)" if i == target else "")
+                               for i in range(ref.shape[1])],
+        },
+    }
+
+
 def lotka_file(
     path: str, *, target: int | None = None, steps: int = 300, n_sim: int = 30, seed: int = 0
 ) -> dict[str, Any]:
@@ -1811,6 +1969,241 @@ def oed_demo(
             "local OED: the optimal design and the reported gains are MEASURED at the "
             "nominal parameter θ₀, not extrapolated to far-from-θ₀ truths (NUDGE-LIM-024)."
         ),
+    }
+
+
+def oed_animation_demo(
+    *, objective: str = "crlb", n_obs: int = 8, steps: int = 300, n_frames: int = 24,
+    learning_rate: float = 0.2, seed: int = 0,
+) -> dict[str, Any]:
+    """OED demo enriched for the ANIMATION: the design φ trajectory + the (α,β) 95%
+    confidence-ellipse collapse over the gradient steps.
+
+    Runs the logistic-growth OED (``optimize_design(..., capture_phi=True)``) and, for
+    ``n_frames`` checkpoints along the gradient trajectory, computes the measurement times
+    ``φ`` and the 2×2 parameter covariance ``FIM(φ)⁻¹`` → the 95%-confidence ellipse in
+    ``(log α, log|β|)`` space. The animator (viz/oed.py) then shows the naive
+    near-equilibrium samples sliding into the informative transient while the ellipse
+    collapses — the differentiability moat, in motion. Everything is MEASURED at θ₀ (local
+    OED, ``NUDGE-LIM-024``); this only READS the fit's output for drawing.
+    """
+    import numpy as np
+
+    from nudge.inference.oed import (
+        fisher_information,
+        make_logistic_design_problem,
+        optimize_design,
+    )
+
+    prob = make_logistic_design_problem()
+    lo, hi = prob.phi_bounds
+    naive = np.linspace(0.6 * hi, hi, n_obs)
+    res = optimize_design(
+        prob, naive, objective=objective, target="log_alpha", steps=steps,
+        learning_rate=learning_rate, seed=seed, capture_phi=True,
+    )
+
+    # χ²(2 dof, 95%) = 5.991 — the 95%-confidence ellipse scale for a 2-parameter covariance.
+    chi2_95 = 5.991
+    idx = np.unique(np.linspace(0, steps - 1, num=min(n_frames, steps)).round().astype(int))
+    frames: list[dict[str, Any]] = []
+    for i in idx:
+        phi = res.phi_history[int(i)]
+        fim = fisher_information(prob, phi)
+        p = fim.shape[0]
+        scale = max(float(np.trace(fim)) / p, 1e-30)
+        cov = np.linalg.inv(fim + 1e-8 * scale * np.eye(p))
+        evals, evecs = np.linalg.eigh(cov)
+        evals = np.clip(evals, 0.0, None)
+        width = float(2.0 * np.sqrt(chi2_95 * evals[1]))   # full major axis
+        height = float(2.0 * np.sqrt(chi2_95 * evals[0]))  # full minor axis
+        angle = float(np.degrees(np.arctan2(evecs[1, 1], evecs[0, 1])))
+        frames.append({
+            "step": int(i),
+            "phi": [float(x) for x in np.sort(phi)],
+            "ellipse": {"width": width, "height": height, "angle": angle},
+            "target_crlb": _jsonsafe(float(np.diag(cov)[res.target_index])),
+        })
+
+    # The transient backdrop (analytic logistic solution x(t)) the samples slide over.
+    meta = prob.meta
+    alpha, k_cap, x0 = float(meta["alpha"]), float(meta["K"]), float(meta["x0"])
+    tgrid = np.linspace(0.0, float(meta["t_max"]), 120)
+    xt = k_cap / (1.0 + (k_cap / x0 - 1.0) * np.exp(-alpha * tgrid))
+
+    return {
+        "kind": "oed",
+        "label": "logistic growth OED",
+        "model": "logistic",
+        "objective": objective,
+        "target_parameter": res.target_name,
+        "call": "",
+        "reason": "",
+        "crlb_improvement": _jsonsafe(res.crlb_improvement),
+        "min_eig_improvement": _jsonsafe(res.min_eig_improvement),
+        "animation": {
+            "param_labels": ["log α (growth)", "log |β| (self-limitation)"],
+            "theta0": [float(np.log(alpha)), float(np.log(-float(meta["beta"])))],
+            "t_bounds": [float(lo), float(hi)],
+            "traj_t": [float(x) for x in tgrid],
+            "traj_x": [float(x) for x in xt],
+            "frames": frames,
+        },
+        "caveat": (
+            "local OED: the optimal design + the ellipse collapse are MEASURED at θ₀, not "
+            "extrapolated (NUDGE-LIM-024)."
+        ),
+    }
+
+
+def robustness_animation_demo(
+    *, k: float = 1.0, vmax: float = 2.0, basal: float = 0.05,
+    n_hi: float = 6.0, n_lo: float = 1.5, n_frames: int = 24,
+) -> dict[str, Any]:
+    """Robustness demo enriched for the ANIMATION: a 1-node switch swept TOWARD its fold.
+
+    Sweeps the self-activation Hill ``n`` from robust (deep two-basin bistability) down
+    toward and past the saddle-node fold, and per frame returns the fused proximity dial +
+    the three channel proximities (all 0..1) + the honest ``call`` (``robust`` → ``near-fold``
+    → ``unresolved``/``not-bistable``) + the **potential well** ``U(x)`` (two basins → one).
+    The animator (viz/robustness.py) shows the dial climbing while the well flattens — the
+    tipping point, in motion. It only READS ``bifurcation_proximity`` / ``classify_robustness``
+    (no fit); near the fold the dial is a ONE-SIDED lower bound (``NUDGE-LIM-012``).
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from nudge.inference.bifurcation import bifurcation_proximity, classify_robustness
+
+    # x-grid from the robust (n_hi) switch's high basin, so the well morph shares one axis.
+    hi_circ = _build_named_circuit("1node", n=n_hi, k=k, vmax=vmax, basal=basal)
+    hi_fps = hi_circ.fixed_points() or []
+    x_hi = max((float(s[0]) for s, _ in hi_fps), default=float(vmax))
+    x_max = max(1.25 * x_hi, 1.0)
+    xg = np.linspace(0.0, x_max, 160)
+
+    def potential(circ: Any) -> np.ndarray:
+        params = circ.base_params()
+        f = np.asarray(
+            jax.vmap(lambda x: circ.vector_field(jnp.array([x]), params)[0])(
+                jnp.asarray(xg)
+            ),
+            dtype=float,
+        )
+        # U(x) = -∫₀ˣ f  (trapezoid); wells at stable FPs, barrier at the saddle.
+        u = -np.concatenate([[0.0], np.cumsum(0.5 * (f[1:] + f[:-1]) * np.diff(xg))])
+        return u - float(np.min(u))
+
+    import jax
+
+    frames: list[dict[str, Any]] = []
+    u_max = 0.0
+    for nv in np.linspace(n_hi, n_lo, n_frames):
+        circ = _build_named_circuit("1node", n=float(nv), k=k, vmax=vmax, basal=basal)
+        score = bifurcation_proximity(circ)
+        call, reason = classify_robustness(score)
+        u = potential(circ)
+        u_max = max(u_max, float(np.max(u)))
+        fps = circ.fixed_points() or []
+        chan = (score.channels.get("channel_proximities", {}) if score else {})
+        frames.append({
+            "n": float(nv),
+            "U": [float(v) for v in u],
+            "proximity": _jsonsafe(score.proximity if score else float("nan")),
+            "one_sided": bool(score.one_sided) if score else False,
+            "channel_proximities": {k2: _jsonsafe(v) for k2, v in chan.items()},
+            "call": call,
+            "reason": reason,
+            "fixed_points": [[float(s[0]), lab] for s, lab in fps],
+        })
+
+    return {
+        "kind": "robustness",
+        "label": "1-node switch → the fold",
+        "call": frames[-1]["call"],
+        "reason": frames[-1]["reason"],
+        "proximity": frames[-1]["proximity"],
+        "one_sided": frames[-1]["one_sided"],
+        "channels": frames[-1]["channel_proximities"],
+        "animation": {
+            "x": [float(v) for v in xg],
+            "u_max": float(u_max) or 1.0,
+            "frames": frames,
+        },
+    }
+
+
+def fibrillization_animation_demo(*, n_frames: int = 28, seed: int = 0) -> dict[str, Any]:
+    """Aggregation demo enriched for the ANIMATION: the **gauge orbit** — the honesty visual.
+
+    A single amyloid aggregation curve is PROVABLY non-identifiable in the three microscopic
+    constants: the exact continuous gauge ``(k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α)`` leaves
+    the mass-fraction curve — and the two identifiable composites κ, λ — UNCHANGED. This
+    builds that orbit: a sinusoidal sweep of α so the three constants swing (a seamless loop)
+    while the curve and κ, λ stay put. It re-simulates a gauged triple to MEASURE the curve
+    invariance (``gauge_check`` = max|Δ mass-fraction| ≈ 0). No fit needed — the gauge is an
+    exact analytic symmetry (Meisl 2016 / Michaels 2020), so this is fast; the animator only
+    DRAWS it. Individual constants are NOT identifiable → the constants panel abstains
+    (``NUDGE-LIM-021``).
+    """
+    import numpy as np
+
+    from nudge.mechanisms.fibrillization import (
+        _BALANCED_TRUTH,
+        AggregationParams,
+        composite_lambda_kappa,
+        simulate_aggregation_curve,
+    )
+
+    truth = _BALANCED_TRUTH
+    m_tot = 1.0
+    curve = simulate_aggregation_curve(params=truth, m_tot=m_tot, obs_noise=0.0, seed=seed)
+    t = np.asarray(curve.t_obs, dtype=float)
+    m = np.clip(np.asarray(curve.signal, dtype=float).mean(axis=0), 0.0, 1.0)
+    lam, kap = composite_lambda_kappa(truth, m_tot)
+
+    # a sinusoidal α(frame) so the orbit loops seamlessly (α=1 at both ends).
+    log_amp = float(np.log(2.8))
+    alphas = np.exp(log_amp * np.sin(2.0 * np.pi * np.arange(n_frames) / n_frames))
+    orbit = [
+        {"alpha": float(a), "k_n": float(truth.k_n / a),
+         "k_plus": float(truth.k_plus * a), "k_2": float(truth.k_2 / a)}
+        for a in alphas
+    ]
+
+    # MEASURE the curve invariance under the gauge (a strong-α gauged triple).
+    a_check = 2.5
+    gauged = AggregationParams(k_n=truth.k_n / a_check, k_plus=truth.k_plus * a_check,
+                               k_2=truth.k_2 / a_check, n_c=truth.n_c, n_2=truth.n_2)
+    m_g = np.clip(
+        np.asarray(simulate_aggregation_curve(params=gauged, m_tot=m_tot, obs_noise=0.0,
+                                              seed=seed).signal, dtype=float).mean(axis=0),
+        0.0, 1.0,
+    )
+    gauge_check = float(np.max(np.abs(m - m_g)))
+
+    return {
+        "kind": "aggregation",
+        "call": "composites-identified",
+        "reason": ("the mass-fraction curve fixes only the composites κ, λ; the three "
+                   "microscopic constants are gauge-degenerate (NUDGE-LIM-021)"),
+        "label": "amyloid aggregation — the gauge orbit",
+        "kappa": _jsonsafe(kap),
+        "lambda": _jsonsafe(lam),
+        "individual_k_identifiable": False,
+        "null_direction": [0.5773502691896258, -0.5773502691896258, 0.5773502691896258],
+        "gauge_check": gauge_check,
+        "animation": {
+            "t": [float(v) for v in t],
+            "m": [float(v) for v in m],
+            "kappa": _jsonsafe(kap),
+            "lambda": _jsonsafe(lam),
+            "k_labels": ["kₙ (primary)", "k₊ (elongation)", "k₂ (secondary)"],
+            "truth": {"k_n": float(truth.k_n), "k_plus": float(truth.k_plus),
+                      "k_2": float(truth.k_2)},
+            "gauge_check": gauge_check,
+            "orbit": orbit,
+        },
     }
 
 

@@ -39,17 +39,28 @@ def is_measured_demo(kind: str) -> bool:
     return kind in _MEASURED_KINDS
 
 
-def demo_result(kind: str, *, variant: str = "resolved") -> Any:
+#: Kinds whose ANIMATION needs an enriched demo (a frame sequence the static dict lacks) —
+#: a sweep / trajectory / gauge orbit computed in the analysis layer, then only DRAWN by viz.
+_ANIMATION_ENRICHED = frozenset({"oed", "robustness", "aggregation", "temporal"})
+
+
+def demo_result(kind: str, *, variant: str = "resolved", animate: bool = False) -> Any:
     """Build a renderable demo result/figure-data for ``kind``.
 
     ``variant`` ∈ {``"resolved"``, ``"abstain"``} selects a resolved call vs the honest
     abstention for kinds that offer both illustrative examples (the measured-analysis kinds
-    ignore it and return their genuine demo output).
+    ignore it and return their genuine demo output). ``animate=True`` returns the
+    animation-enriched demo for the kinds whose GIF needs a frame sequence the static figure
+    doesn't carry (the sweep / trajectory / gauge orbit is computed in the analysis layer;
+    viz only DRAWS it).
     """
     from nudge.viz import _RENDERERS
 
     if kind not in _RENDERERS:
         raise ValueError(f"unknown figure kind {kind!r} (known: {sorted(_RENDERERS)})")
+
+    if animate and kind in _ANIMATION_ENRICHED:
+        return _animation_enriched_demo(kind)
 
     if kind == "dose_response":
         return _dose_response_demo()
@@ -82,6 +93,27 @@ def demo_result(kind: str, *, variant: str = "resolved") -> Any:
     if builder is None:  # pragma: no cover - every registered kind is covered above/here
         raise ValueError(f"no demo for kind {kind!r}")
     return builder(variant == "abstain")
+
+
+def _animation_enriched_demo(kind: str) -> Any:
+    """The animation-enriched demo (a frame sequence) for a sweep/orbit-based animator."""
+    if kind == "oed":
+        from nudge.service import oed_animation_demo
+
+        return oed_animation_demo()
+    if kind == "robustness":
+        from nudge.service import robustness_animation_demo
+
+        return robustness_animation_demo()
+    if kind == "aggregation":
+        from nudge.service import fibrillization_animation_demo
+
+        return fibrillization_animation_demo()
+    if kind == "temporal":
+        from nudge.service import temporal_animation_demo
+
+        return temporal_animation_demo()
+    raise ValueError(f"no animation-enriched demo for kind {kind!r}")  # pragma: no cover
 
 
 def _dose_response_demo() -> list[tuple[str, Any, Any, Any]]:

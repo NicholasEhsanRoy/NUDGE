@@ -25,6 +25,14 @@ MCP sandbox*. Three constraints shape the setup:
   interpreter, and its site‑packages all live under `~`, which the sandbox can't read.
 - The sandbox **can** see system paths (`/usr/local`, `/opt`), and you can grant extra
   directories read‑only via `[sandbox] user_read_paths` in the connector `config.toml`.
+- **The connector command is a single field** — there is no separate *args* or *env* box.
+  Pass arguments and environment variables inline via `/usr/bin/env`:
+  `/usr/bin/env VAR=val /opt/nudge/bin/nudge-mcp`.
+- **Figures can only come back inline, and long calls are killed at ~60 s** — the two
+  facts that shape how you *use* the server (not just install it). We verified both against
+  the live Claude Science harness; see **[Figures and long jobs](#figures-come-back-inline-long-jobs-run-async)**
+  below. In short: set `NUDGE_ENV=cloud` so `render_figure` returns the image as **inline
+  base64**, and run heavy tools through **`job_submit` / `job_status`**.
 
 So the reliable recipe is to install NUDGE **on a system path** and point the connector at
 the console script there — its shebang self‑selects the correct Python and dependencies, and
@@ -51,7 +59,7 @@ In Claude Science → **Settings › Connectors › Add connector › Local comm
 | Field | Value |
 |---|---|
 | **Name** | `nudge` (lowercase / digits / hyphens) |
-| **Command** | `/opt/nudge/bin/nudge-mcp` |
+| **Command** | `/usr/bin/env NUDGE_ENV=cloud /opt/nudge/bin/nudge-mcp` |
 | **Args** | *(none)* |
 | **Env** | *(none)* |
 
@@ -60,13 +68,20 @@ Equivalent connector JSON:
 ```json
 { "mcpServers": { "nudge": {
     "type": "stdio",
-    "command": "/opt/nudge/bin/nudge-mcp"
+    "command": "/usr/bin/env NUDGE_ENV=cloud /opt/nudge/bin/nudge-mcp"
 } } }
 ```
 
 Why `/opt`: the console script's shebang is `#!/opt/nudge/bin/python`, so running it always
 uses the venv that has `nudge` + `mcp` installed — and every path (script, interpreter,
 site‑packages) is on a sandbox‑visible system path.
+
+Why the `/usr/bin/env NUDGE_ENV=cloud …` prefix: the connector command is a **single
+field** (no separate env box), and `NUDGE_ENV=cloud` switches `render_figure` into the
+**inline‑base64** transport that is the only one that works in this sandbox (next section).
+`/usr/bin/env VAR=val PROG` is the portable one‑liner for "set an env var, then exec". Drop
+the prefix (`command = /opt/nudge/bin/nudge-mcp`) only on a host where the client *can* read
+a file path the server writes — then figures come back as paths instead.
 
 ### No‑sudo alternative: keep a home install, grant read access
 
@@ -130,10 +145,99 @@ Confirm the wire independently of any file access. In Claude Science:
 Approve the tool call when prompted (set **Always allow** once you trust it). Getting the
 mechanism list + card back confirms the connection.
 
+---
+
+## Figures come back inline; long jobs run async
+
+Two properties of the Claude Science connector shape how you *use* NUDGE (we verified both
+end‑to‑end against the live harness — don't fight them):
+
+### 1 · A figure can only be delivered as inline base64
+
+The connector mounts its shared data directory (e.g. `/opt/nudge/data`) **read‑only** —
+writing there raises `EROFS` — and the connector's own writable temp directory is **not
+visible to the client**. `render_figure` runs *on the connector*, so it has nowhere to write
+a file the client could then read: **file‑path delivery is structurally impossible here.**
+Custom `nudge://…` **MCP resource URIs are also a dead end** — the harness bridges
+`tools/call` but not `resources/read`, so a resource the server exposes can't be
+dereferenced.
+
+The transport that works is **inline base64**, which `NUDGE_ENV=cloud` selects. `render_figure`
+then returns:
+
+```jsonc
+{
+  "transport": "inline",
+  "image_base64": "iVBORw0KGgo…",   // decode + display this
+  "mime_type": "image/png",          // or image/gif for an animation
+  "code": "# fig.py … viz.render(…)",// the standalone regenerator (provenance)
+  "data": "{ …fig.data.json… }",     // the figure-data sidecar (provenance), capped
+  "caption": "OCT4 → switch …",
+  "abstained": false,
+  "kind": "dose_response"
+}
+```
+
+Decode `image_base64` into the notebook/kernel and display it **immediately**; do **not**
+echo the raw base64 string back into the chat. Animated GIFs are size‑disciplined before
+encoding (downscaled, frame‑limited, a tight palette, and a never‑inflate guard), capped at
+~1.5 MB of base64; above the cap `render_figure` falls back to a **static final‑frame PNG
+preview** (with `image_base64_omitted_reason` set) rather than truncating. The `code` and
+`data` fields are the **provenance grain** — attach them to the artifact so the figure is
+reproducible from the fit's own output (no re‑fit).
+
+> On a host where the client *can* read a server‑written path (a local Claude Desktop /
+> Claude Code, `NUDGE_ENV` unset), the same tool writes to `NUDGE_ARTIFACT_DIR` (fallback:
+> the system temp dir) and returns `image_path` / `code_path` / `data_path` instead. One
+> tool, two transports, chosen by `NUDGE_ENV`.
+
+### 2 · Heavy calls exceed the ~60 s per‑call cap — use `job_submit` / `job_status`
+
+The connector kills any single tool call that runs longer than ~60 s. Several NUDGE tools
+legitimately exceed that — a covariance `attribute`, an OED optimization, the `constitutive`
+demo (~64 s on CPU). Run them as a **background job**:
+
+```
+job_submit(tool="constitutive", args_json="{\"demo\": true}")   →  { "job_id": "…", "status": "running" }   (returns in <1 s)
+job_status(job_id="…")   →  { "status": "running", "elapsed_s": 21.0 }        (poll…)
+job_status(job_id="…")   →  { "status": "done", "elapsed_s": 64.3, "result": { … } }
+```
+
+`job_submit(tool, args_json)` starts the real tool in a background thread and returns a
+`job_id` immediately; poll `job_status(job_id)` until `status` is `done` (carrying the tool's
+real `result`) or `error`. JAX releases the GIL during compilation/execution, so the worker
+doesn't block the server. Each individual call stays well under the cap while the real
+compute takes however long it takes. The fast, always‑synchronous tools
+(`list_mechanisms`, `dose_response`, `get_mechanism_card`, `explain_abstention`,
+`diagnose_abstention`) can just be called directly. A slow `render_figure` `demo=True`
+build (e.g. `constitutive` / `oed` / `temporal` / `aggregation`) is itself a good
+`job_submit` candidate.
+
+### Agent notes (driving the connector well)
+
+A short checklist for an agent using the `nudge` connector inside Claude Science:
+
+- **Figures arrive as inline base64, not files.** Resource URIs aren't dereferenceable
+  here. Decode `image_base64` into the kernel and display it right away; **never echo the
+  base64 blob** into the conversation.
+- **Attach the provenance.** The `code` (a standalone `fig.py`) and `data`
+  (`fig.data.json`) fields regenerate the figure from the fit's output with no re‑fit —
+  attach them as the artifact's provenance.
+- **Trust the honesty overlay.** Every figure stamps its own abstention off the result's
+  verdict; when `abstained` is `true`, present it *as* an abstention (an "I can't tell"
+  figure), never as a confident call.
+- **Wrap heavy calls.** A fit / OED / `constitutive` demo can exceed the 60 s cap — submit
+  it with `job_submit` and poll `job_status` instead of calling it directly.
+- **Animations too.** `render_figure(..., animate=True)` returns a size‑disciplined GIF (or
+  a final‑frame PNG preview above the cap) inline; the `animate`‑able kinds are
+  `constitutive`, `oed`, `robustness`, `aggregation`, `temporal`, `multi_reporter`,
+  `identifiability`, `design`, `dose_response`, `cross_modality`.
+
 The server exposes these tools: `list_mechanisms`, `get_mechanism_card`, `explain_abstention`,
 `attribute`, `dose_response`, `synergy`, `cross_modality`, `robustness`, `design`,
 `multi_reporter`, `diagnose_abstention`, `differential`, `differential_robust`, `lotka`,
-`fibrillization`, `constitutive`, `render_figure`.
+`fibrillization`, `constitutive`, `render_figure`, and the async‑job pair `job_submit` /
+`job_status` (see [Figures and long jobs](#figures-come-back-inline-long-jobs-run-async)).
 
 ---
 
@@ -218,6 +322,9 @@ capability handles that path too.
 | `No module named nudge` | the runtime's `python3` isn't your install target | Option B — point at the absolute `/opt/nudge/bin/nudge-mcp` path (shebang self‑selects Python) |
 | Tools load, but `fibrillization` can't read the file | sandbox file visibility (home not visible) | put the CSV on a visible path (`/opt/nudge/data/…`), grant it via `user_read_paths`, or use the connector's writable directory |
 | `render_figure` returns a *string* (an install hint), not an image | the `[viz]` extra (matplotlib) isn't installed, so the figure can't be drawn server‑side | `sudo /opt/nudge/bin/pip install --upgrade "nudge-bio[mcp,viz]"` and restart the connector |
+| `render_figure` returns an `image_path` but the client can't open it | `NUDGE_ENV` isn't `cloud`, so the server wrote a file the sandbox client can't read | set `NUDGE_ENV=cloud` (via the `/usr/bin/env NUDGE_ENV=cloud …` command) so the image comes back as inline `image_base64` |
+| A tool call fails with a timeout / "connection closed" after ~1 min | the call exceeded the connector's ~60 s cap (a fit / OED / the constitutive demo) | run it via `job_submit(tool, args_json)` + poll `job_status(job_id)` instead of calling it directly |
+| `image_base64_omitted_reason` is set and you got a static PNG, not the GIF | the animation exceeded the ~1.5 MB inline cap | expected — it's the final‑frame preview; fetch the full GIF via the `code` regenerator, or re‑render with fewer `anim_frames` |
 | First tool call is slow | JAX compile‑cache warm‑up on server start | expected once; subsequent calls are fast (the server is long‑lived) |
 
 ## The remote (hosted) alternative

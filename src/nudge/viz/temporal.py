@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 
 from nudge.viz._util import get, verdict_color
-from nudge.viz.base import Panel, RenderedFigure, is_abstention
+from nudge.viz.base import AnimationSpec, Panel, RenderedFigure, abstain_overlay, is_abstention
 from nudge.viz.theme import apply_theme
 
 _KNOBS = ("growth", "interaction", "susceptibility")
@@ -162,3 +162,75 @@ def build(obj: Any, *, theme: str = "auto") -> RenderedFigure:
     return RenderedFigure(
         fig=fig, panels=panels, kind="temporal", caption=_caption(d), data=d
     )
+
+
+def build_animation(obj: Any, *, theme: str = "auto", frames: int = 28) -> AnimationSpec:
+    """Animate the gLV community integrating under the antibiotic pulse — perturbed vs
+    reference DIVERGING (``NUDGE-METHOD-012``; the temporal capability, in motion).
+
+    Reads the enriched ``animation`` block (``service.temporal_animation_demo``: the per-
+    timepoint reference vs perturbed mean trajectories + the pulse window) and sweeps a time
+    cursor so the two communities visibly separate as the drug pulse hits — susceptibility is
+    the identifiable positive. It only READS the simulated trajectories + the fit's verdict
+    (no re-fit); a near-equilibrium growth change is the degenerate α⇄βᵢᵢ case that abstains
+    (``NUDGE-LIM-020``), stamped by the overlay.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    pal = apply_theme(theme)
+    d = temporal_data(obj)
+    call = d["call"]
+    abst = is_abstention(call)
+    color = verdict_color(call, pal)
+    anim = obj.get("animation", {}) if isinstance(obj, dict) else {}
+    t = np.asarray(anim.get("t", []), dtype=float)
+    ref = np.asarray(anim.get("reference", []), dtype=float)   # (T, S)
+    pert = np.asarray(anim.get("perturbed", []), dtype=float)  # (T, S)
+    if not len(t) or ref.ndim != 2:
+        raise ValueError("temporal animation needs the enriched 'animation' block "
+                         "(use service.temporal_animation_demo / "
+                         "demo_result('temporal', animate=True))")
+    pulse = anim.get("pulse_window", [float("nan"), float("nan")])
+    target = int(anim.get("target", 0))
+    labels = anim.get("species_labels", [f"taxon {i}" for i in range(ref.shape[1])])
+    n_sp = ref.shape[1]
+    # a distinct hue per taxon (target gets the verdict colour, others muted variants)
+    cmap = [color if i == target else pal["muted"] for i in range(n_sp)]
+    ymax = float(np.nanmax([ref.max(), pert.max()])) * 1.1 or 1.0
+    hold = max(frames // 6, 2)
+    fig, ax = plt.subplots(figsize=(8.4, 4.8))
+
+    def draw(i: int) -> None:
+        ax.clear()
+        cut = min(int(round(min(i, frames - hold) / max(frames - hold, 1) * (len(t) - 1))) + 1,
+                  len(t))
+        if np.isfinite(pulse[0]):
+            ax.axvspan(pulse[0], pulse[1], color=pal["gain"], alpha=0.14, zorder=1)
+            ax.text(0.5 * (pulse[0] + pulse[1]), ymax * 0.98, "antibiotic pulse",
+                    ha="center", va="top", fontsize=8, color=pal["gain"])
+        for s in range(n_sp):
+            ax.plot(t[:cut], ref[:cut, s], ls="--", color=cmap[s], lw=1.6, alpha=0.7,
+                    zorder=2)
+            ax.plot(t[:cut], pert[:cut, s], ls="-", color=cmap[s], lw=2.4, zorder=3,
+                    label=labels[s] if s == 0 or s == target else None)
+        ax.plot([], [], ls="--", color=pal["muted"], label="reference")
+        ax.plot([], [], ls="-", color=pal["muted"], label="perturbed")
+        ax.set_xlim(float(t[0]), float(t[-1]))
+        ax.set_ylim(0.0, ymax)
+        ax.set_xlabel("time")
+        ax.set_ylabel("abundance")
+        ax.set_title("gLV community: perturbed diverges from reference under the pulse",
+                     fontweight="bold", color=pal["text"], fontsize=10.5)
+        ax.legend(loc="upper right", fontsize=7.5, framealpha=0.9, ncol=2)
+        if abst:
+            abstain_overlay(ax, call, d.get("reason", ""), palette=pal)
+
+    anim_obj = FuncAnimation(
+        fig, draw, frames=frames, interval=1000 // 8, blit=False,  # type: ignore[arg-type]
+    )
+    knob = d.get("selected_knob", "") or call
+    caption = (f"{d['label']} → {call.upper()} "
+               f"(perturbed vs reference diverge under the pulse; knob: {knob})")
+    return AnimationSpec(fig=fig, anim=anim_obj, caption=caption, abstained=abst,
+                         data=dict(obj) if isinstance(obj, dict) else {})
