@@ -1240,7 +1240,7 @@ def viz(
 
     res = render_result(
         kind, result, out=out_path, emit_code=fig_code, theme=theme,
-        animate=animate, self_contained=self_contained,
+        animate=animate, self_contained=self_contained, transport="path",
         cli_call=f"nudge viz {kind}" + (" --demo" if demo else ""),
     )
     _echo(f"nudge viz {kind}  ({source})")

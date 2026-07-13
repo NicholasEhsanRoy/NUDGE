@@ -45,6 +45,124 @@ def _require_mcp() -> Any:
     return FastMCP
 
 
+# --------------------------------------------------------------------------- #
+# async job pattern — the ~60s connector cap breaker
+#
+# The Claude Science connector kills any tool call exceeding ~60s, but several NUDGE tools
+# (a fit, an OED optimisation, the constitutive demo ~64s) legitimately exceed it. So the
+# heavy tools can be run as a JOB: ``job_submit(tool, args_json)`` returns a ``job_id`` in
+# <1s and runs the real tool in a background thread; ``job_status(job_id)`` polls it. JAX
+# releases the GIL during XLA, so the worker thread does not block the event loop, and each
+# individual call stays well under the cap while the real compute spans however long it takes.
+# --------------------------------------------------------------------------- #
+
+#: job_id → {future, tool, submitted}. Mutated only from the tool-dispatch thread; the
+#: worker thread only touches the (thread-safe) Future.
+_JOBS: dict[str, dict[str, Any]] = {}
+_JOB_EXECUTOR: Any = None  # a lazily-created ThreadPoolExecutor
+
+#: Tools that can exceed the ~60s cap — clients should prefer job_submit for these. (Purely
+#: advisory; job_submit accepts any tool except itself and job_status.)
+HEAVY_TOOLS = frozenset({
+    "attribute", "fibrillization", "constitutive", "differential", "differential_robust",
+    "multi_reporter", "lotka", "design", "synergy", "cross_modality", "render_figure",
+})
+
+
+def _executor() -> Any:
+    """The shared job thread-pool (created on first use)."""
+    global _JOB_EXECUTOR
+    if _JOB_EXECUTOR is None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _JOB_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="nudge-job")
+    return _JOB_EXECUTOR
+
+
+def _unwrap(result: Any) -> Any:
+    """FastMCP ``call_tool`` returns ``(content, structured)`` across versions — take the
+    structured payload (and unwrap a single ``{"result": …}`` envelope)."""
+    structured = result[1] if isinstance(result, tuple) else result
+    if isinstance(structured, dict) and "result" in structured and len(structured) == 1:
+        return structured["result"]
+    return structured
+
+
+def _register_job_tools(mcp: Any) -> None:
+    """Register ``job_submit`` / ``job_status`` on ``mcp`` (the async-job pattern)."""
+
+    @mcp.tool()
+    def job_submit(tool: str, args_json: str = "{}") -> dict[str, Any]:
+        """Run a (possibly slow) NUDGE tool as a BACKGROUND JOB — returns a ``job_id`` in <1s.
+
+        The connector kills any single tool call over ~60s, but a fit / OED optimisation /
+        the constitutive demo can exceed that. ``job_submit`` starts the real ``tool`` (any
+        NUDGE tool, e.g. ``attribute`` / ``fibrillization`` / ``constitutive`` / ``lotka`` /
+        ``design`` / ``multi_reporter`` / ``differential`` / ``render_figure``) in a
+        background thread with ``args_json`` (a JSON object of that tool's arguments) and
+        returns immediately with a ``job_id``. Poll :func:`job_status` until it is ``done``
+        (carrying the real ``result``) or ``error``. Fast tools (``list_mechanisms`` /
+        ``dose_response`` / ``explain_abstention`` / ``get_mechanism_card`` /
+        ``diagnose_abstention``) can just be called directly.
+        """
+        import uuid
+
+        if tool in ("job_submit", "job_status"):
+            return {"error": f"{tool!r} cannot itself be submitted as a job; call it directly"}
+        try:
+            import json as _json
+
+            args = _json.loads(args_json) if args_json.strip() else {}
+        except ValueError as exc:
+            return {"error": f"args_json is not valid JSON: {exc}"}
+        if not isinstance(args, dict):
+            return {"error": "args_json must be a JSON object of the tool's arguments"}
+
+        import asyncio
+        import time
+
+        job_id = uuid.uuid4().hex[:12]
+        submitted = time.monotonic()
+
+        def _run() -> Any:
+            # A fresh event loop in the worker thread drives the real tool coroutine; the
+            # heavy (JAX) compute runs here, off the server's event loop.
+            return _unwrap(asyncio.run(mcp.call_tool(tool, args)))
+
+        future = _executor().submit(_run)
+        _JOBS[job_id] = {"future": future, "tool": tool, "submitted": submitted}
+        return {
+            "job_id": job_id, "tool": tool, "status": "running",
+            "note": "poll job_status(job_id) until status is 'done' or 'error'",
+        }
+
+    @mcp.tool()
+    def job_status(job_id: str) -> dict[str, Any]:
+        """Poll a background job started by :func:`job_submit`.
+
+        Returns ``status`` ``running`` (with ``elapsed_s``), ``done`` (with the tool's real
+        ``result``), or ``error`` (with the exception message) — so a client can start a slow
+        job, keep each poll well under the ~60s cap, and collect the result when it lands.
+        """
+        import time
+
+        job = _JOBS.get(job_id)
+        if job is None:
+            return {"error": f"unknown job_id {job_id!r}"}
+        future = job["future"]
+        elapsed = round(time.monotonic() - job["submitted"], 2)
+        if not future.done():
+            return {"job_id": job_id, "tool": job["tool"], "status": "running",
+                    "elapsed_s": elapsed}
+        try:
+            result = future.result()
+        except Exception as exc:  # noqa: BLE001 - surface any tool failure honestly
+            return {"job_id": job_id, "tool": job["tool"], "status": "error",
+                    "elapsed_s": elapsed, "error": f"{type(exc).__name__}: {exc}"}
+        return {"job_id": job_id, "tool": job["tool"], "status": "done",
+                "elapsed_s": elapsed, "result": result}
+
+
 def build_server() -> Any:
     """Construct and return the FastMCP server with NUDGE's tools registered."""
     FastMCP = _require_mcp()
@@ -644,25 +762,43 @@ def build_server() -> Any:
         ``diagnose`` / ``design`` / ``cross_modality`` / ``oed``) from a frozen result — it
         NEVER re-fits and NEVER re-attributes. The **abstention overlay is stamped off the
         result's own verdict**, so an abstention is drawn as an abstention: the picture can
-        never claim more than the text.
+        never claim more than the text. ``animate=True`` renders an animated GIF for the
+        subset with a natural frame variable (``constitutive`` / ``oed`` / ``robustness`` /
+        ``aggregation`` / ``temporal`` / ``multi_reporter`` / ``identifiability`` /
+        ``design`` / ``dose_response`` / ``cross_modality``).
 
         Provide EITHER ``result_json`` (a prior ``*_to_dict()`` / figure-data JSON string,
         e.g. the output of the ``attribute`` / ``dose_response`` / ``differential`` tools) OR
-        ``demo=True`` for a zero-setup synthetic example of that kind. Writes to ``out_dir``
-        (a server-side path; a temp dir if empty) and returns the written paths + the honest
-        caption + the ``abstained`` flag + a size-capped inline ``png_base64`` (omitted, with
-        a reason, above the cap; GIFs are always path-only). Also returns ``code_path`` — the
-        standalone regenerating ``fig.py`` (the Claude Science provenance grain).
+        ``demo=True`` for a zero-setup synthetic example of that kind.
+
+        **Transport (see ``docs/user_guide/claude_science.md``).** The figure is delivered
+        per the ``NUDGE_ENV`` toggle. ``NUDGE_ENV=cloud`` (the Claude Science reality — its
+        connector cannot hand back a readable file path) → the image rides back **inline** as
+        ``image_base64`` + ``mime_type`` (a GIF is downscaled / frame-limited / never-inflated
+        and capped, falling back to a static final-frame preview above the cap — never a
+        silent truncation), with the regenerating ``fig.py`` (``code``) and the sidecar
+        (``data``) inline as text so the client's artifact-provenance system can ingest them.
+        Otherwise → the figure is **written** (to ``out_dir`` / ``NUDGE_ARTIFACT_DIR`` /
+        temp) and ``image_path`` / ``code_path`` / ``data_path`` are returned. Every response
+        carries ``caption`` + ``abstained``. For a slow ``demo`` build (a real synthetic
+        analysis, e.g. ``constitutive`` / ``oed`` / ``temporal`` / ``aggregation``), submit
+        via ``job_submit("render_figure", …)`` so the call returns under the connector's ~60s
+        cap.
         """
         import json as _json
-        import tempfile
 
         from nudge.service import render_result
         from nudge.viz import _RENDERERS
+        from nudge.viz.animate import _ANIMATORS
         from nudge.viz.demo import demo_result
 
         if kind not in _RENDERERS:
             return {"error": f"unknown figure kind {kind!r}", "known_kinds": sorted(_RENDERERS)}
+        if animate and kind not in _ANIMATORS:
+            return {
+                "error": f"kind {kind!r} has no animation (no natural frame variable)",
+                "animatable_kinds": sorted(_ANIMATORS),
+            }
         if result_json:
             result: Any = _json.loads(result_json)
         elif demo:
@@ -670,15 +806,15 @@ def build_server() -> Any:
         else:
             return {"error": "provide result_json (a saved result) or demo=True"}
 
-        out_base = out_dir or tempfile.mkdtemp(prefix="nudge_viz_")
         ext = ".gif" if animate else ".png"
-        out_path = f"{out_base.rstrip('/')}/{kind}{ext}"
+        out_path = f"{out_dir.rstrip('/')}/{kind}{ext}" if out_dir else None
         return render_result(
             kind, result, out=out_path, emit_code=True, theme=theme,
-            animate=animate, self_contained=self_contained, inline_png=not animate,
+            animate=animate, self_contained=self_contained,
             cli_call=f"render_figure({kind})",
         )
 
+    _register_job_tools(mcp)
     return mcp
 
 

@@ -14,6 +14,59 @@ from typing import Any
 TOPOLOGIES = ("1node", "2node", "toggle")
 
 
+#: Cap on the inline provenance ``data`` text (sidecar JSON). Animation sidecars carry a
+#: whole frame sequence, so cap the inlined copy; the full sidecar is always on disk.
+_DATA_TEXT_CAP = 200_000
+
+
+def _read_text_capped(path: str | None, cap: int) -> tuple[str | None, bool]:
+    """Read a text file, capped. Returns ``(text_or_None, truncated)``."""
+    if not path:
+        return None, False
+    try:
+        from pathlib import Path
+
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover - defensive
+        return None, False
+    if len(text) > cap:
+        return text[:cap] + f"\n… (truncated at {cap:,} chars; full sidecar on disk)", True
+    return text, False
+
+
+def _resolve_transport(transport: str | None) -> str:
+    """Resolve the figure transport: explicit override, else the ``NUDGE_ENV`` toggle.
+
+    ``NUDGE_ENV=cloud`` → ``inline`` (the Claude Science reality: the connector can only
+    deliver a figure as inline base64); anything else → ``path`` (write a file the local
+    client can read). Default (env unset) is ``path`` — safe for a local host / the CLI.
+    """
+    if transport in ("inline", "path"):
+        return transport
+    import os
+
+    return "inline" if os.environ.get("NUDGE_ENV", "").strip().lower() == "cloud" else "path"
+
+
+def _artifact_dir(out: str | None) -> str:
+    """The directory to write a figure into for PATH transport.
+
+    ``NUDGE_ARTIFACT_DIR`` (if set) wins — it lets a host pin a client-visible directory;
+    otherwise the caller's ``out`` directory; otherwise the system temp dir.
+    """
+    import os
+    import tempfile
+
+    env_dir = os.environ.get("NUDGE_ARTIFACT_DIR", "").strip()
+    if env_dir:
+        return env_dir
+    if out:
+        d = os.path.dirname(out)
+        if d:
+            return d
+    return tempfile.gettempdir()
+
+
 def render_result(
     kind: str,
     result_or_dict: Any,
@@ -23,47 +76,99 @@ def render_result(
     theme: str = "auto",
     self_contained: bool = False,
     animate: bool = False,
-    inline_png: bool = False,
+    inline_png: bool = False,  # deprecated; transport now governs inlining (kept for compat)
     cli_call: str | None = None,
+    transport: str | None = None,
     **ctx: Any,
 ) -> dict[str, Any]:
     """Render a NUDGE result to a figure — the one place CLI + MCP share the figure path.
 
     Lazy-imports the opt-in :mod:`nudge.viz` (raising the friendly ``[viz]``-extra install
-    message if absent), dispatches on ``kind``, and returns the ``FigureResult`` as a
-    plain dict (paths + honest caption + ``abstained`` flag + optional size-capped inline
-    PNG). ``ctx`` carries any renderer inputs the serialized dict lacks — e.g. the raw
-    ``dose`` / ``response`` points for the dose-response scatter. The abstention overlay
-    is applied by :mod:`nudge.viz` off the result's own verdict; this seam never re-fits.
+    message if absent), dispatches on ``kind``, and returns a transport-aware dict. Two
+    transports (``NUDGE_ENV=cloud`` → ``inline``, else ``path``; override with
+    ``transport=``):
+
+    - **inline** (Claude Science): the image travels as size-disciplined **base64**
+      (``image_base64`` + ``mime_type``) — GIFs downscaled / frame-limited / never-inflated
+      and capped, falling back to a static final-frame preview or a ``too large`` note.
+      Provenance (``code`` = the regenerating ``fig.py``; ``data`` = the sidecar, capped)
+      always rides along inline.
+    - **path** (local hosts / the CLI): the figure is written to ``NUDGE_ARTIFACT_DIR``
+      (fallback: the caller's dir, then the system temp dir) and its ``image_path`` /
+      ``code_path`` / ``data_path`` are returned.
+
+    ``ctx`` carries any renderer inputs the serialized dict lacks (e.g. the raw ``dose`` /
+    ``response`` points). The abstention overlay is applied by :mod:`nudge.viz` off the
+    result's own verdict; this seam never re-fits.
     """
+    import os
+
     import nudge.viz as viz
+
+    resolved = _resolve_transport(transport)
+    ext = ".gif" if animate else ".png"
+
+    if resolved == "inline":
+        import tempfile
+
+        write_dir = tempfile.mkdtemp(prefix="nudge_viz_")  # staging only (base64'd, not returned)
+        write_path = os.path.join(write_dir, f"{kind}{ext}")
+    else:
+        write_dir = _artifact_dir(out)
+        os.makedirs(write_dir, exist_ok=True)
+        basename = os.path.basename(out) if out else f"{kind}{ext}"
+        write_path = os.path.join(write_dir, basename)
 
     fr = viz.render(
         result_or_dict,
-        out,
+        write_path,
         kind=kind,
         emit_code=emit_code,
         theme=theme,
         self_contained=self_contained,
         animate=animate,
-        inline_png=inline_png,
+        inline_png=False,
         cli_call=cli_call,
         **ctx,
     )
-    return {
+
+    mime_type = "image/gif" if (fr.path or write_path).endswith(".gif") else "image/png"
+    code_text, _ = _read_text_capped(fr.code_path, _DATA_TEXT_CAP)
+    data_text, data_trunc = _read_text_capped(fr.data_path, _DATA_TEXT_CAP)
+
+    common: dict[str, Any] = {
+        "transport": resolved,
+        "kind": fr.kind,
+        "caption": fr.caption,
+        "abstained": fr.abstained,
+        "mime_type": mime_type,
+        "code": code_text,
+        "data": data_text,
+        "data_truncated": data_trunc,
+    }
+
+    if resolved == "inline":
+        from nudge.viz.inline import prepare_inline_image
+
+        image_bytes = b""
+        if fr.path:
+            with open(fr.path, "rb") as fh:
+                image_bytes = fh.read()
+        common.update(prepare_inline_image(image_bytes, mime_type))
+        common["image_path"] = None  # the staging file is invisible to the client
+        common["png_path"] = None
+        return common
+
+    # PATH transport: return the written paths (png_path kept as a back-compat alias).
+    common.update({
+        "image_path": fr.path,
         "png_path": fr.path,
         "code_path": fr.code_path,
         "data_path": fr.data_path,
-        "png_base64": fr.png_base64,
-        "png_base64_omitted_reason": (
-            None
-            if (fr.png_base64 is not None or not inline_png)
-            else "exceeds inline cap; read png_path"
-        ),
-        "caption": fr.caption,
-        "abstained": fr.abstained,
-        "kind": fr.kind,
-    }
+        "image_base64": None,
+        "image_base64_omitted_reason": f"path transport; read image_path ({fr.path})",
+    })
+    return common
 
 
 def build_circuit(topology: str) -> Any:
@@ -418,6 +523,7 @@ def dose_response_file(
             emit_code=fig_code,
             theme=fig_theme,
             self_contained=fig_self_contained,
+            transport="path",  # the CLI --fig flag writes a local file
             dose=dose,
             response=response,
             label=fig_label or (target or "dose-response"),
