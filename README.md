@@ -10,6 +10,12 @@
 </p>
 
 <p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-1f6feb?logo=modelcontextprotocol&logoColor=white" alt="MCP server"></a>
+  <a href="https://claude.ai/"><img src="https://img.shields.io/badge/Built%20with-Claude%3A%20Life%20Sciences-D97757?logo=claude&logoColor=white" alt="Built with Claude: Life Sciences"></a>
+</p>
+
+<p align="center">
   <b>Mechanism attribution for perturbation screens — threshold vs gain vs ceiling, and it abstains when it can't tell.</b>
 </p>
 
