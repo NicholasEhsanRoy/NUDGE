@@ -1,0 +1,167 @@
+{
+  "model": "Proctor 2013 AD amyloid-\u03b2 QSP (BIOMD0000000488, CC0) \u2014 NLME/hierarchical population, synthetic cohort",
+  "coupling_probe": {
+    "n_subjects": 6,
+    "n_free": 30,
+    "border_size": 12,
+    "max_border_subject_entry": 425.3114433248546,
+    "max_cross_subject_entry": 0.0,
+    "cross_over_border_ratio": 0.0,
+    "fim_max_abs": 2343.7347095421196,
+    "arrowhead": true
+  },
+  "dense_object_sizes": [
+    {
+      "n_subjects": 100,
+      "n_free": 312,
+      "n_obs": 200,
+      "dense_jacobian_gb": 0.0004992,
+      "dense_fim_gb": 0.000778752
+    },
+    {
+      "n_subjects": 300,
+      "n_free": 912,
+      "n_obs": 600,
+      "dense_jacobian_gb": 0.0043776,
+      "dense_fim_gb": 0.006653952
+    },
+    {
+      "n_subjects": 700,
+      "n_free": 2112,
+      "n_obs": 1400,
+      "dense_jacobian_gb": 0.0236544,
+      "dense_fim_gb": 0.035684352
+    },
+    {
+      "n_subjects": 1500,
+      "n_free": 4512,
+      "n_obs": 3000,
+      "dense_jacobian_gb": 0.108288,
+      "dense_fim_gb": 0.162865152
+    },
+    {
+      "n_subjects": 2500,
+      "n_free": 7512,
+      "n_obs": 5000,
+      "dense_jacobian_gb": 0.30048,
+      "dense_fim_gb": 0.451441152
+    }
+  ],
+  "sweep": [
+    100,
+    300,
+    700,
+    1500,
+    2500
+  ],
+  "dense_cap_gb": 2.5,
+  "rows": [
+    {
+      "method": "dense",
+      "n_subjects": 100,
+      "n_free": 312,
+      "n_obs": 200,
+      "n_states": 600,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 2.819979706000595,
+      "peak_rss_mb": 915.48046875
+    },
+    {
+      "method": "matrixfree",
+      "n_subjects": 100,
+      "n_free": 312,
+      "n_obs": 200,
+      "n_states": 600,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 2.966230011003063,
+      "peak_rss_mb": 561.9609375
+    },
+    {
+      "method": "dense",
+      "n_subjects": 300,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_subjects": 300,
+      "n_free": 912,
+      "n_obs": 600,
+      "n_states": 1800,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 4.444455151999136,
+      "peak_rss_mb": 567.671875
+    },
+    {
+      "method": "dense",
+      "n_subjects": 700,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_subjects": 700,
+      "n_free": 2112,
+      "n_obs": 1400,
+      "n_states": 4200,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 7.6060054680019675,
+      "peak_rss_mb": 637.5703125
+    },
+    {
+      "method": "dense",
+      "n_subjects": 1500,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_subjects": 1500,
+      "n_free": 4512,
+      "n_obs": 3000,
+      "n_states": 9000,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 12.219366743000137,
+      "peak_rss_mb": 825.4609375
+    },
+    {
+      "method": "dense",
+      "n_subjects": 2500,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_subjects": 2500,
+      "n_free": 7512,
+      "n_obs": 5000,
+      "n_states": 15000,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 17.433378976998938,
+      "peak_rss_mb": 891.78125
+    }
+  ],
+  "mismatches": [],
+  "dense_ok_max_nsubj": 100,
+  "dense_oom_min_nsubj": 300,
+  "mf_rss_flatness": 1.5869096773296631,
+  "verdict": "COUPLED ARROWHEAD + MATRIX-FREE FLAT PAST DENSE OOM"
+}

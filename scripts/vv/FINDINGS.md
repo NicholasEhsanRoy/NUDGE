@@ -2337,3 +2337,66 @@ k_gl)` ellipse shrinks: `tmp/ad_qsp_oed/ad_qsp_oed_ellipse_collapse.gif` (gitign
 demo-scaled model + **synthetic** cohort (`NUDGE-LIM-026`), never a patient finding. Tests:
 `tests/mechanisms/test_ad_qsp.py` (6 fast + 1 slow). Results:
 `scripts/vv/ad_qsp_scaling_RESULTS.json`, `scripts/vv/ad_qsp_oed_RESULTS.json`.
+
+---
+
+# AD QSP NLME (hierarchical) — a GENUINELY COUPLED arrowhead FIM: dense OOM vs matrix-free flat (`NUDGE-LIM-028`)
+
+The AD-QSP population identifiability above (Action 2) used the **independent-subjects** cohort:
+each subject its own private 12 kinetic params, so the population FIM is **block-diagonal** (a
+sum of per-subject 12×12 blocks). A competent analyst decomposes that per-subject and **never
+needs a big matrix** — so a "dense FIM OOMs" story on that cohort is a **strawman**. This finding
+records the **non-strawman** version: a hierarchical / NLME cohort whose joint FIM is genuinely
+**coupled** (an arrowhead), where the honest full-joint analysis needs either a dense FIM (OOM)
+or NUDGE's matrix-free path.
+
+**The coupling (`make_ad_nlme_cohort_predict_fn`).** Subjects share population hyperparameters:
+each subject's random-effect kinetics (default plaque-switch gain `k_pg` / threshold `K_pg` +
+microglial clearance `k_gl`) are drawn around a **shared** geometric-mean `μ`, with **shared**
+fixed effects `φ` (and, with `include_prior=True`, a **shared** log-spread `ω` via appended RE
+prior pseudo-observations — the full μ+ω NLME). The joint vector is
+`θ = [μ | ω? | φ | r₀ … r_{N-1}]` (`r_i` = subject `i`'s multiplicative random effect, RE value
+`μ ⊙ r_i`); all entries RAW-positive so `θ·∂/∂θ` log-sensitivity is clean. Because `μ`/`φ`/`ω`
+enter **every** subject's observations, the FIM is a bordered **arrowhead** — a dense border
+(shared-hyperparam rows/cols) coupling every subject, plus per-subject blocks.
+
+**Arrowhead — MEASURED** (`scripts/demo_nlme_scale.py`, dense FIM at N=6):
+`max |FIM[border, subject_0]| ≈ 4.3e2` (≫0 ⇒ the shared border couples every subject) while
+`max |FIM[subject_0, subject_1]| = 0.0` (exactly zero ⇒ block-diagonal in the random effects).
+The NumPy without-arm reproduces the **identical** number (border↔subj0 = 425.311, cross-subject
+= 0.0). Block-summing does not apply.
+
+**Dense OOM vs matrix-free flat — MEASURED** (fixed 2 plaque timepoints/subject; dense under a
+2.5 GB systemd `MemoryMax` cap; `re_params=(k_pg,K_pg,k_gl)`, `include_prior=False`):
+
+| n_subjects | n_free | dense (jacfwd) | matrix-free |
+|---|---|---|---|
+| 100  | 312  | 2.82 s / **915 MB** (ok) | 2.97 s / 562 MB |
+| 300  | 912  | **OOM** (>2.5 GB) | 4.44 s / 568 MB |
+| 700  | 2112 | **OOM** | 7.61 s / 638 MB |
+| 1500 | 4512 | **OOM** | 12.22 s / 826 MB |
+| 2500 | 7512 | **OOM** | 17.43 s / 892 MB |
+
+Dense `jacfwd` succeeds only at N=100 and is **OOM-killed at N≥300**. The OOM is jacfwd's
+**forward-mode tangent fan-out** (peak ∝ `n_params · n_steps · cohort_state`, far larger than the
+final `(n_obs × n_free)` J array — which is only ~0.3 GB even at n_free=7512). Matrix-free stays
+**~0.56 → 0.89 GB across N=100→2500 (1.59× over a 25× subject increase)** — it grows only
+~linearly with the cohort state, never with the `n_obs · n_params` product — completing **every**
+N and returning the **same** verdict where dense succeeded (**0 label mismatch**). With the sparse
+plaque-only budget the problem is rank-deficient by shape → verdict `unidentifiable` (the
+`NUDGE-LIM-023` fail-safe, **preserved** on the coupled model). **0 confident-wrong.**
+
+**Why the differentiable model matters (measured cost, not impossibility).** The matrix-free route
+REQUIRES autodiff jvp/vjp. The from-scratch NumPy without-arm (`scripts/demo_ab/
+ad_qsp_nlme_forward.py`) has no autodiff, so its only matrix-free option is finite-difference
+matvecs = **O(n_params) whole-cohort forward solves per matvec** — intractable at N≈2000+ (7500+
+params). And its natural full-joint route (a finite-difference dense Jacobian → dense FIM) is the
+`(n_params × n_params)` array that reaches ~O(10 GB) and OOMs. **Honesty (`NUDGE-LIM-028`):** an
+arrowhead is in-principle Schur-decomposable, so this is the **measured** dense-OOM-vs-matrix-
+free-flat contrast, **not** an impossibility claim. **Synthetic** cohort (never real patients),
+demo-scaled constants (`NUDGE-LIM-026`); real AD cohorts (ADNI/A4/DIAN/OASIS-3/AIBL/EPAD) exist
+and population/NLME QSP amyloid fits with an FIM step are published precedent (Ramakrishnan et al.
+2023, CPT:PSP 12:876 — 74 params, 32 with IIV, FIM cond 3492) but are all DUA/registration-gated,
+so synthetic is the honest ceiling. `ad_qsp_nlme` registered for the `identifiability` MCP tool
+(driven by name at scale). Tests: `tests/mechanisms/test_ad_qsp.py` (5 fast + 1 slow NLME).
+Results: `scripts/vv/ad_qsp_nlme_scaling_RESULTS.json`.

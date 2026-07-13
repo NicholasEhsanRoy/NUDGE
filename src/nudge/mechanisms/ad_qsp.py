@@ -41,7 +41,7 @@ the OED grammar of :mod:`nudge.inference.oed`.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -62,6 +62,9 @@ __all__ = [
     "make_ad_cohort_predict_fn",
     "generate_ad_cohort",
     "make_ad_oed_problem",
+    "NLMECohortProblem",
+    "make_ad_nlme_cohort_predict_fn",
+    "generate_ad_nlme_cohort",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -437,3 +440,269 @@ def make_ad_oed_problem(
               "dose_window": DOSE_WINDOW, "t_max": t_max, "dt": dt, "biomarkers": biomarkers,
               "x0": x0_np},
     )
+
+
+# --------------------------------------------------------------------------- #
+# HIERARCHICAL / NLME cohort: a GENUINELY COUPLED (arrowhead) population FIM
+# --------------------------------------------------------------------------- #
+# WHY THIS EXISTS (and how it differs from ``make_ad_cohort_predict_fn`` above).
+#
+# The independent-subjects cohort above gives every subject its OWN private copy of the 12
+# kinetic parameters, so subject i's observations depend only on subject i's parameters. Its
+# population Fisher-information matrix is therefore **block-diagonal** — a sum of per-subject
+# 12×12 blocks — and a competent analyst NEVER needs to materialize a big matrix: decompose
+# into blocks, done. (A "dense FIM OOMs" story built on THAT cohort would be a strawman, and
+# we refuse it.)
+#
+# A real nonlinear-mixed-effects (NLME) population fit is different: subjects share population
+# **hyperparameters**. Here each subject's random-effect kinetic value is drawn around a SHARED
+# population geometric-mean ``μ`` (with log-spread ``ω``), and the non-random kinetics are a
+# SHARED fixed-effect vector ``φ``. Because ``μ`` and ``φ`` (and ``ω`` when the RE prior is
+# included) enter EVERY subject's predicted observations, the joint FIM over
+#
+#     θ_joint = [ μ (d) | ω (d, optional) | φ (n_fixed) | r₀ (d) | r₁ (d) | … | r_{N-1} (d) ]
+#
+# (where ``r_i`` is subject i's per-dimension multiplicative random effect, so its RE kinetic
+# value is ``μ ⊙ r_i``) is **NOT block-diagonal**. It is a bordered / **arrowhead** matrix: a
+# dense border (the shared-hyperparameter rows/cols, which couple to every subject) plus the
+# per-subject diagonal blocks; cross-subject blocks are exactly zero. The honest full-joint
+# identifiability analysis of this coupled model needs either a dense Jacobian/FIM (which OOMs
+# at population scale) or NUDGE's matrix-free ``JᵀJ·v`` matvecs (which stay flat).
+#
+# HONEST CAVEAT (NUDGE-LIM-028): arrowhead structure is in principle Schur-decomposable, so a
+# bespoke solver COULD avoid the dense matrix. The claim we ship is strictly the MEASURED one:
+# the NAIVE full-joint dense route OOMs while NUDGE's GENERIC matrix-free solver stays flat
+# WITHOUT needing to derive or exploit the Schur structure — and a from-scratch NumPy model has
+# no autodiff, so its only matrix-free route is finite-difference matvecs = O(n_params) forward
+# solves each, intractable at this scale.
+
+
+@dataclass(frozen=True)
+class NLMECohortProblem:
+    """A hierarchical / NLME population calibration whose joint FIM is genuinely **coupled**.
+
+    ``predict_fn(theta) -> observations`` maps the joint free-parameter vector
+    ``θ = [ μ | ω? | φ | r₀ … r_{N-1} ]`` (all RAW-positive, so the sloppiness diagnostic's
+    ``θ·∂/∂θ`` recovers the log-sensitivity) to the stacked cohort observations. The first
+    ``border_size`` entries are the SHARED population hyperparameters (``μ``: RE geometric means;
+    ``ω``: RE log-spread, present iff ``include_prior``; ``φ``: fixed effects) — they enter
+    every subject, so their FIM rows/cols are the dense **border**. The remaining ``N·n_re``
+    entries are the per-subject random-effect multipliers ``r_i`` — their FIM blocks are
+    per-subject and cross-subject blocks are exactly zero. That border-couples-everything /
+    zero-cross-subject structure is the **arrowhead** the coupled analysis rests on
+    (:meth:`border_indices` / :meth:`subject_block` expose it; a test asserts off-block border↔
+    subject entries are nonzero while cross-subject entries vanish)."""
+
+    predict_fn: Callable[[Array], Array]
+    theta0: np.ndarray
+    param_names: tuple[str, ...]
+    n_subjects: int
+    n_re: int
+    n_fixed: int
+    border_size: int
+    include_prior: bool
+    n_obs: int
+    n_states: int
+    re_params: tuple[str, ...]
+    meta: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def n_theta(self) -> int:
+        return int(self.theta0.shape[0])
+
+    def border_indices(self) -> np.ndarray:
+        """Indices of the SHARED-hyperparameter (border) block — ``[μ | ω? | φ]``."""
+        return np.arange(self.border_size, dtype=int)
+
+    def subject_block(self, i: int) -> np.ndarray:
+        """Indices of subject ``i``'s per-subject random-effect block ``r_i`` (``n_re`` wide)."""
+        start = self.border_size + i * self.n_re
+        return np.arange(start, start + self.n_re, dtype=int)
+
+
+def _omega_vec(omega: float | Sequence[float], d: int) -> np.ndarray:
+    arr = np.atleast_1d(np.asarray(omega, dtype=np.float64))
+    if arr.shape[0] == 1:
+        arr = np.repeat(arr, d)
+    if arr.shape[0] != d:
+        raise ValueError(f"omega must be a scalar or length-{d}; got shape {arr.shape}")
+    return arr
+
+
+def make_ad_nlme_cohort_predict_fn(
+    *,
+    n_subjects: int = 40,
+    re_params: Sequence[str] = ("k_pg", "K_pg", "k_gl"),
+    n_obs_times: int = 2,
+    t_max: float = 12.0,
+    dt: float = 0.08,
+    dose: float = 0.6,
+    omega: float | Sequence[float] = 0.2,
+    include_prior: bool = False,
+    biomarkers: tuple[int, ...] = (2,),
+    seed: int = 0,
+) -> NLMECohortProblem:
+    """Build the hierarchical / NLME population calibration :class:`NLMECohortProblem`.
+
+    ``re_params`` are the kinetic parameters given a population random effect (default the
+    plaque-switch gain ``k_pg`` / threshold ``K_pg`` + microglial clearance ``k_gl``); the rest
+    are shared fixed effects ``φ``. Each subject ``i`` draws a multiplicative random effect
+    ``r_i = exp(ω ⊙ η_i)`` (``η_i ~ N(0, I)``) so its RE kinetic value is ``μ ⊙ r_i`` around the
+    shared geometric mean ``μ`` (= the population truth). The forward map ``vmap``\\s the
+    single-subject RK4 solve over the cohort and returns the log-biomarker observations at
+    ``n_obs_times`` times; when ``include_prior`` it APPENDS the RE prior as ``N·n_re``
+    pseudo-observations ``log(r_i)/ω`` (so ``ω`` becomes a genuine free border hyperparameter
+    that couples every subject, the full μ+ω NLME).
+
+    The joint FIM of this map is the **coupled** population identifiability: ``μ``/``φ`` (and
+    ``ω``) enter every subject → a dense arrowhead border; the ``r_i`` are per-subject blocks.
+    Sweeping ``n_subjects`` grows the joint parameter count at fixed integrated state — the axis
+    the dense Jacobian/FIM OOMs on while the matrix-free path stays flat. With a sparse biomarker
+    budget (``biomarkers=(2,)`` plaque-only, ``n_obs_times < n_re``) and ``include_prior=False``
+    the population problem is genuinely rank-deficient by shape (more per-subject RE params than
+    per-subject observations) → NUDGE certifies ``unidentifiable`` cheaply (``NUDGE-LIM-023``
+    fail-safe). Synthetic cohort, demo-scaled constants (``NUDGE-LIM-026`` / ``NUDGE-LIM-028``).
+    """
+    n_params = AD_PARAM_VALUES.shape[0]
+    name_to_idx = {n: i for i, n in enumerate(AD_PARAM_NAMES)}
+    re_params_t = tuple(re_params)
+    missing = [n for n in re_params_t if n not in name_to_idx]
+    if missing:
+        raise ValueError(f"unknown re_params {missing}; available: {AD_PARAM_NAMES}")
+    re_idx = np.array([name_to_idx[n] for n in re_params_t], dtype=int)
+    fixed_idx = np.array([i for i in range(n_params) if i not in set(re_idx.tolist())], dtype=int)
+    d = int(re_idx.shape[0])
+    n_fixed = int(fixed_idx.shape[0])
+    n_subjects = int(max(1, n_subjects))
+    omega_vec = _omega_vec(omega, d)
+
+    mu0 = AD_PARAM_VALUES[re_idx].astype(np.float64)          # (d,) population geometric means
+    phi0 = AD_PARAM_VALUES[fixed_idx].astype(np.float64)      # (n_fixed,) shared fixed effects
+    rng = np.random.default_rng(seed)
+    eta = rng.standard_normal((n_subjects, d))                # (N, d) subject random effects
+    r0 = np.exp(omega_vec[None, :] * eta)                     # (N, d) multiplicative REs (≈1)
+
+    border_size = d + (d if include_prior else 0) + n_fixed
+    theta0_parts = [mu0]
+    if include_prior:
+        theta0_parts.append(omega_vec.copy())
+    theta0_parts.append(phi0)
+    theta0_parts.append(r0.reshape(-1))
+    theta0 = np.concatenate(theta0_parts).astype(np.float64)
+
+    # integration grid + observation indexing (shared across subjects, fixed state).
+    n = int(round(t_max / dt))
+    grid_t = np.arange(n) * dt
+    obs_t = np.linspace(0.0, t_max, n_obs_times)
+    obs_idx = np.clip(np.round(obs_t / dt).astype(int), 0, n)
+    u_grid = np.asarray(_dose_grid(jnp.asarray(grid_t), dose, DOSE_WINDOW))
+    x0 = np.tile(AD_X0, (n_subjects, 1))
+
+    re_idx_j = jnp.asarray(re_idx)
+    fixed_idx_j = jnp.asarray(fixed_idx)
+    x0_j = jnp.asarray(x0)
+    grid_j = jnp.asarray(grid_t)
+    u_j = jnp.asarray(u_grid)
+    obs_idx_j = jnp.asarray(obs_idx)
+    biom_j = jnp.asarray(np.asarray(biomarkers))
+
+    def one_subject(p_row: Array, x0_row: Array) -> Array:
+        traj = _rk4_full(p_row, x0_row, grid_j, u_j, dt)  # (G+1, 6)
+        obs = traj[obs_idx_j][:, biom_j]  # (n_obs_times, n_biom)
+        return jnp.log(jnp.clip(obs, 0.0, _X_CAP) + _LOG_OFFSET).reshape(-1)
+
+    om_end = d + (d if include_prior else 0)  # end of the [μ | ω?] prefix
+    phi_end = om_end + n_fixed                 # end of the [μ | ω? | φ] border
+
+    def predict(theta: Array) -> Array:
+        theta = jnp.asarray(theta)  # honor the active precision (avoids an x64-request warning)
+        mu = theta[:d]
+        phi = theta[om_end:phi_end]
+        r = theta[phi_end:].reshape(n_subjects, d)
+        re_vals = mu[None, :] * r  # (N, d) subject-specific RE kinetics
+        full = jnp.zeros((n_subjects, n_params), dtype=theta.dtype)
+        full = full.at[:, re_idx_j].set(re_vals.astype(theta.dtype))
+        full = full.at[:, fixed_idx_j].set(
+            jnp.broadcast_to(phi.astype(theta.dtype), (n_subjects, n_fixed))
+        )
+        data = jax.vmap(one_subject)(full, x0_j).reshape(-1)
+        if include_prior:
+            om = theta[d:om_end]
+            prior = (jnp.log(jnp.clip(r, 1e-12, None)) / om[None, :]).reshape(-1)
+            return jnp.concatenate([data, prior])
+        return data
+
+    n_data = int(n_subjects * n_obs_times * len(biomarkers))
+    n_obs = n_data + (n_subjects * d if include_prior else 0)
+
+    names: list[str] = [f"mu[{p}]" for p in re_params_t]
+    if include_prior:
+        names += [f"omega[{p}]" for p in re_params_t]
+    names += [f"phi[{AD_PARAM_NAMES[i]}]" for i in fixed_idx]
+    names += [
+        f"r[{re_params_t[j]}][subj{i}]" for i in range(n_subjects) for j in range(d)
+    ]
+
+    return NLMECohortProblem(
+        predict_fn=predict,
+        theta0=theta0,
+        param_names=tuple(names),
+        n_subjects=n_subjects,
+        n_re=d,
+        n_fixed=n_fixed,
+        border_size=int(border_size),
+        include_prior=bool(include_prior),
+        n_obs=int(n_obs),
+        n_states=int(n_subjects * len(AD_SPECIES)),
+        re_params=re_params_t,
+        meta={"re_idx": re_idx.tolist(), "fixed_idx": fixed_idx.tolist(),
+              "omega": omega_vec.tolist(), "n_obs_times": n_obs_times, "dose": dose,
+              "biomarkers": biomarkers, "t_max": t_max, "dt": dt, "seed": seed,
+              "coupling": "arrowhead (shared μ/ω/φ border + per-subject r_i blocks)"},
+    )
+
+
+def generate_ad_nlme_cohort(
+    *,
+    n_subjects: int = 40,
+    re_params: Sequence[str] = ("k_pg", "K_pg", "k_gl"),
+    n_obs_times: int = 6,
+    dose: float = 0.6,
+    omega: float | Sequence[float] = 0.2,
+    obs_noise: float = 0.05,
+    biomarkers: tuple[int, ...] = (2, 1),
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Generate a SYNTHETIC hierarchical ground-truth cohort (subject-specific RE kinetics +
+    biomarker observations) from the NLME model — never real patient data.
+
+    Returns the shared population truth (``mu``, ``omega``, fixed effects), the per-subject
+    random-effect multipliers and kinetic values, and the (optionally noised) log-biomarker
+    observations. This is the coupled calibration the arrowhead identifiability analysis is
+    *about*."""
+    prob = make_ad_nlme_cohort_predict_fn(
+        n_subjects=n_subjects, re_params=re_params, n_obs_times=n_obs_times, dose=dose,
+        omega=omega, include_prior=False, biomarkers=biomarkers, seed=seed,
+    )
+    clean = np.asarray(prob.predict_fn(jnp.asarray(prob.theta0)))
+    rng = np.random.default_rng(seed + 1)
+    noisy = clean + obs_noise * rng.standard_normal(clean.shape) if obs_noise > 0 else clean
+    d = prob.n_re
+    r = prob.theta0[prob.border_size:].reshape(n_subjects, d)
+    mu = prob.theta0[:d]
+    return {
+        "mu": np.asarray(mu),
+        "omega": np.asarray(prob.meta["omega"]),
+        "re_params": np.array(prob.re_params),
+        "subject_multipliers": r,                 # (N, d) r_i
+        "subject_re_values": mu[None, :] * r,     # (N, d) μ ⊙ r_i
+        "observations": noisy,
+        "clean_observations": clean,
+        "biomarker_indices": np.array(biomarkers),
+        "n_subjects": n_subjects,
+        "n_obs_times": n_obs_times,
+        "obs_noise": obs_noise,
+        "note": "SYNTHETIC NLME ground-truth cohort generated from the AD QSP model — NOT real "
+                "patient data. Shared μ/ω population hyperparameters couple every subject "
+                "(arrowhead FIM).",
+    }

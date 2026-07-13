@@ -1304,3 +1304,78 @@ anomalies:
       decoy models in the registry (well_conditioned must not read as sloppy; redundant_exponential
       must abstain) are the standing check that the general tool returns the correct verdict per
       model rather than a demo-tuned constant.
+
+  - anomaly_id: NUDGE-LIM-028
+    title: The NLME arrowhead scale-wall is a MEASURED dense-vs-matrix-free contrast, not an impossibility claim
+    description: >-
+      The hierarchical / nonlinear-mixed-effects (NLME) population variant of the AD amyloid-β
+      QSP model (nudge.mechanisms.ad_qsp.make_ad_nlme_cohort_predict_fn; registered model
+      `ad_qsp_nlme`; scripts/demo_nlme_scale.py; the WITHOUT-arm scripts/demo_ab/
+      ad_qsp_nlme_forward.py) exists to make the matrix-free identifiability story HONEST at
+      population scale. The independent-subjects cohort (make_ad_cohort_predict_fn) gives every
+      subject its own private 12 kinetic parameters, so its population Fisher-information matrix
+      (FIM) is BLOCK-DIAGONAL — a sum of per-subject 12×12 blocks — and a competent analyst (or
+      NUDGE) decomposes it per-subject and NEVER needs a big matrix; a "dense FIM OOMs" story
+      built on that cohort would be a strawman. The NLME cohort instead shares population
+      hyperparameters: each subject's random-effect kinetics (default the plaque-switch gain
+      k_pg / threshold K_pg + microglial clearance k_gl) are drawn around a SHARED geometric-mean
+      μ with SHARED fixed effects φ (and, when include_prior=True, a shared log-spread ω via
+      appended random-effect prior pseudo-observations). Because μ/φ (and ω) enter EVERY
+      subject's predicted observations, the joint FIM over θ = [μ | ω? | φ | r_0 … r_{N-1}] is a
+      bordered / ARROWHEAD matrix — a dense border (the shared-hyperparameter rows/cols) that
+      couples every subject, plus per-subject blocks; cross-subject blocks are EXACTLY zero
+      (MEASURED at N=6: max |FIM[border, subject_0]| ≈ 4.3e2 while max |FIM[subject_0,
+      subject_1]| = 0.0). THE HONESTY BOUND, load-bearing: an arrowhead matrix is IN PRINCIPLE
+      Schur-decomposable (eliminate the per-subject blocks, work with the small border system),
+      so a bespoke solver COULD analyze it without ever materializing the dense FIM. NUDGE
+      therefore does NOT claim "no method could do this." The claim shipped is strictly the
+      MEASURED contrast: (1) the NAIVE full-joint route materializes the dense Jacobian /
+      dense FIM — and dense jax.jacfwd's forward-mode tangent fan-out (peak ∝ n_params · n_steps
+      · cohort_state, far larger than the final J array itself) OOMs at population scale
+      (MEASURED: OOM-killed at n_subjects≥300 → n_free≥912 under a 2.5 GB systemd MemoryMax cap,
+      while it succeeds only at n_subjects=100 / n_free=312 at ~0.92 GB); (2) NUDGE's GENERIC
+      matrix-free path (sloppiness_diagnostic_matrixfree — the FIM touched only through JᵀJ·v
+      matvecs, one jvp + one vjp, never forming J, and WITHOUT deriving or exploiting the Schur
+      structure) stays low and grows only ~linearly with the cohort (MEASURED: ~0.56 GB at
+      n_free=312 → ~0.89 GB at n_free=7512, i.e. 1.59× over a 25× subject increase), completing
+      every N and returning the SAME verdict where dense succeeded (0 label mismatch); (3) the
+      matrix-free route REQUIRES autodiff jvp/vjp — a from-scratch NumPy model (scripts/demo_ab/
+      ad_qsp_nlme_forward.py) has no autodiff, so its only matrix-free option is finite-difference
+      matvecs = O(n_params) forward solves (whole-cohort re-simulations) PER matvec, intractable
+      at N≈2000+ (this is the honest reason the DIFFERENTIABLE model matters, framed as measured
+      cost, not impossibility). Two further honesty bounds ride with every number. SYNTHETIC +
+      DEMO-SCALED: the NLME cohort is a SYNTHETIC ground-truth population generated from the model
+      itself (never real patients), on the demo-scaled non-dimensionalized constants of
+      NUDGE-LIM-026 (the published stiff Proctor parameterization cannot be integrated by explicit
+      RK4). Real longitudinal AD amyloid/tau cohorts that a population NLME QSP fit would use
+      (ADNI, A4/LEARN, DIAN-OBS, OASIS-3, AIBL, EPAD) DO exist and population/NLME QSP amyloid
+      models with an explicit FIM/covariance identifiability step are published precedent
+      (Ramakrishnan et al. 2023, CPT:PSP 12:876 — a Monolix NLME amyloid QSP, 74 parameters / 32
+      with inter-individual variability, FIM condition number 3492), but ALL of those cohorts are
+      registration + Data-Use-Agreement or controlled-access (none ungated; OASIS-3 is the nearest
+      to "open" and still requires a signed DUA + NITRC registration), so a self-contained
+      reproducible demo cannot bundle real subject-level trajectories — the synthetic cohort is the
+      correct, honest ceiling, demonstrating the METHOD, not a fit to patient data. LOCAL-TO-θ₀
+      for OED-style use: like all of NUDGE's FIM machinery the analysis is at the nominal θ₀
+      (NUDGE-LIM-024). FAIL-SAFE PRESERVED: with a sparse plaque-only budget (n_obs_times < n_re,
+      include_prior=False) the population problem is genuinely rank-deficient by shape (more
+      per-subject random-effect params than per-subject observations) and NUDGE certifies
+      `unidentifiable` (NUDGE-LIM-023) rather than fabricating a verdict — the coupled model does
+      NOT weaken the abstention. Related: NUDGE-LIM-023 (matrix-free identifiability fail-safe),
+      NUDGE-LIM-024 (local OED), NUDGE-LIM-026 (synthetic cohort + demo-scaled constants),
+      NUDGE-LIM-027 (registry scope).
+    severity: minor
+    safety_relevance: context_dependent
+    safety_relevance_rationale: >-
+      A methods DEMONSTRATION on a synthetic cohort, not an attribution verdict on real data, so
+      it cannot emit a confident-wrong mechanism call about a patient or drug. The credibility
+      risk is overclaim, and it is bounded on three sides that must ride with every headline
+      number: (a) the scale win is a MEASURED memory/throughput contrast (dense jacfwd OOM vs
+      matrix-free flat), NOT a claim that the arrowhead is undecomposable — it is in-principle
+      Schur-decomposable, and this is stated; (b) SYNTHETIC + demo-scaled (never real patients,
+      non-dimensionalized constants), with real cohorts existing but DUA/registration-gated so the
+      synthetic ceiling is honest; (c) the NUDGE-LIM-023 rank-deficiency fail-safe is preserved —
+      at genuine shape rank-deficiency NUDGE certifies `unidentifiable`, it does not fabricate.
+      The measured numbers are honest properties of the differentiable demo model at θ₀ (local,
+      NUDGE-LIM-024); they are not extrapolated, not patient findings, and not claims about the
+      published Proctor constants.
