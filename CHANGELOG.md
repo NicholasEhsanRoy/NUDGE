@@ -9,6 +9,14 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.2.0] — 2026-07-13
+
+### Added
+
 - **MCP figure transport — inline base64 for the Claude Science reality
   (`mcp render_figure` + `service.render_result` + `nudge.viz.inline`).** Live-testing against
   the Claude Science connector proved that **file-path delivery is structurally impossible**
