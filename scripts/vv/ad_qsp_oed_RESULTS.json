@@ -1,0 +1,71 @@
+{
+  "model": "Proctor 2013 AD amyloid-\u03b2 QSP (BIOMD0000000488, CC0) \u2014 A\u03b2 subsystem",
+  "pair": [
+    "k_on",
+    "k_gl"
+  ],
+  "objective": "d_opt",
+  "biomarker": "plaque (amyloid-PET)",
+  "naive_schedule": [
+    0.05,
+    0.275,
+    0.5,
+    11.5,
+    11.75,
+    12.0
+  ],
+  "naive": {
+    "corr": 0.9997535515853612,
+    "cond": 8475.629874551436,
+    "min_eig": 0.060548594523666566,
+    "crlb": [
+      9.963438463439292,
+      6.55347017573286
+    ],
+    "fim": [
+      [
+        203.6431689877255,
+        251.03354611077248
+      ],
+      [
+        251.03354611077248,
+        309.604856213887
+      ]
+    ]
+  },
+  "optimised_schedule": [
+    0.05000015615677198,
+    2.2488844254350386,
+    2.251404402344897,
+    6.059919010684557,
+    12.0,
+    12.0
+  ],
+  "optimised": {
+    "corr": 0.9405952904033189,
+    "cond": 32.93961546653488,
+    "min_eig": 12.387213394824201,
+    "crlb": [
+      0.045257517773293975,
+      0.037921675059068856
+    ],
+    "fim": [
+      [
+        191.66964885019735,
+        196.9508033090903
+      ],
+      [
+        196.9508033090903,
+        228.7476104720463
+      ]
+    ]
+  },
+  "crlb_k_on_init": 9.963438463439292,
+  "crlb_k_on_opt": 0.045257517773293975,
+  "crlb_improvement": 220.1499099740424,
+  "min_eig_init": 0.060548594523666566,
+  "min_eig_opt": 12.387213394824201,
+  "min_eig_improvement": 204.5830046473238,
+  "gif_path": "/home/nick/MSF/msf/NUDGE/.claude/worktrees/ad-qsp-clinical-demo/tmp/ad_qsp_oed/ad_qsp_oed_ellipse_collapse.gif",
+  "caveat": "SYNTHETIC calibration cohort; local OED at \u03b8\u2080 (NUDGE-LIM-024); demo-scaled constants (NUDGE-LIM-026)."
+}

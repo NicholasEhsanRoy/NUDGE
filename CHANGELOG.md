@@ -9,6 +9,32 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Flagship AD amyloid-β QSP clinical demo — matrix-free population identifiability +
+  gradient OED on a REAL, published, open model (`nudge.mechanisms.ad_qsp`, `NUDGE-LIM-026`).**
+  Points NUDGE's white-box machinery — matrix-free population identifiability (`NUDGE-LIM-023`)
+  and gradient-based OED (`NUDGE-METHOD-014`) — at the **Proctor et al. 2013** Alzheimer's-disease
+  amyloid-β QSP model (PLoS ONE 8(9):e73631, PMID 24098635; BioModels `BIOMD0000000488`, **CC0**),
+  calibrated against a **synthetic ground-truth cohort** (no patient data). A deep-research
+  subagent downloaded + machine-parsed the SBML (GO; CC0 confirmed); the **full 64-state**
+  network (Aβ + tau + p53/Mdm2 + ubiquitin–proteasome + microglia — 73 parameters, 112
+  reactions) is transcribed faithfully into `nudge.mechanisms._proctor2013` by an offline
+  MathML→JAX generator (`scripts/vv/gen_proctor2013.py`). **Action 2** (`scripts/demo_matrix_free_scale.py`):
+  population-scale calibration (N subjects × 12 subject-specific parameters → thousands of free
+  params at fixed state) — MEASURED, dense `jacfwd` **OOM-killed at n_free≥1000** under a 2.5 GB
+  cap while the **matrix-free FIM matvec stays flat at ~0.57 GB** and returns the same verdict
+  (the honest rank-deficient regime → certified `unidentifiable`, `NUDGE-LIM-023`); single-subject
+  identifiability flags the plaque-growth **gain `k_pg` / threshold `K_pg`** and disaggregation
+  `k_dis` as the **sloppiest** (cond ≈7e8, span 8.8 decades). **Action 3**
+  (`scripts/demo_gradient_oed.py`): the antibody-binding `k_on` ⇄ microglial-clearance `k_gl`
+  pair is **perfectly confounded** by a naive baseline+end amyloid-PET schedule (corr ≈1.000),
+  and gradient OED (D-optimality) resolves it — MEASURED **×220 CRLB / ×205 smallest-eigenvalue**
+  improvement (local OED at θ₀, `NUDGE-LIM-024`) — with the 95%-confidence-ellipse-collapse GIF
+  (`nudge.viz.oed`). **Honesty (`NUDGE-LIM-026`):** synthetic cohort (never real patients) +
+  demo-scaled dimensionless constants (the published stiff seconds-to-years parameterization
+  cannot be integrated by explicit RK4 — the published topology + rate-law forms are preserved).
+  Additive; frozen `fit.py`/`core/` untouched. Tests: `tests/mechanisms/test_ad_qsp.py`;
+  FINDINGS "AD amyloid-β QSP clinical demo".
+
 ### Changed
 
 ### Fixed
