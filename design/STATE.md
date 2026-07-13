@@ -100,6 +100,28 @@ off the result's own verdict** and shipping the fig.py+sidecar replay. Enriched-
 sequences; viz only READS. Docs: `docs/user_guide/claude_science.md` (the EROFS/inline finding
 + the `/usr/bin/env NUDGE_ENV=cloud …` trick + the job pattern + agent notes).
 
+**General-purpose `identifiability` + `oed` MCP tools over a MODEL REGISTRY
+(`feat/mcp-identifiability-oed`; `NUDGE-METHOD-015`, `NUDGE-LIM-027`).** The matrix-free
+identifiability (`NUDGE-LIM-023`) and gradient OED (`NUDGE-METHOD-014`) capabilities, exposed as
+*model-agnostic* MCP tools driven **by name** — NOT a demo-specific cheat. A general registry
+(`inference/model_registry.py`, `register_model`/`list_models`/`build_identifiability_problem`/
+`build_oed_problem`) ships **≥3 models per tool across domains** (`glv` ecology · `linear_pathway`
+kinetics · `ad_qsp` clinical · `logistic` dynamics · canonical `sum_of_exponentials` /
+`redundant_exponential` / `well_conditioned` toys), so both tools demonstrably generalise.
+`service.identifiability_tool` → verdict (`well-constrained`/`sloppy-but-predictive`/
+`unidentifiable`) + named null directions + `NUDGE-LIM-023` bound + the FIM-spectrum figure
+**inline (base64 + fig.py + sidecar)**; `service.oed_tool` → the gradient-optimal design + the
+**MEASURED** CRLB / min-eig lift (local OED `NUDGE-LIM-024`) + the 95%-ellipse-collapse **GIF
+inline**. Both run through `job_submit`/`job_status`. MEASURED end-to-end via a local MCP client
+(glv sloppy-but-predictive; linear_pathway/logistic well-constrained; decoys correct — a
+well-constrained model is NOT flagged sloppy, a rank-deficient one abstains; logistic OED ×49
+CRLB, ad_qsp ×259 CRLB / corr 1.000→cond 22). Ships like a capability: Mechanism Cards
+(`matrix_free_identifiability`, the `oed` tool in `optimal_experimental_design`), a decoy battery,
+`tests/mcp/test_identifiability_oed.py`, `NUDGE-LIM-027` (registry scope — arbitrary models remain
+a plain `import nudge` path). Plus a self-contained A/B "without-NUDGE" package (`scripts/demo_ab/`:
+the AD-QSP forward model + synthetic cohort with NO `nudge` dependency, for a fair raw-agent
+comparison). Additive; frozen `fit.py`/`core/` untouched.
+
 **Efficiency / scaling layer — adjoint gradients + MATRIX-FREE identifiability (Depth, 20%).**
 Two additive, opt-in modules that make NUDGE's mechanistic-ODE work scale to large networks
 without ever materializing the O(N²) objects an ad-hoc script would. (1) `inference/adjoint.py`

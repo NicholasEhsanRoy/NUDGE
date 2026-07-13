@@ -4,7 +4,7 @@ name: optimal_experimental_design
 role: analysis-method
 registry_name: OptimalExperimentalDesign
 vulnerable_to_decoys: []
-documented_limitation: [NUDGE-LIM-024]
+documented_limitation: [NUDGE-LIM-024, NUDGE-LIM-027]
 validated_in_regime: {min_replicates: 1, min_timepoints: 2, notes: "Synthetic differentiable ODE forward models (single-species logistic; 3-taxon gLV). The design parameter is the vector of measurement times φ; the target is the growth⇄self-limitation (α⇄βᵢᵢ) degeneracy (Kᵢ=−αᵢ/βᵢᵢ) that NUDGE-METHOD-012 abstains on near equilibrium. MEASURED at the nominal θ₀ (local OED): a naive near-equilibrium design is near-singular (high FIM condition number, tiny smallest eigenvalue); gradient-ascending a differentiable design criterion (D-optimality logdet FIM, E-optimality λ_min, or the targeted reciprocal-CRLB of α) resolves the sloppy parameter — the growth CRLB improves ~31x and the FIM smallest eigenvalue ~18x on the logistic, ~600x CRLB on the gLV. The white-box gradient reaches the exact continuous optimum; a 1-D design knob confirms the gradient optimum coincides with a fine grid's, while a structured grid guaranteeing the optimum costs r^m FIM evaluations (exponential in the design dimension). Local OED: the optimum is valid near θ₀ and the reported gains are measured there, not extrapolated (NUDGE-LIM-024)."}
 references: [Transtrum2014, Chis2011, Fisher1935]
 ---
@@ -79,6 +79,20 @@ observation noise `σ`, and a valid range for `φ`:
 - `nudge.inference.oed.grid_search_design` — the black-box evaluation baseline.
 - `nudge.inference.oed.make_logistic_design_problem` /
   `nudge.inference.oed.make_glv_design_problem` — the showcase models.
+- `nudge.inference.model_registry.build_oed_problem` — the general model registry the `oed`
+  MCP tool drives by name (≥3 models: `logistic` / `glv` / `ad_qsp`).
+- `nudge.service.oed_tool` — the tool service (measured gain + the ellipse-collapse GIF).
+
+## The general `oed` MCP tool (over the model registry)
+
+The gradient OED is exposed as the general `oed(model, target, objective, …)` MCP tool
+(`nudge.service.oed_tool`) driving a differentiable model **by name** from the registry
+(`nudge.inference.model_registry.list_models`) — `logistic`, `glv`, and the real `ad_qsp` amyloid-β model.
+It runs the real `optimize_design` and returns the **MEASURED** CRLB / smallest-eigenvalue lift
+(never asserted) plus the 95%-confidence-ellipse-collapse GIF via the render seam (inline
+base64 + the regenerating `fig.py` + sidecar under `NUDGE_ENV=cloud`). Registry scope is
+`NUDGE-LIM-027`: arbitrary models remain a plain `import nudge` library path; an unknown model
+name returns an explicit error, never a fabricated design.
 
 ## Validation
 
@@ -95,6 +109,8 @@ deliverable.
 
 - `NUDGE-LIM-024` — **local OED**: the optimum + reported gains are valid near `θ₀`; no
   prior-marginalized robust design.
+- `NUDGE-LIM-027` — the `oed` MCP tool reaches a model only through the named registry; any
+  differentiable model can still be analysed directly via the `import nudge` library path.
 - Related: `NUDGE-METHOD-012` (the gLV abstention this makes actionable), `NUDGE-LIM-020`
   (the α⇄βᵢᵢ degeneracy targeted), `nudge.inference.sloppiness.fisher_information` (the
   Fisher/sloppiness grammar reused).

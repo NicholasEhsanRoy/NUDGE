@@ -9,6 +9,35 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Added
 
+- **Two GENERAL-PURPOSE MCP tools — `identifiability` and `oed` — over a model registry
+  (`nudge.inference.model_registry`; `NUDGE-METHOD-015`, `NUDGE-LIM-027`).** Expose NUDGE's
+  matrix-free identifiability (`NUDGE-LIM-023`) and gradient OED (`NUDGE-METHOD-014`,
+  `NUDGE-LIM-024`) as *model-agnostic* tools driven **by name** over a general registry — not a
+  demo-specific cheat. The registry ships **≥3 models per tool across domains** (`glv` microbiome
+  ecology · `linear_pathway` reaction kinetics · `ad_qsp` clinical pharmacology · `logistic`
+  population dynamics · the canonical `sum_of_exponentials` / `redundant_exponential` /
+  `well_conditioned` toys), so both tools demonstrably "work on any differentiable ODE." Each
+  takes a *model reference* (never a hardcoded answer), runs the REAL analysis, and returns
+  whatever it MEASURES — including honest abstentions. `identifiability(model, free, n_free,
+  method, sigma)` returns the verdict (`well-constrained` / `sloppy-but-predictive` /
+  `unidentifiable`), the named null directions, the fail-safe bound (`NUDGE-LIM-023`), and the
+  **FIM-spectrum figure inline** (base64 + the regenerating `fig.py` + data sidecar under
+  `NUDGE_ENV=cloud`). `oed(model, target, objective, steps)` returns the gradient-optimal design,
+  the **MEASURED** CRLB / smallest-eigenvalue lift (never asserted; local OED `NUDGE-LIM-024`),
+  and the **95%-ellipse-collapse GIF inline** with provenance. Both run through
+  `job_submit`/`job_status`. Ships like a real capability: two Mechanism Cards
+  (`matrix_free_identifiability` `NUDGE-METHOD-015`; the `oed` tool folded into
+  `optimal_experimental_design` `NUDGE-METHOD-014`), a standing decoy battery (a well-constrained
+  model must NOT be flagged sloppy; a rank-deficient one must abstain), tests
+  (`tests/mcp/test_identifiability_oed.py`), and `NUDGE-LIM-027` (registry scope; arbitrary
+  models remain a plain `import nudge` library path). Plus a self-contained **A/B "without-NUDGE"
+  package** (`scripts/demo_ab/`): the same AD-QSP forward model + synthetic cohort as a NumPy
+  module with no `nudge` dependency, for a fair raw-agent comparison (`NUDGE-LIM-026`). Additive;
+  frozen `fit.py`/`core/` untouched. MEASURED via a local MCP client: `identifiability` returns
+  the verdict + inline figure + `fig.py` on multiple models (glv sloppy-but-predictive,
+  linear_pathway/logistic well-constrained, decoys correct); `oed` returns the design + measured
+  gain + inline GIF (logistic ×49 CRLB, ad_qsp ×259 CRLB / corr 1.000→cond 22).
+
 - **Flagship AD amyloid-β QSP clinical demo — matrix-free population identifiability +
   gradient OED on a REAL, published, open model (`nudge.mechanisms.ad_qsp`, `NUDGE-LIM-026`).**
   Points NUDGE's white-box machinery — matrix-free population identifiability (`NUDGE-LIM-023`)

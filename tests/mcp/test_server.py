@@ -37,6 +37,9 @@ def test_server_registers_the_expected_tools() -> None:
         "list_mechanisms",
         "get_mechanism_card",
         "render_figure",
+        "identifiability",
+        "oed",
+        "list_models",
         "job_submit",
         "job_status",
     }

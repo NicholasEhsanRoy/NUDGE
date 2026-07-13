@@ -236,8 +236,20 @@ A short checklist for an agent using the `nudge` connector inside Claude Science
 The server exposes these tools: `list_mechanisms`, `get_mechanism_card`, `explain_abstention`,
 `attribute`, `dose_response`, `synergy`, `cross_modality`, `robustness`, `design`,
 `multi_reporter`, `diagnose_abstention`, `differential`, `differential_robust`, `lotka`,
-`fibrillization`, `constitutive`, `render_figure`, and the async‑job pair `job_submit` /
-`job_status` (see [Figures and long jobs](#figures-come-back-inline-long-jobs-run-async)).
+`fibrillization`, `constitutive`, `render_figure`, `identifiability`, `oed`, `list_models`,
+and the async‑job pair `job_submit` / `job_status` (see
+[Figures and long jobs](#figures-come-back-inline-long-jobs-run-async)).
+
+**General model-analysis tools (`identifiability` / `oed`).** Beyond the perturbation-attribution
+tools, the server exposes two *model-agnostic* tools that work on any differentiable ODE model in
+NUDGE's registry (`list_models` — `glv`, `linear_pathway`, `ad_qsp`, `logistic`, plus canonical
+sloppiness toys, across domains): `identifiability(model, …)` reports which parameters are
+identifiable / sloppy / unrecoverable from the matrix-free Fisher spectrum (and **abstains** when
+it can't certify — `NUDGE-LIM-023`), returning the FIM-spectrum figure inline; `oed(model, target,
+…)` gradient-designs the measurement schedule that best resolves a confounded parameter, returning
+the **measured** CRLB / eigenvalue lift (local OED, `NUDGE-LIM-024`) and the ellipse-collapse GIF
+inline. Both are heavy → run them via `job_submit`. Arbitrary (unregistered) models remain a plain
+`import nudge` library path (`NUDGE-LIM-027`).
 
 ---
 
