@@ -8,9 +8,20 @@ abstain slot) so the picture and the honesty overlay always agree.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from nudge.viz.base import is_abstention
+
+
+def ease(frac: float) -> float:
+    """Smooth 0→1 ease-in-out (raised cosine) — the shared animation timing curve.
+
+    Animators use it so a value "slides" fluidly between two states then holds, instead
+    of a linear ramp. Clipped to ``[0, 1]``; no numpy dependency (a scalar helper).
+    """
+    f = 0.0 if frac < 0.0 else (1.0 if frac > 1.0 else float(frac))
+    return 0.5 - 0.5 * math.cos(math.pi * f)
 
 
 def get(obj: Any, *names: str, default: Any = None) -> Any:
