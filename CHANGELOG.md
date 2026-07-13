@@ -13,6 +13,11 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Fixed
 
+- Removed the redundant PyPI-version badge from `PYPI_README.md`: it permanently lagged one
+  release on the PyPI project page (PyPI snapshots the proxied shields image at upload, before
+  its own index reflects the just-published version), so it always showed the *previous* version.
+  PyPI's page header already shows the true version; the GitHub `README.md` keeps the live badge.
+
 ## [0.4.0] — 2026-07-13
 
 ### Added

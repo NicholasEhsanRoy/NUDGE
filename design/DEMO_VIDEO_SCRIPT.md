@@ -7,8 +7,11 @@ list, and (5) a one-paragraph mapping to the four judging criteria.*
 
 **Honesty north star (non-negotiable, carried through every beat).** NUDGE is the
 "honesty engine": it reports **measured, not asserted**, and its one hard failure is a
-confident-wrong. The video's defensible edges are **scale (the OOM wall), speed, rigor,
-reproducibility, and provenance** — *never* "raw Claude can't do this." Every headline
+confident-wrong. The video's defensible edges are **scale (the OOM wall), the guaranteed
+rank-deficiency guard, speed, rigor, reproducibility, and provenance** — *never* "raw Claude
+can't do this." (Honest positioning: on the *small* demo problems a competent agent matches
+NUDGE's identifiability and OED analyses — measured in dry runs — so the edges are the guard,
+the provenance, and the coupled-population scale wall, not a capability the agent lacks.) Every headline
 number traces to the repo (`scripts/vv/FINDINGS.md`, `design/STATE.md`, `CHANGELOG.md`,
 the two `scripts/demo_*` scripts). The Alzheimer's demo uses a **real published model
 topology + rate-law forms with demo-scaled constants and a synthetic cohort**
@@ -264,7 +267,10 @@ keep the meters animating so it never sits static.
 > differentiates the information criterion through the whole ODE and slides the *same number of
 > scans* into the antibody's dosing window, where only binding leaves a fingerprint. Watch the
 > ellipse collapse. Measured, on this model: the antibody parameter gets two hundred and
-> fifty-nine times more identifiable."
+> fifty-nine times more identifiable. And the tell that this is measurement, not bravado: hand
+> NUDGE a schedule that *can't* identify the parameter at all — a rank-deficient design — and it
+> refuses to invent a factor; it reports the design as degenerate. A tool that *always* hands you
+> a number is guessing."
 
 *On screen:* the **EXPERIMENT card visibly collapses** — from Design A to **"DESIGN B — plaque /
 PET only · baseline + end"** (one biomarker icon × two dots); this shrink *is* the transition,
@@ -274,6 +280,12 @@ times slide off the baseline/end cluster into the dosing transient while the ell
 tight blob. End card: **"CRLB ×259 · corr 1.000 → cond 22."** Money-shot #2.
 **Lower-third:** *"`oed` MCP tool on `ad_qsp`. Local OED at θ₀ — measured, not extrapolated
 (NUDGE-LIM-024)."*
+**Guard callout (brief insert):** on a *rank-deficient* naive design NUDGE returns
+"unidentifiable — no finite factor," not a false-precise number — the honest behavior a naive OED
+tool skips (and which a careful analyst otherwise has to catch by hand). This is the OED edge that
+survives the honest fact that a competent agent *also* finds the optimal schedule on a small
+problem: NUDGE's differentiators are the **guaranteed guard + reproducible provenance + scale**,
+*not* "the agent can't design the experiment."
 
 ---
 
