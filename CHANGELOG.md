@@ -13,6 +13,28 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Fixed
 
+## [0.4.2] — 2026-07-14
+
+### Added
+
+- **Dynamic model ingestion for the `identifiability` and `oed` MCP tools** (`NUDGE-LIM-030`).
+  Both tools now accept `model_path` (an absolute path to a user model file) or `model_code`
+  (inline Python source) in addition to a registry `model` name — precedence
+  `model_code` > `model_path` > `model` — loading a user's OWN differentiable model via the new
+  `nudge.inference.model_loader`. The file exposes `nudge_identifiability` / `nudge_oed`
+  builders and needs no `nudge` import; the loaded model reproduces the equivalent registered
+  model to machine precision. This makes the with-vs-without-NUDGE demo symmetric — both arms
+  analyze the *same* user model file. Ships standalone JAX model files
+  `scripts/demo_ab/ad_qsp_model.py` + `ad_qsp_nlme_model.py`. **Security (`NUDGE-LIM-030`):**
+  dynamic ingestion executes arbitrary user Python in the server process — a local,
+  trusted-input convenience, not for untrusted / multi-tenant use.
+
+### Changed
+
+- GitHub README PyPI-version badge is now **pinned to the released version** (static) instead of
+  the live `shields.io/pypi/v` badge, which chronically lagged several releases behind through
+  shields' own cache *and* GitHub's Camo image cache. It's bumped as part of each release.
+
 ## [0.4.1] — 2026-07-13
 
 ### Fixed
