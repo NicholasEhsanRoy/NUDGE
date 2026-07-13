@@ -1121,3 +1121,78 @@ anomalies:
       false-precise, and the grid-search baseline lets a caller CHECK the gradient optimum.
       The honest framing — "optimal given the current best estimate, gain measured at θ₀" —
       and the tests are what keep the prescription from being oversold.
+
+  - anomaly_id: NUDGE-LIM-025
+    title: The multi-operating-point breaker resolves only when the operating points
+      MEASURABLY break the gain⇄threshold degeneracy — a threshold-dominated large-gain
+      perturbation is abstained, not resolved
+    description: >-
+      The multi-operating-point covariance breaker (nudge.inference.lyapunov.
+      attribute_lyapunov_multi, M3) fits ONE shared kinetic value jointly across ≥2 operating
+      points of the same perturbed condition and resolves the mechanism whose joint NLL wins
+      by resolve_margin (0.03) — the second operating point is what is supposed to separate
+      gain (Hill n) from threshold (K), the confound a single snapshot cannot break. It has
+      near-fold proximity down-weighting + best-buffered-pair corroboration (NUDGE-LIM-017) —
+      but those inspect the WT/CONTROL circuit at each operating point, and the load-bearing
+      resolution decision was a PURE NLL-gap test with NO identifiability check. VERIFIED
+      confident-wrong (red-team P7; scripts/redteam/lyapunov_multi_gain_threshold_hole.py, LNA
+      mixture ground truth on a mutual-repression toggle, SCALE=20, OBS_SD=0.5, two operating
+      points bB ∈ {0.05, 0.30}, 3000 cells): a large GAIN knockdown (Hill n 4→1.5) is resolved
+      to a CONFIDENT 'threshold' with an NLL gap ≈1.70 ≫ 0.03 (2/2 seeds) even though the true
+      knob is gain. Root cause (MEASURED): a large gain drop is threshold-DOMINATED in the LNA
+      moments (flattening the Hill curve shifts the effective EC50, so a ΔK explains the
+      dominant shift), and the perturbed condition slides THROUGH the saddle-node fold — at
+      bB=0.30 it is monostable (bifurcation_proximity None), at bB=0.05 it sits AT the fold
+      (proximity ≈0.539). So the second operating point carries no independent gain-vs-
+      threshold information — the degeneracy is NOT broken — yet the NLL gap resolves anyway.
+      The naive intuition "degenerate joint fit ⇒ abstain" is FALSIFIED here: the joint (Δn,
+      ΔK) Laplace condition number is INVERTED — the CORRECT threshold case is degenerate
+      (cond ≈1000–1300, gain a free nuisance) while the WRONG large-gain case is well-
+      conditioned (cond ≈7, both knobs identifiable). MITIGATION (SHIPPED, additive in
+      inference/lyapunov.py; frozen fit.py/core untouched): (1) an IDENTIFIABILITY GATE — after
+      the breaker resolves a bare mechanism X, _resolution_contamination fits the joint (X,
+      runner-up Y) two-mechanism model (_fixed_root_multi_loss + _fit_fixed_root) and reads the
+      Laplace posterior (uncertainty.laplace_posterior, the SAME machinery the single-operating-
+      point call abstains with); if any runner-up Y is IDENTIFIABLE and DISPLACED from its no-
+      change value beyond a MEASURED cut (_CONTAM_MARGIN=0.5 log-units), the data demonstrably
+      needs a SECOND mechanism, so NUDGE ABSTAINS regardless of the NLL gap. The cut is a
+      measured separator, not a guessed constant: genuine single-mechanism resolutions leave
+      every runner-up unidentifiable or barely displaced (K=2.0 threshold → 0.095; genuine
+      ceiling vmax=1.5 → 0.114–0.116) while the n=1.5 confident-wrong forces the runner-up gain
+      ≈1.0 log-units off nominal (1.013–1.042), so 0.5 sits centred in the gap with ~0.4-log
+      margin each side. (2) GRACEFUL MONOSTABLE DEGRADATION — an operating point whose circuit
+      has lost bistability (bifurcation_proximity None / < 2 stable modes) now returns
+      ('unresolved', {}) ("bistability lost") instead of raising ValueError deep in the k_modes
+      fit; the joint-fit calls are also wrapped so a mid-fit drift to monostability abstains
+      rather than crashing. RE-VALIDATED (shipped attribute_lyapunov_multi): n=1.5 → unresolved
+      (2/2 seeds, 0 confident-wrong); K=2.0 → threshold (positive control, no over-abstention);
+      n=2.4 → unresolved (unchanged); a monostable operating point → ('unresolved', {})
+      gracefully. RESIDUAL BOUND (honest): a large-gain perturbation that is genuinely
+      threshold-dominated and has slid through the fold is FUNDAMENTALLY non-separable from a
+      threshold shift with only these two operating points, so NUDGE ABSTAINS on it (the honest
+      outcome) rather than emitting a false-precise 'threshold' — recovering a positive gain
+      call there would need a better-buffered operating point (one where the perturbed condition
+      stays well inside bistability). This over-abstention on a genuinely-degenerate large-gain
+      case is a fail-safe residual (locked as a strict-xfail decoy), never a confident-wrong.
+      Guarded by tests/inference/test_lyapunov_multi_uq_gate.py. Related: NUDGE-LIM-017 (near-
+      fold WT-side gate — this is the perturbed-side identifiability the NLL gap was blind to),
+      NUDGE-LIM-012 (the LNA breaks down AT the fold).
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      This is a genuine confident-wrong hole (not merely an abstention gap): the multi-point
+      breaker — the very machinery meant to be MORE trustworthy than a single snapshot because
+      it fuses evidence across operating points — emitted a confident, specific, WRONG mechanism
+      ('threshold' for a true gain knockdown) with a large NLL gap, exactly the failure the
+      project exists to avoid, and especially dangerous because a joint multi-point fit LOOKS
+      more authoritative than one snapshot. The load-bearing lesson: the NLL gap measures fit
+      quality, not identifiability, and the guards that DID exist (NUDGE-LIM-017 near-fold down-
+      weighting, best-buffered-pair corroboration, lna_reliable) all key on the WT/CONTROL
+      circuit and are blind to a perturbed condition that has itself slid to/through the fold —
+      the systemic "guard keyed on the control misses the confound on the perturbed side"
+      pattern. The fix does not add another proximity threshold (which NUDGE-LIM-017 already
+      proved is a scientifically-invalid knife-edge near a fold); it measures the identifiability
+      of the resolution directly (does a runner-up mechanism earn an identifiable, displaced
+      parameter in the joint Laplace posterior) and abstains when the resolved single mechanism
+      is insufficient. Removing the identifiability gate, or lowering _CONTAM_MARGIN below the
+      measured genuine-resolution ceiling (≈0.12), would resurrect the false positive.

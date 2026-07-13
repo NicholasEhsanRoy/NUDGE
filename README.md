@@ -207,10 +207,16 @@ hardening loop then closed the differential per-condition **affine confound clas
 affine null (`NUDGE-LIM-016`) — and P6, where the matrix-free identifiability path mislabeled
 an **isolated structural Fisher-null** as `well-constrained` (it verified eigenpair-*ness*,
 not smallest-*ness*) → fixed with an exact dense-via-matvec deferral + a one-sided
-inverse-iteration null probe (`NUDGE-LIM-023`, sharpened to *major*). The final full re-scan
-found **0 holes**
-([`design/FAILSAFE_REDTEAM_7.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/FAILSAFE_REDTEAM_7.md)).
-A found hole is a *win*: closed or locked, never hidden.
+inverse-iteration null probe (`NUDGE-LIM-023`, sharpened to *major*). A later probe of the
+**multi-operating-point covariance breaker** surfaced **P7**: it resolved a threshold-DOMINATED
+large-gain perturbation (whose perturbed condition slides through the fold, so the second
+operating point never breaks the gain⇄threshold degeneracy) to a confident-wrong `threshold` —
+because the existing near-fold guards inspect the WT/control side, not the perturbed side. Fixed
+with a **MEASURED identifiability gate** (`NUDGE-LIM-025`): after a bare mechanism resolves,
+NUDGE fits the joint (winner, runner-up) model and abstains if the joint Laplace posterior shows
+the runner-up mechanism is identifiably displaced from no-change (measured cut 0.5 log-units;
+genuine ≤0.12 vs the hole ≈1.0) — plus a graceful "bistability lost" degradation. A found hole is
+a *win*: closed or locked, never hidden.
 
 **Genuinely deferred for 0.1.0** (honest gaps, stated up front, not hidden): **real-data
 lock-ins for the newest capabilities** — constitutive-control (needs a constitutively-driven

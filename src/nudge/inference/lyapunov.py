@@ -24,6 +24,7 @@ the Lyapunov solve — both differentiable in the free kinetics.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -575,6 +576,136 @@ def _proximity_weight(prox: float, full_thresh: float, width: float = 0.04) -> f
     return float(np.exp(-((excess / width) ** 2)))
 
 
+#: Mechanism name → the kinetic parameter it frees (the inverse of ``_ATTR_PARAMS``).
+_MECH_TO_PARAM: dict[str, str] = {name: param for param, name in _ATTR_PARAMS}
+
+#: Identifiability-gate contamination cut, in **log-units** on a runner-up kinetic.
+#: After the breaker resolves a single mechanism X, NUDGE fits the joint two-mechanism
+#: model (X together with each runner-up Y) and measures Y's *identifiable* displacement
+#: from its no-change (nominal) value. A genuine single-mechanism shift leaves every
+#: runner-up either a free nuisance the joint fit cannot pin (unidentifiable → contributes
+#: 0) or barely displaced — MEASURED ≤ 0.12 for the resolvable K=2.0 threshold and the
+#: genuine ceiling. A confident-WRONG resolution of a threshold-DOMINATED large-gain
+#: perturbation (Hill n 4→1.5) forces the runner-up gain ≈ 1.0 log-units off nominal,
+#: because the second operating point did NOT break the gain⇄threshold degeneracy (one
+#: point slid monostable, the other sits at the fold). The cut 0.5 sits in the measured gap
+#: (≤ 0.12 genuine vs ≈ 1.0 confident-wrong) with ~0.4-log margin on each side — a MEASURED
+#: separator, not a guessed constant (FINDINGS "P7"; NUDGE-LIM-025;
+#: scripts/redteam/lyapunov_multi_gain_threshold_hole.py).
+_CONTAM_MARGIN = 0.5
+
+
+def _fixed_root_multi_loss(
+    points: list[OperatingPoint], frees: list[FreeParam], k_modes: int
+) -> Callable[[Array], Array]:
+    """Smooth (pinned-mode-seed) multi-point mean NLL over the shared ``frees``.
+
+    The multi-point analogue of :func:`nudge.inference.uncertainty.lyapunov_nll_loss`:
+    each operating point's stable-mode seeds are pinned at its WT circuit's nominal fixed
+    points (``stop_gradient`` constants inside :func:`_mode_mean`), so the Hessian in the
+    shared log-kinetics is a clean observed-Fisher curvature that
+    :func:`~nudge.inference.uncertainty.laplace_posterior` can read for identifiability.
+    Used ONLY by the identifiability gate (:func:`_resolution_contamination`), never by the
+    attribution fit itself (which re-seeds each step). Assumes every point is bistable at
+    nominal kinetics (the caller guards on that).
+    """
+    bases = [p.circuit.base_params() for p in points]
+    ys = [jnp.asarray(np.asarray(p.data, dtype=np.float32)) for p in points]
+    eyes = [jnp.eye(p.circuit.n_species) for p in points]
+    roots: list[Array] = []
+    for p in points:
+        r = _stable_roots(p.circuit, [], np.asarray([], dtype=float))
+        r = sorted(r, key=lambda x: tuple(float(v) for v in x))
+        roots.append(jnp.asarray(np.stack(r[:k_modes])))
+    log_w = jnp.log(jnp.full((k_modes,), 1.0 / k_modes))
+
+    def loss(log_theta: Array) -> Array:
+        vals = jnp.exp(log_theta)
+        total = jnp.asarray(0.0)
+        for i, point in enumerate(points):
+            params = _apply_free(bases[i], frees, vals)
+            comps = []
+            for k in range(k_modes):
+                mu = _mode_mean(point.circuit, params, roots[i][k])
+                cov = _mode_cov(point.circuit, params, mu)
+                cov_obs = point.scale**2 * cov + point.obs_sd**2 * eyes[i]
+                comps.append(log_w[k] + _mvn_logpdf(ys[i], point.scale * mu, cov_obs))
+            ll = jax.scipy.special.logsumexp(jnp.stack(comps), axis=0)
+            total = total - jnp.mean(ll)
+        return total / len(points)
+
+    return loss
+
+
+def _fit_fixed_root(
+    loss: Callable[[Array], Array], init: Array, *, steps: int = 600, lr: float = 0.03
+) -> np.ndarray:
+    """Adam-minimize the smooth fixed-root ``loss`` from ``init`` → the log-optimum θ*."""
+    theta = jnp.asarray(init)
+    opt = optax.adam(lr)
+    state = opt.init(theta)
+
+    @jax.jit
+    def step(t: Array, s: optax.OptState) -> tuple[Array, optax.OptState]:
+        _v, grad = jax.value_and_grad(loss)(t)
+        updates, s = opt.update(grad, s)
+        return jnp.asarray(optax.apply_updates(t, updates)), s
+
+    for _ in range(steps):
+        theta, state = step(theta, state)
+    return np.asarray(theta)
+
+
+def _resolution_contamination(
+    points: list[OperatingPoint],
+    winner: str,
+    *,
+    target_edge: int,
+    k_modes: int,
+) -> tuple[float, str]:
+    """Does the data need a SECOND mechanism on top of the resolved ``winner``?
+
+    The multi-point breaker resolves a single bare mechanism by an NLL gap — but a
+    large-gain perturbation that is *threshold-dominated* in the LNA moments (its perturbed
+    condition sliding to/through the saddle-node fold, so the second operating point never
+    breaks the gain⇄threshold degeneracy) is resolved to ``threshold`` with a LARGE,
+    confident gap even though the truth is gain (``scripts/redteam/
+    lyapunov_multi_gain_threshold_hole.py``; NUDGE-LIM-025). The NLL gap cannot see this;
+    the joint-fit **curvature** can. For each runner-up mechanism Y this fits the joint
+    (winner, Y) two-mechanism model (:func:`_fixed_root_multi_loss`) and reads the Laplace
+    posterior (:func:`~nudge.inference.uncertainty.laplace_posterior` — the SAME machinery
+    the single-operating-point call abstains with): if Y is **identifiable** AND
+    **displaced** from its no-change (nominal) value, the data demonstrably needs Y too and
+    the single-mechanism resolution is contaminated. Returns ``(max_contamination,
+    detail)`` — ``contamination = |log Y* − log Y_nom|`` when Y is identifiable, else 0,
+    maxed over the runner-ups; the caller abstains above :data:`_CONTAM_MARGIN`.
+    """
+    from nudge.inference.uncertainty import laplace_posterior  # lazy: avoid import cycle
+
+    n_data = int(sum(np.asarray(p.data).shape[0] for p in points))
+    fw: FreeParam = ("edge", target_edge, _MECH_TO_PARAM[winner])
+    win_nom = float(_param_value(points[0].circuit, fw))
+    worst = 0.0
+    details: list[str] = []
+    for param, other in _ATTR_PARAMS:
+        if other == winner:
+            continue
+        fy: FreeParam = ("edge", target_edge, param)
+        y_nom = float(_param_value(points[0].circuit, fy))
+        loss = _fixed_root_multi_loss(points, [fw, fy], k_modes)
+        init = jnp.log(jnp.array([win_nom, y_nom]))
+        theta = _fit_fixed_root(loss, init)
+        post = laplace_posterior(loss, theta, names=[winner, other], n_data=n_data)
+        y_ci = post.marginal_ci[1]
+        disp = abs(float(theta[1]) - float(np.log(y_nom)))
+        contam = disp if y_ci.identifiable else 0.0
+        worst = max(worst, contam)
+        details.append(
+            f"{other}: id={y_ci.identifiable} disp={disp:.3f} contam={contam:.3f}"
+        )
+    return worst, "; ".join(details)
+
+
 def attribute_lyapunov_multi(
     points_by_mech: dict[str, list[OperatingPoint]] | list[OperatingPoint],
     *,
@@ -615,11 +746,40 @@ def attribute_lyapunov_multi(
        marginal point changed the answer, NUDGE **abstains**. Threshold-free, it closes the
        0.007 knife-edge that weighting cannot, while keeping a genuinely well-buffered
        multi-point set resolvable.
+
+    **Identifiability gate (NUDGE-LIM-025).** The near-fold robustness above inspects the
+    WT/CONTROL circuit at each operating point; it is blind to a *perturbed* condition that
+    has itself slid to/through the fold. A large GAIN knockdown (Hill ``n`` 4→1.5) is
+    **threshold-dominated** in the LNA moments (a ``ΔK`` mimics the dominant shift) and drives
+    the perturbed condition monostable at one operating point / to the fold at the other — so
+    the second operating point never breaks the gain⇄threshold degeneracy, yet the pure
+    NLL-gap test resolves a **confident-wrong** ``threshold`` (gap ≈1.7 ≫ ``resolve_margin``;
+    ``scripts/redteam/lyapunov_multi_gain_threshold_hole.py``). The NLL gap measures fit
+    quality, not identifiability. So after a bare mechanism resolves, NUDGE fits the joint
+    (winner, runner-up) two-mechanism model and reads its Laplace posterior
+    (:func:`_resolution_contamination`, reusing :func:`~nudge.inference.uncertainty.
+    laplace_posterior`): if a runner-up is **identifiable and displaced** from its no-change
+    value beyond the MEASURED cut :data:`_CONTAM_MARGIN` (genuine resolutions ≤ 0.12 vs the
+    hole ≈ 1.0), the data demonstrably needs a second mechanism and NUDGE **abstains**.
+
+    **Graceful degradation (NUDGE-LIM-025).** An operating point whose circuit has lost
+    bistability (monostable — :func:`~nudge.inference.bifurcation.bifurcation_proximity`
+    ``None`` / < 2 stable modes) returns ``("unresolved", {})`` ("bistability lost") instead of
+    raising deep in the k_modes fit; the joint-fit calls are wrapped so a mid-fit drift to
+    monostability abstains rather than crashes.
     """
     points = (
         points_by_mech if isinstance(points_by_mech, list)
         else next(iter(points_by_mech.values()))
     )
+    # Graceful degradation (NUDGE-LIM-025): an operating point whose circuit has LOST
+    # bistability (monostable — bifurcation_proximity is None / < 2 stable modes) carries no
+    # two-mode LNA moments, so the k_modes joint fit is meaningless and would otherwise
+    # raise deep inside the fit ("must present 2 stable modes"). Abstain loudly
+    # ("bistability lost") rather than crash. This is the perturbed-side analogue of the
+    # lna_reliable guard below (which trips on the same, plus low depth / lobe overlap).
+    if any(bifurcation_proximity(p.circuit) is None for p in points):
+        return "unresolved", {}
     # Abstain loudly unless EVERY operating point's LNA is trustworthy (one bad Gaussian
     # corrupts the shared-parameter joint fit).
     if not all(lna_reliable(p.circuit, p.scale)[0] for p in points):
@@ -648,14 +808,38 @@ def attribute_lyapunov_multi(
             return best, nlls
         return "unresolved", nlls
 
-    call, nlls = _resolve(list(range(len(points))))
-    # Best-buffered-pair corroboration: proximity cannot separate a useful 2nd point (0.112)
-    # from a corrupting near-fold one (0.119), so require the resolved bare mechanism to be
-    # confirmed by the two MOST-BUFFERED points. If a marginal point changed the answer,
-    # abstain (fail-safe) — this, not the graded weighting, is what closes the knife-edge.
-    if call in ("gain", "threshold", "ceiling") and len(points) > 2:
-        order = sorted(range(len(points)), key=lambda i: prox[i])
-        pair_call, _ = _resolve(order[:2])
-        if pair_call != call:
+    try:
+        call, nlls = _resolve(list(range(len(points))))
+        # Best-buffered-pair corroboration: proximity cannot separate a useful 2nd point
+        # (0.112) from a corrupting near-fold one (0.119), so require the resolved bare
+        # mechanism to be confirmed by the two MOST-BUFFERED points. If a marginal point
+        # changed the answer, abstain (fail-safe) — this, not the graded weighting, is what
+        # closes the knife-edge.
+        if call in ("gain", "threshold", "ceiling") and len(points) > 2:
+            order = sorted(range(len(points)), key=lambda i: prox[i])
+            pair_call, _ = _resolve(order[:2])
+            if pair_call != call:
+                return "unresolved", nlls
+    except ValueError:
+        # A shared parameter drifted an operating point monostable mid-fit (the k_modes
+        # failure — "must present 2 stable modes"): bistability lost. Abstain gracefully
+        # (NUDGE-LIM-025) instead of surfacing a raw stack trace.
+        return "unresolved", {}
+
+    # Identifiability gate (NUDGE-LIM-025): trust a resolved bare mechanism only if the
+    # second operating point MEASURABLY broke the gain⇄threshold degeneracy — i.e. the data
+    # does not ALSO demand a runner-up mechanism. A threshold-dominated large-gain
+    # perturbation is resolved 'threshold' with a large NLL gap, yet the joint-fit curvature
+    # shows the runner-up gain is identifiable and displaced ~1 log-unit from no-change; we
+    # abstain there rather than emit a confident-wrong single-mechanism call. The NLL gap
+    # (which resolves) is blind to this; the Laplace posterior of the joint fit is not.
+    if call in ("gain", "threshold", "ceiling"):
+        try:
+            contam, _detail = _resolution_contamination(
+                points, call, target_edge=target_edge, k_modes=k_modes
+            )
+        except (ValueError, FloatingPointError, np.linalg.LinAlgError):
+            return "unresolved", nlls  # an unreadable curvature ⇒ abstain (fail-safe)
+        if contam > _CONTAM_MARGIN:
             return "unresolved", nlls
     return call, nlls
