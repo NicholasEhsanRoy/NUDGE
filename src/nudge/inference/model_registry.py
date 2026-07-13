@@ -330,6 +330,43 @@ def _ad_qsp_ident(*, n_free: int = 0, sigma: float | None = None, seed: int = 0,
     )
 
 
+def _ad_qsp_nlme_ident(*, n_free: int = 0, sigma: float | None = None, seed: int = 0, **_: Any):
+    """Alzheimer's amyloid-β **NLME / hierarchical** population identifiability (clinical
+    pharmacology). Unlike ``ad_qsp`` (independent subjects → block-diagonal FIM), each subject's
+    random-effect kinetics are drawn around SHARED population hyperparameters (geometric mean
+    ``μ`` + fixed effects ``φ``), so the joint FIM is a genuinely **coupled arrowhead** — the
+    ``μ``/``φ`` border couples every subject; cross-subject blocks are exactly zero. ``n_free``
+    grows the joint parameter count (mostly per-subject random effects) at fixed integrated
+    state — the axis a dense Jacobian/FIM OOMs on while the matrix-free path stays flat. With a
+    sparse plaque-only budget it is rank-deficient by shape (more per-subject RE params than
+    per-subject observations) → certified ``unidentifiable`` (``NUDGE-LIM-023`` fail-safe).
+    Synthetic cohort, demo-scaled constants (``NUDGE-LIM-026``; arrowhead scope ``NUDGE-LIM-028``).
+    """
+    from nudge.mechanisms.ad_qsp import AD_PARAM_NAMES, make_ad_nlme_cohort_predict_fn
+
+    re_params = ("k_pg", "K_pg", "k_gl")
+    d = len(re_params)
+    border = len(AD_PARAM_NAMES)  # μ (d) + φ (n_fixed = 12 − d) — include_prior=False
+    nf = int(n_free) if n_free and n_free > 0 else 72
+    n_subjects = max(20, -(-(nf - border) // d))  # ceil((nf-border)/d), ≥20
+    cohort = make_ad_nlme_cohort_predict_fn(
+        n_subjects=n_subjects, re_params=re_params, n_obs_times=2, include_prior=False,
+        biomarkers=(2,), seed=seed,
+    )
+    return IdentifiabilityProblem(
+        predict_fn=cohort.predict_fn,
+        theta0=np.asarray(cohort.theta0, dtype=np.float64),
+        param_names=tuple(cohort.param_names),
+        sigma=0.05 if sigma is None else float(sigma),
+        meta={"model": "ad_qsp_nlme", "domain": "clinical pharmacology (Alzheimer's Aβ, NLME)",
+              "n_subjects": cohort.n_subjects, "n_obs": cohort.n_obs,
+              "border_size": cohort.border_size, "n_re": cohort.n_re,
+              "coupling": cohort.meta["coupling"],
+              "note": "synthetic hierarchical cohort, demo-scaled (NUDGE-LIM-026/028); "
+                      "coupled arrowhead FIM (shared μ/φ border)"},
+    )
+
+
 def _canonical_ident(kind: str):
     """A builder for a canonical sloppiness model (the honesty decoys + the sloppy showcase)."""
 
@@ -451,6 +488,12 @@ def _register_shipped() -> None:
         domain="clinical pharmacology",
         identifiability_builder=_ad_qsp_ident, oed_builder=_ad_qsp_oed,
         default_oed_target="log_k_on",
+    )
+    register_model(
+        "ad_qsp_nlme",
+        summary="Alzheimer's amyloid-β NLME/hierarchical population (coupled arrowhead FIM)",
+        domain="clinical pharmacology",
+        identifiability_builder=_ad_qsp_nlme_ident,
     )
     register_model(
         "logistic", summary="single-species logistic growth (α⇄carrying-capacity)",
