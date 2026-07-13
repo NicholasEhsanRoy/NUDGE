@@ -1,299 +1,227 @@
-# NUDGE
+<p align="center">
+  <img src="docs/assets/nudge-logo.png" width="480" alt="NUDGE">
+</p>
 
-**N**ode/edge **U**ltrasensitivity **D**iagnostic for **G**ene-regulatory **E**ffects
+<p align="center">
+  <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/v/nudge-bio" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/pyversions/nudge-bio" alt="Python versions"></a>
+  <a href="https://github.com/NicholasEhsanRoy/NUDGE/blob/main/LICENSE"><img src="https://img.shields.io/github/license/NicholasEhsanRoy/NUDGE" alt="License: MIT"></a>
+  <a href="https://github.com/NicholasEhsanRoy/NUDGE/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/NicholasEhsanRoy/NUDGE/ci.yml?branch=main&label=CI" alt="CI status"></a>
+</p>
 
-NUDGE fits a compositional, differentiable gene-regulatory **circuit** model to
-single-cell perturbation (Perturb-seq) data and classifies each perturbation by
-*mechanism* — does it move a switch's **threshold**, change its **gain**, or
-shift its **ceiling**? — a distinction the field's default linear models cannot
-make. It then inverts the fit to propose untested interventions. Built on
-[MADDENING](https://github.com/Microrobotics-Simulation-Framework/MADDENING), a
-differentiable JAX graph-physics engine.
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-1f6feb?logo=modelcontextprotocol&logoColor=white" alt="MCP server"></a>
+  <a href="https://claude.ai/"><img src="https://img.shields.io/badge/Built%20with-Claude%3A%20Life%20Sciences-D97757?logo=claude&logoColor=white" alt="Built with Claude: Life Sciences"></a>
+</p>
 
-This repository is my project for the **Built with Claude: Life Sciences** remote
-hackathon, 7–13 July 2026.
+<p align="center">
+  <b>Mechanism attribution for perturbation screens — threshold vs gain vs ceiling, and it abstains when it can't tell.</b>
+</p>
 
-> **Design docs (read first):** [`design/PITCH.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/PITCH.md) —
-> plain-language; [`design/WORKING_BACKWARDS.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/WORKING_BACKWARDS.md) —
-> full PR/FAQ + engineering reasoning.
+---
 
-## Status
+## What is NUDGE
 
-**Working, calibrated, and adversarially red-teamed — `0.2.0`, building on the `0.1.0`
-first release.** The generative backbone and the fit engine are built end to end:
-generate ground-truth Perturb-seq data → `fit()` → recover the circuit →
-attribute threshold / gain / ceiling → **abstain when the data can't say**. The
-fail-safe property is *measured* — **0% misclassification** across hundreds of
-synthetic datasets (it abstains, never guesses wrong). **0.2.0** hardens the Claude
-integration — inline-base64 figure transport + an async job pattern for the Claude Science
-connector — and grows the figure layer into a full **animation battery** (10 honesty-
-preserving GIFs, incl. the amyloid **gauge orbit**), every frame stamping its own abstention.
+**N**ode/edge **U**ltrasensitivity **D**iagnostic for **G**ene-regulatory **E**ffects.
 
-Highlights so far:
-- **Phases 0–2 done:** circuit model, differentiable population fit, distributional
-  losses, and the two-level abstention gates (calibrated `margin_k = 1.7`).
-- **Tier-0.5 independent stochastic simulator** — a tau-leaping SSA with *emergent*
-  bimodality that breaks the "inverse crime" of self-benchmarking; the fail-safe
-  guarantee survives it.
-- **Saddle transition-mode gain gate** — fail-safe mechanism attribution on
-  genuinely bistable stochastic data (recovers *gain* where a naive fit is
-  confidently wrong). See [`scripts/vv/FINDINGS.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/scripts/vv/FINDINGS.md).
-- **`nudge` CLI + Claude MCP server** — the tool is drivable from a terminal
-  (`nudge attribute … / dose-response / synergy / cross-modality / robustness / design /
-  multi-reporter / diagnose-abstention / differential / constitutive / lotka / fibrillization /
-  oed / viz / explain`, plus the utility verbs `load` / `check-data` / `mechanisms`) *and* by
-  Claude in plain language through a custom MCP server (Claude Code / Desktop / the
-  Claude Science workbench). Connection recipes verified in
-  [`design/INTEGRATION_FEASIBILITY.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/INTEGRATION_FEASIBILITY.md).
-- **Cross-modality readout adapter** (`NUDGE-METHOD-002`) — the *same* threshold / gain
-  / ceiling attribution, run on a **continuous single channel** (flow fluorescence /
-  activity / fold-change) instead of counts, behind a modality-aware bouncer that refuses
-  log-normalized or raw counts masquerading as fluorescence (`NUDGE-LIM-008`). Validated
-  on the **Chure 2019 LacI benchmark** (author-labelled K-vs-ceiling ground truth):
-  inducer-binding mutants → **threshold**, DNA-binding mutants → **ceiling / leakiness**,
-  the non-inducible mutant **abstains**, no mis-calls — see
-  [`notebooks/Chure_LacI_Benchmark.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Chure_LacI_Benchmark.ipynb).
-- **Robustness dial** (`NUDGE-METHOD-006`) — a scalar 0..1 answer to *how close is a
-  bistable switch to **losing** bistability* (a saddle-node fold), from three channels
-  (critical slowing `min|Reλ|→0`, basin collapse, LNA lobe swell). The honesty crux
-  (`NUDGE-LIM-012`): the noise model is weakest **exactly at the fold**, so the dial is a
-  **one-sided lower bound** near the fold and **abstains** on the deep-basin side — never a
-  confident "you are safe" number it can't support. Validated on the self-activation
-  switch's **known analytic fold** (all three channels move monotonically toward it) — see
-  [`notebooks/Robustness_Dial.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Robustness_Dial.ipynb). This is the hard
-  dependency for the `design()` safety gate.
-- **Inverse / intervention design — `design()`** (`NUDGE-METHOD-007`) — the flagship: NUDGE
-  *inverts the fit to **propose untested interventions***. Given a **reliable** attribution
-  it runs the differentiable circuit **backwards** to prescribe an intervention (a kinetic
-  Δ, or a dose), behind an **integrity gate** (never design off an unreliable fit), a
-  **reachability abstention** (never extrapolate to an unreachable target, `NUDGE-LIM-013`),
-  and a **bifurcation safety gate** (flag an intervention that pushes a switch toward its
-  tipping point — firing on a relative proximity rise **or** an absolute landing at/above
-  the near-fold cut, so it agrees with `classify_robustness` on the same circuit; a
-  one-sided lower bound near the fold). Recovers a known intervention to
-  loss ≈ 0, flags a fold-crossing flip as HIGH RISK, and inverts the **real OCT4**
-  dose-response fit to a knockdown dose — see
-  [`notebooks/Inverse_Design.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Inverse_Design.ipynb).
-- **Multi-reporter joint attribution** (`NUDGE-METHOD-008`) — the identifiability
-  force-multiplier: fits **several downstream reporters of ONE latent switch jointly** to
-  break the **K⇄v_max degeneracy** that is NUDGE's dominant reason to abstain. Because a
-  **threshold** shift and a **ceiling** change project differently onto a panel of
-  heterogeneous gains, the JOINT panel **resolves** threshold / gain / ceiling (**100%** on
-  synthetic ground truth) where a SINGLE reporter **abstains** (`unresolved`, **0%**), with
-  **0 confident-wrong calls**. Fail-safe strengthened: the **consistency guard** abstains
-  **off-model** when a reporter reads a *different* latent, and a **floor-consistency gate**
-  abstains **`unresolved`** when a per-condition batch/depth scale on the perturbed panel
-  aliases onto a `ceiling` — a genuine ceiling leaves each reporter's OFF baseline fixed, a
-  batch rescales it (`NUDGE-LIM-014`; near-zero-floor panels are a documented bound) — see
-  [`notebooks/Multi_Reporter.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Multi_Reporter.ipynb).
-- **Hidden-node abstention** (`NUDGE-METHOD-009`) — the **abstention half only**: turns a
-  bare **`off-model`** verdict into a legible **six-cause differential** (genuinely
-  not-a-switch / nonlinear readout / off-target / wrong topology / batch-depth confound /
-  hidden node), each with its documented limitation and the experiment that would
-  distinguish it. The honesty crux (`NUDGE-LIM-015`): positive hidden-node identification is
-  *not identifiable* from an off-model verdict (the causes are observationally overlapping),
-  so NUDGE **never** asserts a hidden node — the strongest it says is that an off-axis
-  residual is *consistent with, does not prove* an unmeasured regulator (`nudge
-  diagnose-abstention`) — see
-  [`notebooks/Hidden_Node_Abstention.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Hidden_Node_Abstention.ipynb).
-- **Comparative / differential attribution** (`NUDGE-METHOD-010`) — the SAME perturbation
-  in **two contexts** (drug-resistant vs sensitive line; donor A vs B; disease vs healthy):
-  isolate whether the difference is in **threshold** (`K`), **gain** (`n`), or **ceiling**
-  (`v_max`), a call linear differential expression structurally cannot make (a raised
-  ceiling → **more of the same drug**; a rewired gain/threshold → a **different class**).
-  Fits the two contexts **jointly** and **BIC-selects** which single knob differs, or
-  abstains. The honesty crux (`NUDGE-LIM-016`): a depth/batch shift aligned with the context
-  axis mimics a ceiling difference, so depth is pinned **per context** from each control and
-  NUDGE **abstains** when the two contexts' depths differ beyond a ratio; a red-team-found
-  **per-condition affine confound on one context's *perturbed* cells** — an additive
-  offset (P1), a large multiplicative scale (P4), or a **small** multiplicative scale (P5,
-  `c ≈ 1.15–1.25`, which per-magnitude OFF-cluster bands miss) — is one class, and all of it is
-  caught by the load-bearing **free-affine "earn" guard**: before any positive call NUDGE refits the
-  perturbed context with the affine `(s, o)` as a **free nuisance** and abstains unless the winning
-  knob still **earns** its BIC parameter over that null (the whole confound family is inside the
-  null's span, so it cannot; a genuine mechanism reshapes the distribution and earns ≫ margin). This
-  **closes the whole uniform affine class** — 0 confident-wrong, positives preserved; the honest
-  residual is a *non-uniform* perturbed-side scale (identical to a genuine ceiling), which needs an
-  independent inert-feature anchor. Never a spurious mechanism
-  from an artifact (`nudge differential`) — see
-  [`notebooks/Differential.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Differential.ipynb).
-- **Constitutive-reporter calibration control** (`NUDGE-METHOD-011`) — removes a known
-  **confident-wrong** failure mode (`NUDGE-LIM-006`: a **nonlinear measurement readout**
-  misattributed as a **circuit switch**). Only the composition readout∘circuit is observed,
-  so from one population the circuit gain and the reporter nonlinearity are unidentifiable —
-  the profile over circuit `n` is **FLAT** (you cannot even tell a switch exists). A
-  **constitutive-reporter control** — the reporter driven at **known** activity doses,
-  *bypassing the circuit* — anchors the readout (using **readout parameters only**, no
-  circuit leak), and a profile over circuit `n` then **rejects "no switch"** for a genuine
-  switch → **biological**, or **abstains** for a linear circuit whose apparent
-  ultrasensitivity lives in the reporter. **Adversarially bounded (`NUDGE-LIM-019`):** it
-  turns the confident false positive into a correct call **or** an honest abstention and never
-  a bare knob — but `biological-switch` is a falsifiable positive claim, valid **only when the
-  control and the circuit population share a capture/depth scale** (co-measured); an unmodeled
-  capture mismatch between the two populations re-opens `NUDGE-LIM-006` (a red-team round-2
-  finding, now locked as a strict-xfail decoy). It also does **not** point-identify `n` (needs
-  a second anchor; `NUDGE-LIM-018`) (`nudge constitutive --demo`) — see
-  [`notebooks/Constitutive_Control.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Constitutive_Control.ipynb).
-- **Temporal / Lotka–Volterra attribution** (`NUDGE-METHOD-012`) — *same engine, new field
-  of biology*. The first **trajectory-fit** capability: it points the same
-  abstain-and-attribute philosophy at a **microbial community** (generalized Lotka–Volterra,
-  `dxᵢ/dt = xᵢ(αᵢ + Σⱼ βᵢⱼxⱼ + εᵢ·u(t))`) and attributes a perturbation to a change in
-  **growth (α) / interaction (β) / antibiotic-susceptibility (ε)** — from **trajectories**,
-  not a snapshot — in a module that touches **neither `fit.py` nor `core/`**. The **ε** axis
-  is the identifiable positive; **α⇄βᵢᵢ** (growth vs self-limitation, `Kᵢ=−αᵢ/βᵢᵢ`) is
-  **degenerate near equilibrium** and NUDGE **abstains**, with the degeneracy **MEASURED** by
-  a near-singular Laplace curvature (`NUDGE-LIM-020`), never asserted. **0 confident-wrong**
-  across the battery; real coda on the **Stein 2013** clindamycin→*C. difficile* series
-  surfaces the honest abstention (*C. difficile*'s bloom is interaction-mediated, ε≈−0.31)
-  (`nudge lotka`) — see
-  [`notebooks/Temporal_Ecology.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Temporal_Ecology.ipynb).
-- **Protein aggregation / fibrillization attribution** (`NUDGE-METHOD-013`) — *the
-  efficiency demo, and a THIRD dynamical system*. NUDGE analyzes an **amyloid aggregation
-  curve** (the sigmoidal ThT trace) by fitting the filament master equation's principal
-  moments (`dP/dt = k_n·m^{n_c} + k_2·m^{n_2}·M`, `dM/dt = 2·k_+·m·P`) and, **in one
-  deterministic call**, returns the two identifiable composites **κ ≈ 1, λ ≈ 0.01** and the
-  **measured** non-identifiability of the three microscopic rate constants — an *exact gauge
-  symmetry* `(k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α)` (Fisher condition number → ∞, null
-  `[+0.577, −0.577, +0.577]`, gauge check ~1e-16; `NUDGE-LIM-021`). A **control LLM agent
-  took 12.2 min / 28 turns / 6 scripts** to hand-derive the same answer. A concentration
-  series + a seeded anchor (the Meisl discipline) resolves all three (0 confident-wrong); an
-  inhibitor is attributed to the microscopic step it lowers — primary / elongation /
-  secondary nucleation — or abstained on (`nudge fibrillization`) — see
-  [`notebooks/Aggregation_Kinetics.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Aggregation_Kinetics.ipynb).
-- **Optimal experimental design — the differentiability moat** (`NUDGE-METHOD-014`) — *the
-  white-box advantage a black-box ODE solver can't offer*. Because NUDGE's forward model is
-  **differentiable**, the Fisher-information design criterion is itself a differentiable
-  function of the *experiment*, so `∂criterion/∂φ` is available by autodiff and NUDGE
-  **gradient-optimizes *when to measure*** to the exact schedule that resolves a sloppy,
-  degenerate parameter — a black box has no `∂/∂φ` and can only grid-search (exponential in
-  the design size). This makes the gLV growth⇄self-limitation abstention **actionable**:
-  from a naive **near-equilibrium** schedule (where α⇄βᵢᵢ is degenerate, cond 136) the
-  optimal design puts samples in the growth **transient** and **measurably** resolves α —
-  **CRLB 31× better, FIM smallest eigenvalue 18× better** (600× on a gLV community); all
-  D-/E-/CRLB objectives agree. Local OED (`NUDGE-LIM-024`): the gains are measured at the
-  nominal θ₀, not extrapolated (`nudge oed`) — see
-  [`notebooks/Optimal_Experimental_Design.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Optimal_Experimental_Design.ipynb).
-- **Honest figures — `nudge.viz`** (opt-in `[viz]` extra) — an additive,
-  provenance-carrying figure layer that renders NUDGE's frozen result objects from one
-  `render(result, out=…)` call, with a renderer for every result type (dose-response,
-  attribution, identifiability/sloppiness, epistasis, differential, multi-reporter,
-  temporal/gLV, aggregation, constitutive, diagnose, design, OED, cross-modality,
-  robustness). It only *reads* results (never re-fits; never touches `fit`/`core`), and the
-  honesty is **structural**: `render()` applies the abstention overlay itself off each
-  result's own verdict, so a figure can never draw an abstention as a confident call, and
-  one-sided bounds draw as **open-ended arrows**, never error bars. The flagship
-  **dose-response dual panel** shows the real ESC-screen **OCT4 → switch** (n≈6.7) beside the
-  honest **NANOG → unresolved** in one frame. Every figure also ships a standalone `fig.py`
-  that regenerates it from the fit's output (no re-fit; **pixel-identical**) — the Claude
-  Science provenance grain. Reachable from the command line — `nudge viz KIND --demo --out
-  fig.png` (any kind; `--json FILE` replays a saved run) — the MCP `render_figure` tool, the
-  per-result CLI flag (`nudge dose-response … --fig-out fig.png`), and
-  [`notebooks/OCT4_NANOG_Flagship.ipynb`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/OCT4_NANOG_Flagship.ipynb).
+NUDGE fits a compositional, differentiable **circuit** model to single-cell perturbation
+(Perturb-seq) data and classifies each perturbation by *mechanism* — does a knockdown move a
+switch's **threshold** (`K`), change its **gain** (`n`), or shift its **ceiling** (`v_max`)? —
+a distinction the field's default linear models cannot make. Its defining property is
+**honesty: when the data can't identify the mechanism, NUDGE abstains** (`unresolved` /
+`off-model`) rather than emit a confident guess. It can then invert a *reliable* fit to
+propose an untested intervention, behind safety gates. Built on
+[MADDENING](https://github.com/Microrobotics-Simulation-Framework/MADDENING), a differentiable
+JAX graph-physics engine.
 
-**The fail-safe guarantee is adversarially red-teamed across seven rounds**
-([`design/FAILSAFE_REDTEAM.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/FAILSAFE_REDTEAM.md)
-→ [`_7.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/FAILSAFE_REDTEAM_7.md),
-plus the auditable red-team → fix → independent-audit
-[`design/hardening/`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/hardening/LEDGER.md)
-loop): dedicated passes tried to force *any* capability into a confident, specific, wrong
-call past its abstention gates, and every found hole was independently reproduced,
-fixed-or-locked, and re-audited. Round 1 surfaced **2 holes** — a near-fold operating point
-corrupting the multi-point covariance fit (**closed**, `NUDGE-LIM-017`) and an additive
-ambient/batch offset faking synergy where no safe runtime gate exists (**locked** as a
-strict-`xfail` decoy + a sharpened `NUDGE-LIM-009`). Round 2 hardened the constitutive
-capture-scale bound (`NUDGE-LIM-019`) and replaced the near-fold knife-edge with graded
-down-weighting; round 3 closed the **`design()` safety gate** so it fires on an **absolute**
-near-fold check reusing the same threshold `classify_robustness` uses (`NUDGE-LIM-013`). The
-hardening loop then closed the differential per-condition **affine confound class** — P1
-(additive) / P4 (large multiplicative) / P5 (small multiplicative), all folded into one
-**free-affine "earn" gate (4d)** that abstains unless the winning knob out-earns a free
-affine null (`NUDGE-LIM-016`) — and P6, where the matrix-free identifiability path mislabeled
-an **isolated structural Fisher-null** as `well-constrained` (it verified eigenpair-*ness*,
-not smallest-*ness*) → fixed with an exact dense-via-matvec deferral + a one-sided
-inverse-iteration null probe (`NUDGE-LIM-023`, sharpened to *major*). The final full re-scan
-found **0 holes**
-([`design/FAILSAFE_REDTEAM_7.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/FAILSAFE_REDTEAM_7.md)).
-A found hole is a *win*: closed or locked, never hidden.
+Gene-regulatory circuits are what NUDGE was **first built for** and named for — but the core
+is domain-general (a compositional, differentiable ODE model plus a calibrated abstention
+gate). It already reaches beyond gene circuits to microbial community dynamics, protein
+aggregation kinetics, and differentiable experimental design (see the capability map below).
 
-**Genuinely deferred for 0.1.0** (honest gaps, stated up front, not hidden): **real-data
-lock-ins for the newest capabilities** — constitutive-control (needs a constitutively-driven
-reporter titration, uncommon in public data), multi-reporter, differential, fibrillization,
-gradient OED, and the gLV temporal path are synthetic-validated (the gLV path with a real-data
-*coda* on Stein 2013) and their full real-data demos are `needs_data` follow-ups; and
-**per-result provenance tracking** (`provenance.py`) is a Phase-0 stub schema. (Shipped, so no
-longer "not yet": **temporal / Lotka–Volterra attribution** (`NUDGE-METHOD-012`),
-**fibrillization** (`013`), **gradient OED** (`014`), the **`nudge.viz` figure battery**,
-`design()` inversion, the Laplace uncertainty layer, and a real-data fail-safe validation on
-the Gladstone T-cell screen, where NUDGE honestly abstained.)
-See [`design/STATE.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/STATE.md)
-for the live roadmap and
-[`JUDGES_GUIDE.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/JUDGES_GUIDE.md) for a
-guided tour.
+> Originated at the **Built with Claude: Life Sciences** hackathon (July 2026) and is itself
+> an experiment in Claude-assisted development — the git history is written to make that
+> auditable. For a guided, judges-facing tour of the whole project, read
+> **[`JUDGES_GUIDE.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/JUDGES_GUIDE.md)**.
 
 ## Install
 
 ```bash
-uv venv && uv pip install -e ".[dev]"     # local development
-pip install nudge-bio                      # from PyPI
+pip install nudge-bio
 ```
 
-Requires `maddening[ift]>=0.3.1`, `jax==0.5.1` (pinned), Python ≥ 3.10.
+Core install pulls `maddening[ift]>=0.3.1`, `jax==0.5.1` (pinned), `numpy`, `optax`,
+`pydantic`, `anndata`, `typer`, `pyyaml`. **Python ≥ 3.10.**
 
-## The two verbs
+Optional extras:
+
+| Extra | `pip install "nudge-bio[…]"` | What it adds |
+|---|---|---|
+| `bio` | real-data loaders | `scanpy` / `pertpy` for Tier-1/2 Perturb-seq loading + E-distance |
+| `viz` | honest figures | `matplotlib` — the opt-in `nudge.viz` figure battery (core stays matplotlib-free) |
+| `mcp` | Claude server | the `mcp` SDK for the `nudge-mcp` Model Context Protocol server |
+
+For local development: `uv venv && uv pip install -e ".[dev]"`.
+
+## Quickstart
+
+### Attribute a mechanism from a dose-response curve
+
+The flagship positive: give NUDGE a knockdown dose-response of a readout signature and it
+calls **switch vs graded** (or abstains). Here a genuinely ultrasensitive curve resolves to
+`switch`:
+
+```python
+import numpy as np
+from nudge.mechanisms.regulatory import hill_repression
+from nudge.inference.dose_response import fit_dose_response, classify_dose_response
+
+# A knockdown dose-response of a self-renewal signature (an ultrasensitive switch, n=6).
+dose = np.linspace(0.0, 1.0, 22)
+response = 0.2 + np.asarray(hill_repression(dose, 0.5, 6.0, 0.8))
+response += np.random.default_rng(0).normal(0.0, 0.02, dose.shape)  # measurement noise
+
+fit = fit_dose_response(dose, response, direction="repress", n_boot=200)
+call, reason = classify_dose_response(fit)
+print(f"call = {call!r}")
+print(f"apparent gain n = {fit.n:.1f}  (95% CI {fit.ci_n[0]:.1f}-{fit.ci_n[1]:.1f})   "
+      f"K = {fit.k_threshold:.2f}   R2 = {fit.r2:.2f}")
+```
+
+```text
+call = 'switch'
+apparent gain n = 6.5  (95% CI 6.0-7.5)   K = 0.49   R2 = 1.00
+```
+
+(`n` is an *apparent population gain*, not molecular cooperativity — NUDGE says so in the
+`reason` string.) A curve whose doses don't span the inflection, or whose gain CI straddles
+the ultrasensitive line, returns `unresolved` / `no-effect` instead.
+
+### The two verbs — `fit` and `design`
 
 ```python
 import nudge
-
 result = nudge.fit(adata, circuit)     # → MechanismMap (per-perturbation calls + uncertainty)
-plan = nudge.design(target_outcome)    # → ranked interventions (stretch)
+plan   = nudge.design(target)          # → ranked interventions, behind safety gates
 ```
 
-`fit` wants **raw integer counts** — NUDGE owns the observation model. See the
-data contract in `docs/user_guide/data_contract.md`.
+`fit` wants **raw integer counts** — NUDGE owns the observation model (a negative-binomial +
+dropout count model; the mechanism signal lives in the *shape* of the single-cell
+distribution, which standard log/normalize pipelines destroy). Pass an `AnnData` of raw
+counts with `obs["condition"]` labels (a `"WT"` control plus one label per perturbation). See
+the data contract in
+[`docs/user_guide/data_contract.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/docs/user_guide/data_contract.md).
 
-## The command line
+**Honesty, by design:** a *single* under-powered snapshot at *one* operating point genuinely
+tends to abstain — the gain⇄threshold degeneracy is real, and forcing a call would be
+guessing. That is why the resolving capabilities read a **dose axis** (above), **several
+reporters** of one latent (`multi_reporter`), or **two operating points**. On a single
+synthetic snapshot, `nudge.fit` honestly abstains:
+
+```python
+import nudge
+from nudge.circuits import ras_switch_1node
+from nudge.data.synthetic import PerturbationSpec
+
+circuit = ras_switch_1node()
+adata = nudge.generate_synthetic_perturbseq(
+    circuit,
+    perturbations=[PerturbationSpec("KD", scope="edge", index=0, param="K", factor=3.0)],
+    n_cells_per_condition=1000, seed=0,
+)
+result = nudge.fit(adata, circuit)     # one operating point; raw counts checked at the boundary
+for c in result.calls:
+    print(c.perturbation, "->", c.mechanism.value, f"(confidence {c.confidence:.2f})")
+```
+
+```text
+KD -> no-effect  (confidence 0.00)
+```
+
+That abstention is the tool working, not failing — NUDGE won't over-call a single snapshot.
+
+### Command line
 
 ```bash
-nudge check-data screen.h5ad                 # raw-count guardrail (fails loudly)
+nudge check-data screen.h5ad                 # raw-count guardrail — fails loudly on normalized input
 nudge load screen.h5ad                        # conditions / cells / genes summary
-nudge attribute screen.h5ad --target SOS1     # mechanism call + honest abstentions
-nudge mechanisms                              # the registered library + cards
-nudge explain unresolved                      # why an abstention was the honest answer
+nudge attribute screen.h5ad --target SOS1    # mechanism call + honest abstentions/skips
+nudge explain unresolved                     # why an abstention was the honest answer
+nudge mechanisms                             # the registered mechanism library + cards
 ```
+
+Run `nudge --help` for the full verb list.
+
+## What it does — the capability map
+
+Each capability is fail-safe by construction (0% misclassification on its synthetic battery)
+and ships a Mechanism Card, tests, and a decoy it must correctly resist. For the narrated
+version of any row — the reasoning, the honesty crux, and the real-data result — see
+[`JUDGES_GUIDE.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/JUDGES_GUIDE.md) and
+the [notebooks index](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/README.md).
+
+| Capability | ID | One line |
+|---|---|---|
+| Dose-response attribution | `NUDGE-METHOD-001` | switch vs graded from a dose axis, or abstain |
+| Cross-modality readout | `NUDGE-METHOD-002` | same K/n/v_max attribution on a continuous channel (fluorescence/activity) |
+| Synergy / epistasis | `NUDGE-METHOD-003` | additive vs synergistic/buffering for a two-perturbation combo |
+| Robustness dial | `NUDGE-METHOD-006` | 0..1 proximity of a bistable switch to losing bistability (one-sided near the fold) |
+| Inverse design — `design()` | `NUDGE-METHOD-007` | invert a reliable fit to propose an intervention, behind a bifurcation safety gate |
+| Multi-reporter joint fit | `NUDGE-METHOD-008` | several reporters of one latent switch break the K⇄v_max degeneracy |
+| Hidden-node abstention | `NUDGE-METHOD-009` | turn a bare `off-model` verdict into a legible differential (never asserts a hidden node) |
+| Differential attribution | `NUDGE-METHOD-010` | which knob differs for the SAME perturbation across two contexts |
+| Constitutive-reporter control | `NUDGE-METHOD-011` | separate circuit ultrasensitivity from a nonlinear readout (the `NUDGE-LIM-006` fix) |
+| Temporal / Lotka–Volterra | `NUDGE-METHOD-012` | trajectory-fit attribution for a microbial community (growth/interaction/susceptibility) |
+| Fibrillization kinetics | `NUDGE-METHOD-013` | amyloid aggregation curve → identifiable composites + a measured gauge degeneracy |
+| Optimal experimental design | `NUDGE-METHOD-014` | gradient-optimize *when to measure* to resolve a sloppy parameter |
+| Honest figures — `nudge.viz` | (opt-in `[viz]`) | render any frozen result to a figure; abstentions draw as abstentions |
 
 ## Drive it from Claude (MCP)
 
-NUDGE ships a custom MCP server so Claude can run it in plain language:
+NUDGE ships a custom MCP server so Claude can run the whole modelling surface in plain
+language:
 
 ```bash
 uv pip install -e ".[mcp]"
 claude mcp add --scope project nudge -- uv run nudge-mcp   # Claude Code
 ```
 
-It exposes the full modelling surface as tools — `attribute`, `dose_response`, `synergy`,
-`cross_modality`, `robustness`, `design`, `multi_reporter`, `diagnose_abstention`,
-`differential` (+ `differential_robust`), `lotka`, `fibrillization`, `constitutive`, and
-`render_figure` — alongside the knowledge tools `explain_abstention`, `list_mechanisms`, and
-`get_mechanism_card`. The same stdio server registers as a **Local command**
-connector in Claude Desktop and the **Claude Science** workbench; a hosted
-(Streamable HTTP) deployment reaches claude.ai. A step-by-step **Claude Science**
-walkthrough (connect + an α-synuclein / Parkinson's aggregation-kinetics case) is in
+The same stdio server registers as a **Local command** connector in Claude Desktop and the
+**Claude Science** workbench. A step-by-step walkthrough (connect + an α-synuclein /
+Parkinson's aggregation-kinetics case) is in
 [`docs/user_guide/claude_science.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/docs/user_guide/claude_science.md);
-the verified connection recipes are in
+verified connection recipes are in
 [`design/INTEGRATION_FEASIBILITY.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/INTEGRATION_FEASIBILITY.md).
+
+## The honesty differentiator
+
+NUDGE's whole thesis is *never claim more than you measured*. A **confident-wrong** call — a
+specific mechanism where the truth is "can't tell" — is the only hard failure; an abstention
+or a one-sided bound is a feature, not a bug. The fail-safe property is **measured** (0%
+misclassification across the synthetic battery) and **adversarially red-teamed** across many
+rounds: dedicated passes try to force any capability into a confident, specific, wrong call
+past its abstention gates, and every found hole is independently reproduced, then closed or
+locked as a regression decoy. A found hole is a *win* — the red-team loop is ongoing, not a
+one-time stamp. The auditable red-team → fix → independent-audit trail lives in
+[`design/hardening/LEDGER.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/hardening/LEDGER.md).
+
+## Learn more
+
+- **[`JUDGES_GUIDE.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/JUDGES_GUIDE.md)** — the guided, judges-facing tour of the whole project.
+- **[Notebooks index](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/README.md)** — the guided, output-embedded walkthroughs (the [dose-response flagship](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/OCT4_NANOG_Flagship.ipynb), [inverse design](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/notebooks/Inverse_Design.ipynb), and more).
+- **[`design/STATE.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/STATE.md)** — the live roadmap, architecture decisions, and gotchas (start-here doc for contributors).
+- **[`scripts/vv/FINDINGS.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/scripts/vv/FINDINGS.md)** — the measured V&V + calibration results.
+- Plain-language pitch: [`design/PITCH.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/PITCH.md); full PR/FAQ: [`design/WORKING_BACKWARDS.md`](https://github.com/NicholasEhsanRoy/NUDGE/blob/main/design/WORKING_BACKWARDS.md).
 
 ## Capabilities NOT provided
 
 Scope discipline, stated up front:
 
-- **Not** a general Perturb-seq hit-caller — it answers a sharper question than
-  "is this gene a hit?"
-- **Not** a black-box response predictor — the deliverable is the *mechanism*,
-  not just the number.
-- **Not** a clinical or diagnostic tool.
-- **Not** a substitute for a wet-lab screen — it tells you which experiment is
-  worth running next.
-- **Not** a medical device; makes no clinical claims.
+- **Not** a general Perturb-seq hit-caller — it answers a sharper question than "is this gene a hit?"
+- **Not** a black-box response predictor — the deliverable is the *mechanism*, not just the number.
+- **Not** a substitute for a wet-lab screen — it tells you which experiment is worth running next.
+- **Not** a clinical, diagnostic, or medical-device tool; makes no clinical claims.
 
 ## License
 

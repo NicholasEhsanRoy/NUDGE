@@ -1,3 +1,20 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/NicholasEhsanRoy/NUDGE/main/docs/assets/nudge-logo.png" width="480" alt="NUDGE">
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/v/nudge-bio" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/pyversions/nudge-bio" alt="Python versions"></a>
+  <a href="https://github.com/NicholasEhsanRoy/NUDGE/blob/main/LICENSE"><img src="https://img.shields.io/github/license/NicholasEhsanRoy/NUDGE" alt="License: MIT"></a>
+  <a href="https://github.com/NicholasEhsanRoy/NUDGE/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/NicholasEhsanRoy/NUDGE/ci.yml?branch=main&label=CI" alt="CI status"></a>
+</p>
+
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-server-1f6feb?logo=modelcontextprotocol&logoColor=white" alt="MCP server"></a>
+  <a href="https://claude.ai/"><img src="https://img.shields.io/badge/Built%20with-Claude%3A%20Life%20Sciences-D97757?logo=claude&logoColor=white" alt="Built with Claude: Life Sciences"></a>
+</p>
+
 # NUDGE (`nudge-bio`)
 
 **N**ode/edge **U**ltrasensitivity **D**iagnostic for **G**ene-regulatory **E**ffects.
