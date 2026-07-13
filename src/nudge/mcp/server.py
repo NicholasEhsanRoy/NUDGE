@@ -163,10 +163,32 @@ def _register_job_tools(mcp: Any) -> None:
                 "elapsed_s": elapsed, "result": result}
 
 
+#: Connector usage note delivered to the client (Claude Science / Desktop) as the server's
+#: MCP ``instructions`` — the runtime agent's "how to drive NUDGE well" (docs/user_guide/
+#: claude_science.md is the human version).
+NUDGE_MCP_INSTRUCTIONS = (
+    "NUDGE attributes perturbation mechanisms and ABSTAINS loudly when it can't tell — a "
+    "confident-wrong answer is the only hard failure, so present every abstention AS an "
+    "abstention.\n\n"
+    "Figures: render_figure returns an image. With NUDGE_ENV=cloud it comes back INLINE as "
+    "`image_base64` + `mime_type` (a file path is impossible in this sandbox); decode and "
+    "display it immediately and DON'T echo the base64 blob. The `code` (a standalone fig.py) "
+    "and `data` (the sidecar) fields regenerate it with no re-fit — attach them as the "
+    "artifact's provenance. GIFs are size-disciplined and fall back to a static preview above "
+    "the inline cap (never truncated). MCP resource URIs are not dereferenceable here.\n\n"
+    "Long calls: the host kills any single tool call over ~60s. Run heavy tools (attribute, "
+    "fibrillization, constitutive, differential, multi_reporter, lotka, design, and a slow "
+    "render_figure demo) as a background job: job_submit(tool, args_json) returns a job_id in "
+    "<1s; poll job_status(job_id) until 'done' (with the real result) or 'error'. Fast tools "
+    "(list_mechanisms, dose_response, explain_abstention, get_mechanism_card, "
+    "diagnose_abstention) can be called directly."
+)
+
+
 def build_server() -> Any:
     """Construct and return the FastMCP server with NUDGE's tools registered."""
     FastMCP = _require_mcp()
-    mcp = FastMCP("nudge")
+    mcp = FastMCP("nudge", instructions=NUDGE_MCP_INSTRUCTIONS)
 
     @mcp.tool()
     def list_mechanisms() -> list[dict[str, Any]]:

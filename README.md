@@ -19,12 +19,15 @@ hackathon, 7–13 July 2026.
 
 ## Status
 
-**Working, calibrated, and adversarially red-teamed — this is the `0.1.0` first
-release.** The generative backbone and the fit engine are built end to end:
+**Working, calibrated, and adversarially red-teamed — `0.2.0`, building on the `0.1.0`
+first release.** The generative backbone and the fit engine are built end to end:
 generate ground-truth Perturb-seq data → `fit()` → recover the circuit →
 attribute threshold / gain / ceiling → **abstain when the data can't say**. The
 fail-safe property is *measured* — **0% misclassification** across hundreds of
-synthetic datasets (it abstains, never guesses wrong).
+synthetic datasets (it abstains, never guesses wrong). **0.2.0** hardens the Claude
+integration — inline-base64 figure transport + an async job pattern for the Claude Science
+connector — and grows the figure layer into a full **animation battery** (10 honesty-
+preserving GIFs, incl. the amyloid **gauge orbit**), every frame stamping its own abstention.
 
 Highlights so far:
 - **Phases 0–2 done:** circuit model, differentiable population fit, distributional
