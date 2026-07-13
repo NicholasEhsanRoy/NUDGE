@@ -166,3 +166,61 @@ def test_glv_multispecies_generalizes() -> None:
     )
     assert res.crlb_improvement > 10.0
     assert res.target_crlb_opt < res.target_crlb_init
+
+
+# --------------------------------------------------------------------------- #
+# rank-deficient-naive honesty (NUDGE-LIM-029): the guard is MEASURED (min-eig vs the
+# ridge floor at the FIM's own scale) and must not fire on a well-conditioned design.
+# --------------------------------------------------------------------------- #
+from nudge.inference.oed import (  # noqa: E402
+    is_rank_deficient,
+    ridge_floor,
+    target_ridge_dominated,
+)
+
+
+def test_rank_deficiency_helpers_on_constructed_fims() -> None:
+    """UNIT: the curvature-grounded rank test agrees with construction — a well-conditioned
+    FIM is not rank-deficient; an exactly-singular FIM (a zero flat direction) is, and its
+    target CRLB is a ridge artifact (var ~halves when the ridge doubles)."""
+    well = np.diag([10.0, 4.0])
+    assert not is_rank_deficient(well)
+    assert min_eigenvalue(well) > ridge_floor(well)
+    dominated, ratio = target_ridge_dominated(well, 1)
+    assert not dominated and ratio < 1.5  # ridge-insensitive → genuine information
+
+    singular = np.array([[10.0, 0.0], [0.0, 0.0]])  # parameter 1 is a flat direction
+    assert is_rank_deficient(singular)
+    assert min_eigenvalue(singular) <= ridge_floor(singular)
+    dominated, ratio = target_ridge_dominated(singular, 1)
+    assert dominated and ratio > 1.5  # var(r)/var(2r) → 2 → pure ridge artifact
+
+
+@pytest.mark.x64
+def test_logistic_default_naive_is_not_flagged_rank_deficient() -> None:
+    """A SECOND non-singular model: the logistic OED default naive schedule is informative
+    (min_eig ≫ ridge floor), so the guard must NOT fire and the finite gain stands."""
+    prob = make_logistic_design_problem()
+    res = optimize_design(
+        prob, _naive(prob, m=8), objective="crlb", target="log_alpha",
+        steps=120, learning_rate=0.2,
+    )
+    assert res.naive_rank_deficient is False
+    assert res.naive_target_identifiable is True
+    assert res.crlb_improvement_is_lower_bound is False
+    assert res.note == ""
+
+
+def test_decoy_well_conditioned_design_is_never_flagged() -> None:
+    """DECOY (NUDGE-LIM-029): a well-conditioned, genuinely-informative design must NEVER be
+    flagged rank-deficient — the guard fires ONLY on true ridge-floor degeneracy, so it can
+    never silently over-abstain on an informative design. The hole (a false-precise finite
+    factor on a rank-deficient baseline) is CLOSED, so this decoy PASSES (not strict-xfail)."""
+    prob = _fast_logistic()
+    fim = fisher_information(prob, _naive(prob, m=6))
+    assert not is_rank_deficient(fim)
+    res = optimize_design(
+        prob, _naive(prob, m=6), objective="crlb", target="log_alpha", steps=40,
+    )
+    assert res.naive_rank_deficient is False
+    assert res.crlb_improvement_is_lower_bound is False

@@ -936,6 +936,15 @@ def build_server() -> Any:
         a design *recommendation*, not an attribution verdict, so it can't emit a confident-wrong
         mechanism call. Local OED: valid near the nominal θ₀ (``NUDGE-LIM-024``).
 
+        Rank-deficient-naive honesty (``NUDGE-LIM-029``): when the naive baseline does not
+        identify the target (its FIM smallest eigenvalue sits at/below its own relative-ridge
+        floor, so the guarded CRLB is a ridge artifact) the tool refuses the false-precise finite
+        gain — it returns ``naive_rank_deficient=True`` / ``naive_target_identifiable=False`` and
+        marks ``crlb_improvement`` / ``min_eig_improvement`` as LOWER BOUNDS
+        (``*_is_lower_bound``) with a plain ``rank_deficiency_note`` (the true CRLB is unbounded).
+        The trigger is a MEASURED curvature comparison, so an ill-conditioned-but-informative
+        design still reports its honest finite factor.
+
         ``target`` selects the parameter to resolve (default: the model's confounded target,
         e.g. ``log_k_on`` for ``ad_qsp``); ``objective`` ∈ ``d_opt`` / ``a_opt`` / ``e_opt`` /
         ``crlb``; ``n_obs`` the number of measurement times; ``naive`` overrides the naive

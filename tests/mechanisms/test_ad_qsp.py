@@ -93,6 +93,72 @@ def test_oed_confound_is_measured_and_resolved():
     assert np.linalg.cond(res.fim_opt) < np.linalg.cond(fim)
 
 
+def test_oed_rank_deficient_naive_is_flagged_not_false_precise():
+    """REPRO + GUARD (NUDGE-LIM-029): the literal 'baseline + end' [0, 12] schedule makes the
+    naive FIM EXACTLY rank-1 (plaque≈0 at t=0 → both sensitivities vanish), so the true CRLB
+    of the target is INFINITE. NUDGE must NOT report a false-precise finite improvement factor
+    — it must flag the rank-deficiency and mark the gains as LOWER BOUNDS."""
+    from nudge.inference import oed
+
+    prob = A.make_ad_oed_problem(pair=("k_on", "k_gl"), biomarkers=(2,))
+    # measured: the naive baseline is ridge-floor rank-deficient in BOTH the global sense and
+    # the target direction specifically (never a hard-coded constant).
+    fim0 = oed.fisher_information(prob, np.array([0.0, 12.0]))
+    assert oed.min_eigenvalue(fim0) <= oed.ridge_floor(fim0)
+    assert oed.is_rank_deficient(fim0)
+    dominated, ratio = oed.target_ridge_dominated(fim0, 0)
+    assert dominated and ratio > 1.5  # target var ~halves when the ridge doubles → artifact
+    res = oed.optimize_design(prob, np.array([0.0, 12.0]), objective="crlb",
+                              target="log_k_on", steps=60)
+    assert res.naive_rank_deficient is True
+    assert res.naive_target_identifiable is False
+    # the confident-wrong is refused: the improvement is NOT a finitely-quantified factor.
+    assert res.crlb_improvement_is_lower_bound is True
+    assert res.min_eig_improvement_is_lower_bound is True
+    assert "does not identify" in res.note and "LOWER BOUND" in res.note
+
+
+def test_oed_default_schedule_still_reports_finite_gain_no_over_abstention():
+    """POSITIVE CONTROL (NUDGE-LIM-029): the DEFAULT 8-point naive schedule is merely ill-
+    conditioned-but-informative (min_eig≈0.097 ≫ ridge floor, cond≈6981), so the guard must
+    NOT fire — the honest finite CRLB / min-eig gains are still reported, not withheld."""
+    from nudge.inference import oed
+    from nudge.service import _naive_oed_schedule
+
+    prob = A.make_ad_oed_problem(pair=("k_on", "k_gl"), biomarkers=(2,))
+    sched = np.asarray(_naive_oed_schedule(*prob.phi_bounds, 8))
+    fim0 = oed.fisher_information(prob, sched)
+    assert oed.min_eigenvalue(fim0) > oed.ridge_floor(fim0)   # well above the ridge floor
+    assert not oed.is_rank_deficient(fim0)
+    res = oed.optimize_design(prob, sched, objective="d_opt", target="log_k_on", steps=120,
+                              learning_rate=0.2)
+    assert res.naive_rank_deficient is False
+    assert res.naive_target_identifiable is True
+    assert res.crlb_improvement_is_lower_bound is False
+    assert res.min_eig_improvement_is_lower_bound is False
+    assert np.isfinite(res.crlb_improvement) and res.crlb_improvement > 5.0
+    assert res.note == ""
+
+
+@pytest.mark.x64
+@pytest.mark.slow
+def test_oed_default_schedule_gain_is_byte_for_byte_preserved():
+    """LOAD-BEARING CALIBRATION (NUDGE-LIM-029): the rank-deficiency guard is ADDITIVE — the
+    default ad_qsp 8-point OED must report the SAME finite gains as before the guard, to the
+    bit. Any drift means the guard perturbed the informative path (a regression)."""
+    from nudge.inference import oed
+    from nudge.service import _naive_oed_schedule
+
+    prob = A.make_ad_oed_problem(pair=("k_on", "k_gl"), biomarkers=(2,))
+    sched = np.asarray(_naive_oed_schedule(*prob.phi_bounds, 8))
+    res = oed.optimize_design(prob, sched, objective="d_opt", target="log_k_on",
+                              steps=400, learning_rate=0.2, seed=0)
+    assert res.crlb_improvement == 259.41999523414836
+    assert res.min_eig_improvement == 222.42661880663067
+    assert res.naive_rank_deficient is False
+    assert res.crlb_improvement_is_lower_bound is False
+
+
 @pytest.mark.x64
 @pytest.mark.slow
 def test_matrix_free_flat_where_dense_would_oom():

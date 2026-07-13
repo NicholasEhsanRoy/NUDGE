@@ -2400,3 +2400,71 @@ and population/NLME QSP amyloid fits with an FIM step are published precedent (R
 so synthetic is the honest ceiling. `ad_qsp_nlme` registered for the `identifiability` MCP tool
 (driven by name at scale). Tests: `tests/mechanisms/test_ad_qsp.py` (5 fast + 1 slow NLME).
 Results: `scripts/vv/ad_qsp_nlme_scaling_RESULTS.json`.
+
+---
+
+## §P8 — gradient OED reported a FALSE-PRECISE finite improvement on a rank-deficient naive baseline; a curvature-grounded ridge-floor guard makes it an honest LOWER BOUND (`NUDGE-LIM-029`)
+
+**The confident-wrong (red-team, VERIFIED, reproduced from scratch).** The gradient-OED tool
+(`nudge.inference.oed.optimize_design` / `oed_tool`) headlines the MEASURED identifiability gain
+of the optimal design over a naive baseline — the target's CRLB factor (`crlb_improvement`) and
+the FIM smallest-eigenvalue lift (`min_eig_improvement`). On a naive baseline that carries **no**
+information about the target, those factors are FALSE-PRECISE: the true CRLB is infinite, and the
+finite number is a pure artifact of the guarded Tikhonov ridge.
+
+REPRO — `make_ad_oed_problem()` (default pair `k_on`⇄`k_gl`, target `k_on`, plaque-only) with the
+literal "baseline + end" schedule `φ = [0.0, 12.0]`:
+
+```
+eig(FIM₀)          ≈ [7.1e-15, 176]      # EXACTLY rank-1 (plaque ≈ 0 at t=0 → both ∂/∂θ = 0)
+crlb(FIM₀)         ≈ [6.98e5, 4.36e5]    # ridge-FLOOR artifact, SE ≈ 835
+min_eig(FIM₀)      = 7.1e-15  (x64) / 0.0 (float32)
+ridge_floor(FIM₀)  = 8.82e-7             # = 1e-8 · trace/p  → min_eig is ~8e-9 · floor
+```
+
+A competent raw agent (Claude Science dry run) REFUSED to report a finite CRLB here, calling it a
+pseudo-inverse artifact. NUDGE was doing the less-honest thing.
+
+**Root cause (MEASURED, not guessed).** `crlb()` inverts `FIM + ridge·scale·I` (`scale =
+trace/p`, `ridge = 1e-8`). The reported variance is a valid data-driven bound only when the FIM's
+smallest eigenvalue sits ABOVE the ridge floor `ridge·scale`. When `min_eig(FIM_init) ≲ ridge·scale`
+the CRLB is ridge-dominated → the design is rank-deficient in the target direction → any finite
+improvement factor is an artifact.
+
+**The fix (additive; `oed.py` + `service.py`; frozen `fit.py`/`core/` untouched).** A curvature-
+grounded guard, not a magic constant:
+
+- `ridge_floor(fim)` = `1e-8·trace/p`; `is_rank_deficient(fim)` = `min_eig(fim) ≤ ridge_floor(fim)`
+  — a unit-free comparison against the ridge floor baked into the reported CRLB.
+- `target_ridge_dominated(fim, i)` — a THRESHOLD-FREE per-target check: the guarded target
+  variance ~halves when the ridge doubles (`var(r)/var(2r) → 2`) iff the target is in the null
+  space; it is ridge-insensitive (`→ 1`) when the data identify it. Separator 1.5 = the midpoint.
+- When the naive baseline does not identify the target, `OEDResult` / the `oed_tool` dict expose
+  `naive_rank_deficient=True`, `naive_target_identifiable=False`,
+  `crlb_improvement_is_lower_bound=True`, `min_eig_improvement_is_lower_bound=True`, and a plain
+  `rank_deficiency_note` (true CRLB unbounded → the factor cannot be finitely quantified). The
+  tool STILL recommends the optimized schedule; it just no longer overstates the gain.
+
+**Measured separation (>12 orders of magnitude — the guard is not delicate):**
+
+| design                                   | min_eig    | ridge_floor | min_eig / floor | var(r)/var(2r) | flagged? |
+|------------------------------------------|------------|-------------|-----------------|----------------|----------|
+| singular `[0, 12]`                       | 7.1e-15    | 8.82e-7     | 8.1e-9          | 2.0000         | **yes**  |
+| DEFAULT 8-point `_naive_oed_schedule`    | 9.74e-2    | 3.40e-6     | 2.86e4          | 1.0000         | no       |
+| logistic default naive                   | 53.1       | 1.68e-5     | 3.2e6           | ~1             | no       |
+
+**Re-validation (0 false-precise finite factor; positive control preserved).**
+
+- Singular `[0,12]` → `naive_rank_deficient=True`, both factors flagged LOWER BOUNDS (3/3 seeds).
+- DEFAULT ad_qsp 8-point naive → `naive_rank_deficient=False` and the honest finite gains
+  **byte-for-byte preserved**: `crlb_improvement = 259.41999523414836`,
+  `min_eig_improvement = 222.42661880663067` (objective `d_opt`, steps 400, lr 0.2, seed 0, x64).
+  NO over-abstention.
+- logistic (×48.95) and gLV (×6.25) defaults unflagged.
+
+**Residual bound (honest — this IS the limitation).** NUDGE cannot invent identifiability the data
+lack: when the naive baseline is rank-deficient in the target, the true improvement over it is
+UNBOUNDED, so the reported factor is only a finite LOWER BOUND. This is a fail-safe abstention on
+the finite-factor claim, never a confident-wrong. Guarded by `tests/mechanisms/test_ad_qsp.py`
+(rank-deficient flag + byte-for-byte default) and `tests/inference/test_oed.py` (curvature-helper
+unit + well-conditioned decoy).

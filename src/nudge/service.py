@@ -2325,6 +2325,18 @@ def oed_tool(
     ``target`` selects the parameter to resolve (default: the model's ``default_oed_target``);
     ``objective`` ∈ ``d_opt`` / ``a_opt`` / ``e_opt`` / ``crlb``; ``naive`` overrides the naive
     'baseline+end' schedule; ``sigma`` overrides the observation noise.
+
+    **Rank-deficient-naive honesty (``NUDGE-LIM-029``).** If the naive baseline does not
+    identify the target — its FIM smallest eigenvalue sits at/below its own relative-ridge
+    floor, so the guarded CRLB is a Tikhonov artifact, not data information — the tool refuses
+    the false-precise finite gain: it sets ``naive_rank_deficient=True`` /
+    ``naive_target_identifiable=False`` and marks the reported ``crlb_improvement`` /
+    ``min_eig_improvement`` as LOWER BOUNDS (``*_is_lower_bound=True``) with a plain
+    ``rank_deficiency_note`` (the true CRLB is unbounded, so the improvement cannot be finitely
+    quantified from the data alone). The trigger is a MEASURED curvature comparison (smallest
+    eigenvalue vs the ridge floor at the FIM's own scale, plus a threshold-free ridge-doubling
+    test on the target direction), so a merely ill-conditioned-but-informative design (e.g. the
+    ad_qsp 8-point default, cond≈6981) still reports its honest finite factor unchanged.
     """
     import numpy as np
 
@@ -2375,6 +2387,15 @@ def oed_tool(
         "cond_init": _jsonsafe(float(np.linalg.cond(fim_init))),
         "cond_opt": _jsonsafe(float(np.linalg.cond(fim_opt))),
         "naive_correlation": _jsonsafe(corr_init),
+        # rank-deficiency honesty (NUDGE-LIM-029): when the naive baseline does not identify
+        # the target its finite CRLB is a ridge artifact, so the improvement factors are
+        # reported as LOWER BOUNDS (never a false-precise finite gain).
+        "ridge_floor_init": _jsonsafe(res.ridge_floor_init),
+        "naive_rank_deficient": bool(res.naive_rank_deficient),
+        "naive_target_identifiable": bool(res.naive_target_identifiable),
+        "crlb_improvement_is_lower_bound": bool(res.crlb_improvement_is_lower_bound),
+        "min_eig_improvement_is_lower_bound": bool(res.min_eig_improvement_is_lower_bound),
+        "rank_deficiency_note": res.note,
         "measured_note": (
             "MEASURED at the nominal θ₀ — the optimal design and the CRLB / smallest-eigenvalue "
             "gains are computed, not asserted; a design recommendation, never a mechanism call."

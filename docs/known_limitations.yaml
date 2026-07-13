@@ -1379,3 +1379,82 @@ anomalies:
       The measured numbers are honest properties of the differentiable demo model at θ₀ (local,
       NUDGE-LIM-024); they are not extrapolated, not patient findings, and not claims about the
       published Proctor constants.
+
+  - anomaly_id: NUDGE-LIM-029
+    title: The gradient-OED tool reports the identifiability gain as a LOWER BOUND (not a
+      false-precise finite factor) when the naive baseline is rank-deficient in the target
+    description: >-
+      The gradient optimal-experimental-design capability (NUDGE-METHOD-014, nudge.inference.oed;
+      the oed_tool / oed MCP verb over the model registry) contrasts a naive baseline design
+      against the gradient-optimal design and headlines the MEASURED identifiability gain — the
+      target parameter's Cramér–Rao-bound factor (crlb_improvement) and the FIM smallest-
+      eigenvalue lift (min_eig_improvement). Those factors are crlb_init/crlb_opt and
+      min_eig_opt/min_eig_init, and crlb() inverts the FIM with a RELATIVE Tikhonov ridge
+      (fim + ridge·scale·I, scale = trace(fim)/p, ridge = 1e-8) so a near-singular design gives a
+      large-but-finite over-cautious bound rather than a NaN or a pseudo-inverse's zeroed flat
+      direction. THE HOLE (red-team, VERIFIED confident-wrong): when the naive baseline does NOT
+      identify the target at all — its FIM is rank-deficient in the target direction, smallest
+      eigenvalue at NUMERICAL ZERO — the true target CRLB is INFINITE, so the finite crlb_init the
+      ridge produces is a pure Tikhonov artifact and ANY finite crlb_improvement / min_eig_
+      improvement built from it is a FALSE-PRECISE number that hides the rank-deficiency. REPRO
+      (2+ seeds, through the shipped optimize_design path): make_ad_oed_problem() (default pair
+      k_on⇄k_gl, target k_on, plaque-only observation) with the literal 'baseline + end' schedule
+      φ = [0.0, 12.0] — at t=0 plaque ≈ 0 (the X0 plaque state is 0) so BOTH parameter
+      sensitivities are exactly zero → the baseline FIM is rank-1 singular (eigenvalues ≈ [7e-15,
+      176]; smallest eigenvalue 7.1e-15 at the numerical floor), crlb() returns the ridge-artifact
+      SE ≈ 835 (variance ≈ 6.98e5), and optimize_design reported a FINITE crlb_improvement /
+      min_eig_improvement as if the gain were measured. A competent raw agent (Claude Science dry
+      run) correctly REFUSED to report a finite CRLB there, calling it a pseudo-inverse artifact;
+      NUDGE was doing the LESS honest thing. ROOT CAUSE (MEASURED, not guessed): the reported
+      variance is a valid data-driven bound only when the FIM's smallest eigenvalue sits ABOVE the
+      ridge floor ridge·scale at the FIM's own scale; when min_eig(fim_init) ≲ ridge·scale the
+      CRLB is ridge-dominated and the design is effectively rank-deficient in the target direction.
+      MITIGATION (SHIPPED, additive in inference/oed.py + service.py; frozen fit.py/core untouched):
+      a CURVATURE-GROUNDED guard, not a magic constant. (1) ridge_floor(fim) = ridge·trace(fim)/p
+      and is_rank_deficient(fim) = min_eig(fim) ≤ ridge_floor(fim) — a unit-free comparison of the
+      smallest eigenvalue against the very ridge floor baked into the reported CRLB; the two
+      regimes are separated by >12 orders of magnitude on NUDGE's own designs (the singular [0,12]
+      baseline sits ~8e-9·floor; the informative 8-point default sits ~2.9e4·floor). (2) a
+      THRESHOLD-FREE per-target check target_ridge_dominated(fim, index): the ridge-guarded target
+      variance ~halves when the ridge doubles (var(r)/var(2r) → 2) iff the target direction is in
+      the null space, but is ridge-insensitive (ratio → 1) when the data identify it; the 1.5
+      separator is the midpoint (singular = 2.0000, informative default = 1.0000). When the naive
+      baseline does not identify the target, OEDResult / the oed_tool dict now expose
+      naive_rank_deficient=True, naive_target_identifiable=False, crlb_improvement_is_lower_bound=
+      True, min_eig_improvement_is_lower_bound=True and a plain rank_deficiency_note stating that
+      the naive design does not identify the target (rank-deficient FIM, smallest eigenvalue at the
+      ridge floor), so its finite CRLB is a ridge artifact, the true CRLB is unbounded, and the
+      improvement CANNOT be finitely quantified from the data alone. The tool STILL recommends the
+      optimized schedule (a design recommendation) — it just no longer overstates the quantified
+      gain as a false-precise finite factor. RE-VALIDATED (shipped optimize_design / oed_tool):
+      singular [0,12] baseline → naive_rank_deficient=True and both factors flagged LOWER BOUNDS
+      (3/3 seeds, 0 false-precise finite factor); the DEFAULT ad_qsp 8-point naive schedule
+      (_naive_oed_schedule(0.05, 12.0, 8): min_eig ≈ 0.097, cond ≈ 6981, well above the ridge
+      floor) STILL reports the honest finite crlb_improvement = 259.41999523414836 and
+      min_eig_improvement = 222.42661880663067 BYTE-FOR-BYTE with naive_rank_deficient=False (no
+      over-abstention); logistic and gLV defaults also unflagged. RESIDUAL BOUND (honest, this is
+      the LIMITATION): NUDGE cannot invent identifiability the data do not contain — when the naive
+      baseline is rank-deficient in the target the true improvement over it is UNBOUNDED, so the
+      reported factor is only a finite LOWER BOUND on it, never the finitely-quantified gain. This
+      is a fail-safe abstention on the FINITE-FACTOR claim, not a confident-wrong. Guarded by
+      tests/mechanisms/test_ad_qsp.py (rank-deficient flag + byte-for-byte default preservation)
+      and tests/inference/test_oed.py (curvature-helper unit test + well-conditioned decoy);
+      MEASURED numbers in scripts/vv/FINDINGS.md. Related: NUDGE-LIM-024 (local OED — the same
+      module's local-to-θ₀ caveat), NUDGE-LIM-023 (matrix-free rank-deficiency fail-safe — the
+      same never-fabricate-an-identifiability discipline), NUDGE-METHOD-014.
+    severity: major
+    safety_relevance: safety_relevant
+    safety_relevance_rationale: >-
+      The OED tool is a design RECOMMENDATION, not an attribution verdict, so it cannot emit a
+      confident-wrong mechanism call about a perturbation — but a false-precise uncertainty number
+      is exactly the failure mode the project exists to avoid: reporting a finite, authoritative-
+      looking crlb_improvement / min_eig_improvement when the naive baseline carries NO information
+      about the target (true CRLB infinite) misrepresents a ridge artifact as measured
+      identifiability and would mislead a user into trusting a baseline that identifies nothing.
+      The fix keeps the tool honest by construction: the trigger is a MEASURED curvature comparison
+      (smallest eigenvalue vs the ridge floor at the FIM's own scale, plus a threshold-free ridge-
+      doubling test on the target direction), so it fires ONLY on genuine ridge-floor rank-
+      deficiency and provably not on a merely ill-conditioned-but-informative design (the ×259
+      default is byte-for-byte preserved). When it fires the tool abstains on the finite-factor
+      claim (reports a LOWER BOUND + an unbounded true CRLB) rather than fabricating a number — a
+      fail-safe outcome, never a confident-wrong.
