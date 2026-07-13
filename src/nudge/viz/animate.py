@@ -35,6 +35,11 @@ _ANIMATORS: dict[str, str] = {
     "robustness": "nudge.viz.robustness",
     "aggregation": "nudge.viz.aggregation",
     "temporal": "nudge.viz.temporal",
+    "multi_reporter": "nudge.viz.multi_reporter",
+    "identifiability": "nudge.viz.identifiability",
+    "design": "nudge.viz.design",
+    "dose_response": "nudge.viz.dose_response",
+    "cross_modality": "nudge.viz.dose_response",  # continuous readout → same Hill sweep
 }
 
 

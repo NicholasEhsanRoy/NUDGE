@@ -18,7 +18,7 @@ from typing import Any
 
 import numpy as np
 
-from nudge.viz.base import Panel, RenderedFigure, is_abstention
+from nudge.viz.base import AnimationSpec, Panel, RenderedFigure, abstain_overlay, is_abstention
 from nudge.viz.layout import freest_corner, place_label, reserve_top_band
 from nudge.viz.theme import apply_theme, call_color
 
@@ -275,4 +275,150 @@ def build(data_or_entries: Any, *, theme: str = "auto") -> RenderedFigure:
         kind="dose_response",
         caption=_caption(data),
         data=data,
+    )
+
+
+def build_animation(
+    result_or_data: Any, *, theme: str = "auto", frames: int = 28
+) -> AnimationSpec:
+    """Animate the Hill sweep: a dose cursor crosses the dose axis left→right while the
+    fitted curve is REVEALED up to it and the guide-dose points light up as the cursor
+    passes them (``design`` §5.1, in motion). Handles BOTH the flagship dose-response
+    entry-list AND a cross-modality ``{"variants": [...]}`` dict — the continuous readout
+    has the identical Hill geometry, so it reuses this same sweep (its ``cross_modality_data``
+    normaliser yields the same per-panel dicts).
+
+    Honesty grammar, per panel, off that panel's OWN verdict: a RESOLVED switch marks the
+    inflection at ``d=K`` with a dashed line once the cursor reaches it; a panel whose doses
+    do NOT span the inflection (``spans_inflection == False``) instead draws an OPEN-ENDED
+    arrow toward where ``K`` would sit past the sampled range — never a confident marker —
+    and gets the one-sided abstention overlay; any other abstaining panel (e.g. a flat
+    ``no-effect`` whose fitted K happens to fall in range) is hatched WITHOUT asserting a K.
+    This only READS the fit output (no re-fit); ``abstained`` is stamped off the same calls
+    the CLI/MCP print, and the overlay fires per-frame where a panel abstains.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    pal = apply_theme(theme)
+    # A cross-modality variants dict (or its already-built figure-data) reuses this sweep via
+    # its OWN normaliser; everything else goes through the dose-response normaliser. Both
+    # yield the identical per-panel Hill dicts, so the draw code below is shared.
+    is_xmod = isinstance(result_or_data, dict) and (
+        result_or_data.get("kind") == "cross_modality" or "variants" in result_or_data
+    )
+    if is_xmod:
+        from nudge.viz.cross_modality import cross_modality_data
+
+        data = cross_modality_data(result_or_data)
+    else:
+        data = dose_response_data(result_or_data)
+
+    panels_data = list(data["panels"])[:3]  # keep to ≤3 panels for the demo strip
+    ncols = max(len(panels_data), 1)
+    xlabel = data.get("xlabel", _DEFAULT_XLABEL)
+    ylabel = data.get("ylabel", _DEFAULT_YLABEL)
+
+    # Precompute each panel's geometry ONCE — draw() only reveals/slices, never re-fits.
+    prep: list[dict[str, Any]] = []
+    for p in panels_data:
+        k = p["k_threshold"]
+        # the SAMPLED dose reach the cursor sweeps (0 → d_span); with no raw points
+        # (cross-modality) fall back to a window that brackets K so the curve reads.
+        d_span = p["dose_max"] if p["dose_max"] is not None else max(k * 2.5, 1.0)
+        xmax = max(d_span, k) * 1.05
+        xs = np.linspace(0.0, xmax, 240)
+        ys = _hill(p["direction"], xs, p["floor"], p["amp"], k, p["n"])
+        dose = np.asarray(p["dose"], dtype=float) if p["dose"] is not None else None
+        resp = np.asarray(p["response"], dtype=float) if p["response"] is not None else None
+        yv = [float(ys.min()), float(ys.max())]
+        if resp is not None and len(resp):
+            yv += [float(resp.min()), float(resp.max())]
+        ylo, yhi = min(yv), max(yv)
+        pad = 0.09 * (yhi - ylo or 1.0)
+        prep.append({
+            "p": p, "k": k, "d_span": float(d_span), "xmax": float(xmax), "xs": xs, "ys": ys,
+            "dose": dose, "resp": resp, "ylim": (ylo - pad, yhi + pad),
+            "color": call_color(p["call"], pal),
+            "abst": is_abstention(p["call"]),
+            "one_sided": not p["spans_inflection"],
+            # repress descends (free lower-left); activate ascends (free upper-left).
+            "leg_loc": "lower left" if p["direction"] == "repress" else "upper left",
+        })
+
+    fig, axes = plt.subplots(1, ncols, figsize=(5.2 * ncols, 4.4), squeeze=False)
+    row = axes[0]
+    hold = max(frames // 6, 2)
+
+    def draw(i: int) -> None:
+        frac = min(min(i, frames - hold) / max(frames - hold, 1), 1.0)
+        for ax, pp in zip(row, prep, strict=False):
+            ax.clear()
+            p = pp["p"]
+            xs, ys, color, k = pp["xs"], pp["ys"], pp["color"], pp["k"]
+            xc = frac * pp["d_span"]
+            cut = max(int(np.searchsorted(xs, xc, side="right")), 2)
+            # the fitted Hill curve, REVEALED up to the dose cursor
+            ax.plot(xs[:cut], ys[:cut], color=color, lw=2.2, zorder=3,
+                    label=f"Hill fit (n={p['n']:.1f})")
+            # the moving cursor + the point riding the curve at the current dose
+            yc = float(_hill(p["direction"], xc, p["floor"], p["amp"], k, p["n"]))
+            ax.axvline(xc, color=pal["muted"], lw=1.0, alpha=0.55, zorder=2)
+            ax.plot([xc], [yc], "o", color=color, ms=8, zorder=6,
+                    markeredgecolor=pal["surface"], markeredgewidth=0.8)
+            # guide-dose points light up as the cursor passes their dose
+            if pp["dose"] is not None and pp["resp"] is not None:
+                seen = pp["dose"] <= xc
+                if bool(seen.any()):
+                    ax.scatter(pp["dose"][seen], pp["resp"][seen], s=42, color=color,
+                               zorder=5, edgecolors=pal["surface"], linewidths=0.8,
+                               label="guide-dose points")
+            if p["dose_max"] is not None:  # where sampling stopped
+                ax.axvline(p["dose_max"], ls=":", color=pal["muted"], lw=1.0, zorder=2)
+            # inflection grammar, off THIS panel's own verdict
+            if not pp["one_sided"] and not pp["abst"]:
+                # resolved switch: mark K with a dashed line once the cursor reaches it
+                if xc >= k:
+                    ax.axvline(k, ls="--", color=color, lw=1.3, alpha=0.85, zorder=4)
+                    ax.annotate(f"K={k:.2f}", xy=(k, 0.05), xytext=(4, 0),
+                                textcoords="offset points",
+                                xycoords=("data", "axes fraction"), fontsize=8,
+                                color=color, ha="left", va="bottom", zorder=7)
+            elif pp["one_sided"]:
+                # doses do NOT span the inflection: an OPEN-ENDED arrow toward where K would
+                # sit past the sampled range — never a confident point estimate.
+                x0 = pp["d_span"] * 0.6
+                ax.annotate("", xy=(pp["xmax"], 0.5), xytext=(x0, 0.5),
+                            xycoords=("data", "axes fraction"),
+                            arrowprops={"arrowstyle": "-|>", "color": color, "lw": 1.6,
+                                        "linestyle": "--"})
+                ax.text(0.5, 0.30, "K past sampled range →\ngain unidentifiable",
+                        transform=ax.transAxes, ha="center", va="center", fontsize=8,
+                        color=color, zorder=7)
+            ax.set_xlim(0.0, pp["xmax"])
+            ax.set_ylim(*pp["ylim"])
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            lbl = p["label"] or "curve"
+            ax.set_title(f"{lbl}  →  {p['call'].upper()}", fontweight="bold",
+                         color=pal["text"], fontsize=11)
+            ax.legend(loc=pp["leg_loc"], fontsize=8, framealpha=0.9)
+            if pp["abst"]:  # per-frame overlay, off this panel's OWN call
+                abstain_overlay(ax, p["call"], p["reason"], one_sided=pp["one_sided"],
+                                palette=pal)
+
+    suptitle = ("cross-modality Hill sweep — same K/n vocabulary from a continuous readout"
+                if is_xmod else
+                "dose-response Hill sweep — trace the curve, locate the switch")
+    fig.suptitle(suptitle, fontweight="bold", color=pal["text"], fontsize=12)
+    fig.tight_layout()
+    anim = FuncAnimation(
+        fig, draw, frames=frames, interval=1000 // 8, blit=False,  # type: ignore[arg-type]
+    )
+    abstained = any(pp["abst"] for pp in prep)
+    # the normalised figure-data rides in the sidecar (kind preserved) so fig.py replays the
+    # exact sweep with no re-fit; truncate to the panels actually drawn.
+    out = {**data, "panels": panels_data}
+    return AnimationSpec(
+        fig=fig, anim=anim, caption=_caption(data), abstained=abstained, data=out
     )
