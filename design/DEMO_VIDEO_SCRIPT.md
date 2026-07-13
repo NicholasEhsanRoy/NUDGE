@@ -55,7 +55,7 @@ honest on-camera A/B; AI-for-science positioning; the close). The actionable tak
 
 5. **Close with a structured recap + one specific, low-friction CTA + a verifiable number.**
    Endings are remembered disproportionately; a concrete, checkable fact ("on PyPI as
-   `nudge-bio`", "0% misclassification / 852 datasets") is social proof judges can repeat.
+   `nudge-bio`", "0% misclassification across hundreds of synthetic datasets") is social proof judges can repeat.
    ([Vidyard: strong CTA](https://www.vidyard.com/blog/end-video-strong-call-action-examples/),
    [PitchAvatar: ending for impact](https://pitchavatar.com/the-last-step-the-best-ending-for-a-presentation/))
 
@@ -98,7 +98,7 @@ thematic peak (angle 4), and close on measured social proof + `pip install` (ang
    constants; a red stamp drops: "unidentifiable." VO: "A model that's confidently wrong is
    worse than one that admits it can't tell."
 2. **0:15–0:35 Thesis.** NUDGE = the honesty engine; abstains rather than guess; 0%
-   misclassification across 852 synthetic datasets; on PyPI as `nudge-bio`.
+   misclassification across hundreds of synthetic datasets (300 linear + 120 switch measured at every margin_k); on PyPI as `nudge-bio`.
 3. **0:35–0:55 Setup.** Real published Alzheimer's amyloid-β QSP model (Proctor 2013, CC0) +
    synthetic cohort; caveat on-screen; driven from Claude Science via the `nudge` MCP
    connector.
@@ -186,12 +186,12 @@ the table: **"UNIDENTIFIABLE."** Hard cut. Hold the stamp ≤2 s.
 
 > VO: "This is NUDGE. It's a mechanism-attribution and experimental-design tool for
 > biology, and its defining property is that it reports what it *measured*, never what it
-> guessed. Across 852 synthetic ground-truth datasets, it misclassified a mechanism zero
+> guessed. Across hundreds of synthetic ground-truth datasets, it misclassified a mechanism zero
 > times — because when it can't be sure, it abstains, loudly. It's on PyPI, today, as
 > `nudge-bio`."
 
 *On screen:* NUDGE wordmark → quick cut to the FINDINGS table showing **0% misclassification
-/ 852 datasets** (highlight the "0%" cell) → a `pip install nudge-bio` line auto-typing in a
+/ hundreds of datasets** (highlight the "0%" cell) → a `pip install nudge-bio` line auto-typing in a
 terminal. Keep each ≤3 s.
 
 ---
@@ -281,7 +281,7 @@ of the **red-team → uq-fixer → audit** loop; the P7 record (confident-wrong 
 
 *On screen:* the wordmark; three tight text lines — **"Scales. Resolves. Abstains."** — then
 the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, with the
-**0% / 852** number still visible in the corner. Hold 3 s. End.
+**0%** number still visible in the corner. Hold 3 s. End.
 
 ---
 
@@ -299,7 +299,7 @@ the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, w
 
 - **Confident-wrong hook table** — the raw-agent least-squares fit from `scripts/demo_ab/`
   (12×N confident constants) + a red "UNIDENTIFIABLE" stamp (added in edit).
-- **FINDINGS "0% / 852" table** — `scripts/vv/FINDINGS.md` §1 (highlight the 0% cell).
+- **FINDINGS "0%" table** — `scripts/vv/FINDINGS.md` §1 (highlight the 0% cell).
 - **`pip install nudge-bio`** auto-typing terminal (PyPI 0.3.0).
 - **Claude Science chat + `nudge` connector** — the prompt + the MCP tools list; recipe in
   `docs/user_guide/claude_science.md` (use `NUDGE_ENV=cloud` for inline figures).
@@ -317,7 +317,7 @@ the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, w
 
 | Claim in VO | Value | Source |
 |---|---|---|
-| never misclassified / abstains | **0% across 852 synthetic datasets** | `scripts/vv/FINDINGS.md` §1; `JUDGES_GUIDE.md` |
+| never misclassified / abstains | **0% across hundreds of synthetic datasets (300 linear + 120 switch measured at every margin_k)** | `scripts/vv/FINDINGS.md` §1; `JUDGES_GUIDE.md` |
 | on PyPI | **`nudge-bio` 0.3.0** | `CHANGELOG.md`; `docs/user_guide/claude_science.md` |
 | dense build dies | **dense jacfwd OOM-killed at n_free ≥ 1000, 2.5 GB cap** | `scripts/demo_matrix_free_scale.py`; STATE.md "AD QSP" |
 | NUDGE stays flat | **~0.57 GB (1.01×), same `unidentifiable` verdict** | same |
