@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/v/nudge-bio" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/v/nudge-bio?cacheSeconds=3600" alt="PyPI version"></a>
   <a href="https://pypi.org/project/nudge-bio/"><img src="https://img.shields.io/pypi/pyversions/nudge-bio" alt="Python versions"></a>
   <a href="https://github.com/NicholasEhsanRoy/NUDGE/blob/main/LICENSE"><img src="https://img.shields.io/github/license/NicholasEhsanRoy/NUDGE" alt="License: MIT"></a>
   <a href="https://github.com/NicholasEhsanRoy/NUDGE/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/NicholasEhsanRoy/NUDGE/ci.yml?branch=main&label=CI" alt="CI status"></a>

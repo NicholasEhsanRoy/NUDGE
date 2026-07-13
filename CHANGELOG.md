@@ -13,6 +13,38 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Fixed
 
+## [0.4.0] — 2026-07-13
+
+### Added
+
+- **Hierarchical / nonlinear-mixed-effects AD QSP population model (`ad_qsp_nlme`) with a
+  genuinely COUPLED (arrowhead) joint Fisher-Information Matrix** (`NUDGE-LIM-028`). Subjects
+  share population hyperparameters (geometric-mean `μ`, fixed effects `φ`, optional log-spread
+  `ω`), so the joint FIM over `[μ | ω | φ | rᵢ]` is a bordered/**arrowhead** matrix — cross-subject
+  blocks exactly zero, a dense border coupling every subject — and is **not** block-decomposable
+  like the independent-subjects cohort. Registered for the `identifiability` tool over the model
+  registry. This makes the matrix-free-vs-dense scale contrast honest (the block-diagonal cohort
+  was a strawman we refused): MEASURED (`scripts/demo_nlme_scale.py`), dense `jacfwd` OOM-kills at
+  N≥300 under a 2.5 GB cap while the matrix-free `jvp∘vjp` path stays ~0.56→0.89 GB across
+  N=100→2500 (≈linear in cohort state, **not** flat) and returns the same `unidentifiable`
+  verdict; the `NUDGE-LIM-023` rank-deficiency fail-safe is preserved. Arrowhead is in-principle
+  Schur-decomposable, so the shipped claim is the measured dense-OOM-vs-matrix-free contrast, not
+  impossibility.
+- **A self-contained NumPy WITHOUT-arm** for the coupled model (`scripts/demo_ab/
+  ad_qsp_nlme_forward.py` + `cohort_nlme.npz`) so a raw agent can attempt the same joint
+  identifiability question (no `nudge` import) for a fair A/B.
+- **3-minute demo/pitch video shooting script** (`design/DEMO_VIDEO_SCRIPT.md`).
+
+### Changed
+
+- **Corrected the AD QSP confound attribution to be design-dependent** (honesty; caught by a
+  Claude Science reviewer). On the 2-biomarker / 8-visit cohort the confounded pair is the
+  microglial clearance ⇄ activation pair `k_gl` ⇄ `k_ga` — antibody binding `k_on` is *well*
+  -identified there; the antibody-binding ⇄ microglial-clearance `k_on` ⇄ `k_gl` confound belongs
+  to the sparser single-biomarker (amyloid-PET, baseline+end) OED design. Fixes the
+  `scripts/demo_ab/ad_qsp_forward.py` docstring + README, which had mis-attributed the OED
+  design's confound to the cohort.
+
 ## [0.3.0] — 2026-07-13
 
 ### Added

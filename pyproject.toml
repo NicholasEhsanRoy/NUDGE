@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nudge-bio"
-version = "0.3.0"
+version = "0.4.0"
 description = "Node/edge Ultrasensitivity Diagnostic for Gene-regulatory Effects — mechanism attribution for Perturb-seq screens"
 readme = "PYPI_README.md"
 license = "MIT"
