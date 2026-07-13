@@ -160,6 +160,26 @@ the model is on screen; (e) the setup is cut to ~15 s.
   the close to one sentence, put one Impact sentence in the thesis, keep every caveat in a
   lower-third.
 
+### v4 — the confound is design-dependent (two-design coherence)
+
+A Claude Science reviewer — our own on-camera honesty check — caught that the identifiability
+arm's dominant confound on the 2-biomarker / 8-visit cohort is the **microglial** pair
+`k_gl ⇄ k_ga`, and that `k_on` is in fact *well*-identified there — whereas the OED arm resolves
+`k_on ⇄ k_gl`. These are two *different measurement designs*, and the confound genuinely **moves**
+between them (fewer biomarkers, sparser schedule → a different near-singular direction). Left
+implicit, that reads as a discontinuity ("why did the parameters change?"). Fix: make the
+**experiment the protagonist** — an on-screen "EXPERIMENT" card announces each design and
+*visibly shrinks* (2 biomarkers × 8 visits → PET-only × baseline+end) at the Cap 1→2 seam, and
+the VO frames Cap 2 as the confound *moving onto the clinically decisive pair as data is stripped
+away*. This converts a potential contradiction into the sharpest statement of the thesis — the
+confound you're stuck with is a property of your experiment — which is precisely why OED exists.
+Two honesty guards fall out: (a) Cap 1 must *establish* "k_on recoverable here" for the bridge to
+land; (b) the dense-OOM money-shot (M1) must run on the genuinely **coupled** NLME population, not
+a block-decomposable cohort — a competent agent simply decomposes the latter (measured in a dry
+run), so a block-diagonal "OOM" would be a strawman. Also corrected forward: the
+`scripts/demo_ab/ad_qsp_forward.py` docstring, which had mis-attributed the OED design's
+`k_on ⇄ k_gl` confound to the cohort.
+
 ---
 
 ## 3. FINAL shootable script (~3:05)
@@ -213,34 +233,45 @@ synthetic cohort — not real patients, not a clinical finding. NUDGE-LIM-026."*
 
 **[0:46–1:24] — CAPABILITY 1: matrix-free identifiability (WITH / WITHOUT, the OOM wall)**
 
-> VO: "Population-scale, this is thousands of parameters. The textbook way builds a dense
-> Jacobian. Same laptop, same memory budget — watch it. The dense build climbs, and dies:
-> out of memory. NUDGE never forms that matrix. It works through matrix-vector products
-> only, stays flat at about half a gigabyte, and returns the honest verdict:
-> unidentifiable — with the plaque-growth gain and threshold named as the sloppiest knobs."
+> VO: "Start generous. This cohort measures two biomarkers — amyloid plaque *and* soluble
+> oligomer — across eight visits. Fit it population-scale and you're estimating thousands of
+> *coupled* parameters. The textbook way builds one dense Jacobian. Same laptop, same memory
+> budget — watch it climb, and die: out of memory. NUDGE never forms that matrix — it works
+> through matrix-vector products only, stays flat at about half a gigabyte, and returns an
+> honest verdict. Even with this much data, two rates stay welded together: how fast microglia
+> clear plaque, and how strongly plaque recruits them. The antibody's binding rate, though, is
+> fully recoverable *here* — hold onto that."
 
-*On screen:* a split terminal. **LEFT ("dense jacfwd"):** a live memory meter rising, rising,
-then a kernel **`Killed` / OOM** message (real, under the 2.5 GB `systemd` cap). **RIGHT
-("NUDGE matrix-free"):** memory trace pinned flat (~0.57 GB), finishing with a green
-**`unidentifiable`** verdict + the named sloppy directions (`k_pg`, `K_pg`). A small callout:
-**"same machine · same 2.5 GB cap · same model."** Hold the OOM-vs-flat comparison — this is
-money-shot #1 — but keep the meters animating so it's never a static hold.
+*On screen:* **EXPERIMENT card (top-right, persists): "DESIGN A — plaque + oligomer · 8 visits"**
+(two biomarker icons × eight dots). A split terminal. **LEFT ("dense jacfwd"):** a live memory
+meter rising, rising, then a kernel **`Killed` / OOM** (real, under the 2.5 GB `systemd` cap —
+run on the genuinely *coupled* NLME population, never a block-decomposable cohort; see the §4
+honesty note). **RIGHT ("NUDGE matrix-free"):** memory pinned flat (~0.57 GB) → green
+**`unidentifiable (rank-deficient)`**; quick insert of the cohort FIM figure naming the
+confounded pair **`k_gl ⇄ k_ga`** (microglial clearance ⇄ activation) with **`k_on`
+well-constrained**. Callout: **"same machine · same 2.5 GB cap · same model."** Money-shot #1;
+keep the meters animating so it never sits static.
 
 ---
 
-**[1:24–2:04] — CAPABILITY 2: gradient OED (the ellipse collapse)**
+**[1:24–2:04] — CAPABILITY 2: gradient OED (design shrinks → the confound *moves* → the ellipse collapses)**
 
-> VO: "Now the design question. Two parameters — how fast the antibody binds, and how fast
-> microglia clear the plaque — both lower amyloid, so a naive baseline-and-end scan can't
-> separate them. Their correlation is basically one. NUDGE differentiates the information
-> criterion through the whole ODE and *moves the measurement times* to break the tie. Watch
-> the uncertainty ellipse collapse. Measured, on this model: the antibody parameter gets two
-> hundred and fifty-nine times more identifiable."
+> VO: "But two biomarkers and eight visits is a luxury. A real amyloid trial measures one
+> thing — a PET scan — baseline and end. Strip back to that, and the confound *moves* — onto
+> the pair that decides whether the drug even works: the antibody binding and clearing plaque,
+> versus microglia clearing it on their own. Both just make the number fall, so
+> baseline-and-end can't tell them apart — their correlation is basically one. NUDGE
+> differentiates the information criterion through the whole ODE and slides the *same number of
+> scans* into the antibody's dosing window, where only binding leaves a fingerprint. Watch the
+> ellipse collapse. Measured, on this model: the antibody parameter gets two hundred and
+> fifty-nine times more identifiable."
 
-*On screen:* the confounded (k_on, k_gl) scatter with a huge diagonal 95% ellipse; a
-**corr ≈ 1.000** label. Then the **ellipse-collapse GIF** plays: sample times slide off the
-baseline/end cluster into the dosing transient while the ellipse shrinks to a tight blob.
-End card: **"CRLB ×259 · corr 1.000 → cond 22."** Money-shot #2.
+*On screen:* the **EXPERIMENT card visibly collapses** — from Design A to **"DESIGN B — plaque /
+PET only · baseline + end"** (one biomarker icon × two dots); this shrink *is* the transition,
+so the confound change reads as caused by it. Then the confounded (k_on, k_gl) scatter with a
+huge diagonal 95% ellipse + a **corr ≈ 1.000** label. The **ellipse-collapse GIF** plays: sample
+times slide off the baseline/end cluster into the dosing transient while the ellipse shrinks to a
+tight blob. End card: **"CRLB ×259 · corr 1.000 → cond 22."** Money-shot #2.
 **Lower-third:** *"`oed` MCP tool on `ad_qsp`. Local OED at θ₀ — measured, not extrapolated
 (NUDGE-LIM-024)."*
 
@@ -291,7 +322,7 @@ the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, w
 
 | # | Shot | Source / how to capture | Hold |
 |---|---|---|---|
-| M1 | **Dense-Jacobian OOM vs. matrix-free flat**, split screen with live memory meters | `uv run python scripts/demo_matrix_free_scale.py` (dense worker runs under the `systemd` 2.5 GB cap → real OOM-kill; matrix-free flat ~0.57 GB, same verdict). Screen-record both workers; overlay memory meters. | animate through |
+| M1 | **Dense-Jacobian OOM vs. matrix-free flat**, split screen with live memory meters | The dense worker runs under the `systemd` 2.5 GB cap → real OOM-kill; matrix-free flat ~0.57 GB, same verdict. Screen-record both workers; overlay memory meters. **Source must be the genuinely *coupled* NLME population** (`ad_qsp_nlme`, pending the hierarchical-model build) so the dense OOM is honest, not a block-decomposable strawman; `scripts/demo_matrix_free_scale.py` is the provisional stand-in until then. | animate through |
 | M2 | **95%-confidence-ellipse collapse GIF** (k_on, k_gl) | `uv run python scripts/demo_gradient_oed.py` writes the GIF (`nudge.viz.oed` animator); *or* the `oed` MCP tool on `ad_qsp` returns it inline (the ×259 figure). | play full GIF |
 | M3 | **`fig.py` + `fig.data.json` inline → pixel-identical replay** | The `render_figure` / `oed` MCP tool under `NUDGE_ENV=cloud` returns `image_base64` + `code` + `data`; run the emitted `fig.py` in a fresh shell to reproduce. | ≤6 s |
 
@@ -310,6 +341,11 @@ the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, w
 - **Git-log scroll** — `git log` showing `Co-Authored-By: Claude Opus 4.8` trailers.
 - **Hardening-loop diagram** — red-team → uq-fixer → audit; the P7 record
   (`NUDGE-LIM-025`, `CHANGELOG` 0.3.0 Fixed; `design/FAILSAFE_REDTEAM*.md`).
+- **EXPERIMENT card (the two-design anchor)** — a small persistent top-corner card showing the
+  current measurement design as icons: **Design A** = 2 biomarkers (plaque + oligomer) × 8 visit
+  dots (Cap 1); it **visibly collapses** to **Design B** = 1 biomarker (plaque/PET) × 2 dots
+  (baseline+end) at the Cap 1→2 seam. This shrink is the transition device that makes the moving
+  confound read as caused by the design — built in edit (simple motion graphic), not a repo asset.
 - **Persistent lower-thirds:** the `NUDGE-LIM-026` caveat (whenever the AD model shows) and
   the `NUDGE-LIM-024` local-OED caveat (over Capability 2).
 
@@ -321,8 +357,9 @@ the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, w
 | on PyPI | **`nudge-bio` 0.3.0** | `CHANGELOG.md`; `docs/user_guide/claude_science.md` |
 | dense build dies | **dense jacfwd OOM-killed at n_free ≥ 1000, 2.5 GB cap** | `scripts/demo_matrix_free_scale.py`; STATE.md "AD QSP" |
 | NUDGE stays flat | **~0.57 GB (1.01×), same `unidentifiable` verdict** | same |
-| sloppiest knobs named | **plaque-growth gain `k_pg` / threshold `K_pg`** (single-subject sloppy-but-predictive, cond ≈ 7e8, span 8.8 decades) | `scripts/demo_matrix_free_scale.py`; `NUDGE-LIM-026` |
-| the two params are confounded | **corr(k_on, k_gl) ≈ 1.000** under a naive baseline+end schedule | `scripts/demo_gradient_oed.py`; STATE.md |
+| Design A confound named (Cap 1) | **microglial clearance ⇄ activation `k_gl` ⇄ `k_ga`** confounded; **`k_on` well-identified** — on the 2-biomarker / 8-visit cohort | `scripts/demo_ab/` cohort analysis; `ad_qsp_forward.py` docstring |
+| single-subject sloppy knobs (scale demo aside) | **plaque-growth gain `k_pg` / threshold `K_pg`** (cond ≈ 7e8, span 8.8 decades) | `scripts/demo_matrix_free_scale.py`; `NUDGE-LIM-026` |
+| Design B confound (Cap 2) | **corr(k_on, k_gl) ≈ 1.000** under a naive baseline+end PET-only schedule | `scripts/demo_gradient_oed.py`; `make_ad_oed_problem`; STATE.md |
 | identifiability gain | **CRLB ×259, corr 1.000 → cond 22** (`oed` MCP tool on `ad_qsp`) | `CHANGELOG.md` 0.3.0; STATE.md ("ad_qsp ×259 CRLB") |
 | provenance replay | **inline `fig.py` + `fig.data.json`, pixel-identical** | `nudge.viz` provenance; `docs/user_guide/claude_science.md` |
 | self-red-team found + closed a confident-wrong | **P7 → `NUDGE-LIM-025`, independent audit PASS** | `CHANGELOG.md` 0.3.0 Fixed; `scripts/vv/FINDINGS.md` §P7 |
@@ -332,6 +369,16 @@ the CTA card: **`pip install nudge-bio` · Built with Claude: Life Sciences**, w
 > (the on-camera Claude-Science path) measures **×259 CRLB / corr 1.000→cond 22**. The VO
 > uses ×259 because that is the asset shown. Either is honest; keep the number matched to
 > the footage on screen.
+
+> Note on the two designs (Cap 1 vs Cap 2): the confounded pair **is not the same** across the
+> two beats, and that is deliberate — it is a property of the *measurement design*, not a slip.
+> **Design A** (Cap 1: plaque + oligomer, 8 visits) leaves the microglial pair `k_gl ⇄ k_ga`
+> confounded while `k_on` is recoverable; **Design B** (Cap 2: PET-only, baseline+end) confounds
+> `k_on ⇄ k_gl`. The on-screen EXPERIMENT card must change between the beats so the moving
+> confound reads as *caused by* the shrinking design. Do **not** intercut the two designs as one
+> cohort, and do **not** state `k_on` is confounded in Cap 1 (it isn't there). Guard: M1's dense
+> OOM must be the coupled `ad_qsp_nlme` population — a block-decomposable cohort does not honestly
+> OOM (a competent agent decomposes it; measured in a dry run).
 
 ---
 

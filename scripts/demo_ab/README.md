@@ -29,7 +29,11 @@ baseline+end measurement schedule, is **guessing**. NUDGE refuses to.
   overfit.
 - *With NUDGE:* `identifiability(model="ad_qsp", n_free=…)` runs the matrix-free Fisher
   diagnostic and **abstains** (`unidentifiable` by shape) or reports `sloppy-but-predictive`
-  with the named sloppy directions — the honest verdict (`NUDGE-LIM-023`).
+  with the named sloppy directions — the honest verdict (`NUDGE-LIM-023`). On this 2-biomarker
+  cohort the dominant sloppy direction is the **microglial** clearance ⇄ activation pair
+  (`k_gl` ⇄ `k_ga`), with antibody binding `k_on` *well*-identified — a confound structure that
+  is a property of the design and **shifts** to `k_on` ⇄ `k_gl` under the sparser
+  single-biomarker schedule in (B). NUDGE reports the one you actually have.
 
 **(B) "Design the best schedule to pin the antibody's effect."**
 - *Without NUDGE:* the intuitive schedule is baseline + end-of-study amyloid-PET. But the
