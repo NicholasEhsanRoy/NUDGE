@@ -34,6 +34,7 @@ _ANIMATORS: dict[str, str] = {
     "oed": "nudge.viz.oed",
     "robustness": "nudge.viz.robustness",
     "aggregation": "nudge.viz.aggregation",
+    "temporal": "nudge.viz.temporal",
 }
 
 

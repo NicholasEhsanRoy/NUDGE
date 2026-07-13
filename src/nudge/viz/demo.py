@@ -41,7 +41,7 @@ def is_measured_demo(kind: str) -> bool:
 
 #: Kinds whose ANIMATION needs an enriched demo (a frame sequence the static dict lacks) —
 #: a sweep / trajectory / gauge orbit computed in the analysis layer, then only DRAWN by viz.
-_ANIMATION_ENRICHED = frozenset({"oed", "robustness", "aggregation"})
+_ANIMATION_ENRICHED = frozenset({"oed", "robustness", "aggregation", "temporal"})
 
 
 def demo_result(kind: str, *, variant: str = "resolved", animate: bool = False) -> Any:
@@ -109,6 +109,10 @@ def _animation_enriched_demo(kind: str) -> Any:
         from nudge.service import fibrillization_animation_demo
 
         return fibrillization_animation_demo()
+    if kind == "temporal":
+        from nudge.service import temporal_animation_demo
+
+        return temporal_animation_demo()
     raise ValueError(f"no animation-enriched demo for kind {kind!r}")  # pragma: no cover
 
 

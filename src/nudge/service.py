@@ -1808,6 +1808,58 @@ def lotka_demo(
     }
 
 
+def temporal_animation_demo(
+    *, mechanism: str = "susceptibility", n_species: int = 3, n_replicates: int = 40,
+    steps: int = 250, n_sim: int = 30, seed: int = 0,
+) -> dict[str, Any]:
+    """Temporal / gLV demo enriched for the ANIMATION: the community integrating under the
+    antibiotic pulse, perturbed vs reference DIVERGING (``NUDGE-METHOD-012``).
+
+    Simulates a reference vs perturbed gLV community, returns the per-timepoint mean
+    trajectories + the pulse window + the honest attribution verdict, and the animator
+    (viz/temporal.py) sweeps a time cursor so the perturbed community visibly diverges from
+    the reference as the drug pulse hits (susceptibility → the identifiable positive). Only
+    READS the simulated trajectories + the fit's verdict; near-equilibrium growth is the
+    degenerate α⇄βᵢᵢ case NUDGE abstains on (``NUDGE-LIM-020``).
+    """
+    import numpy as np
+
+    from nudge.inference.lotka_volterra import attribute_glv, simulate_glv_perturbseq
+
+    ds = simulate_glv_perturbseq(
+        n_species=n_species, n_replicates=n_replicates, mechanism=mechanism,
+        dense_transient=True, seed=seed,
+    )
+    res = attribute_glv(ds, steps=steps, n_sim=n_sim, seed=seed)
+    ref = np.asarray(ds.reference, dtype=float).mean(axis=0)   # (T, S)
+    pert = np.asarray(ds.perturbed, dtype=float).mean(axis=0)  # (T, S)
+    t = np.asarray(ds.t_obs, dtype=float)
+    gt = dict(ds.ground_truth)
+    pulse = gt.get("pulse_window", (float("nan"), float("nan")))
+    target = int(gt.get("target", 0))
+
+    return {
+        "kind": "temporal",
+        "label": "gLV community under an antibiotic pulse",
+        "call": res.call,
+        "reason": res.reason,
+        "selected_knob": res.fit.selected,
+        "identifiability": {
+            "cond_number": _jsonsafe(res.fit.cond_number),
+            "degenerate": bool(res.fit.degenerate),
+        },
+        "animation": {
+            "t": [float(v) for v in t],
+            "reference": [[float(v) for v in row] for row in ref],
+            "perturbed": [[float(v) for v in row] for row in pert],
+            "pulse_window": [float(pulse[0]), float(pulse[1])],
+            "target": target,
+            "species_labels": [f"taxon {i}" + (" (target)" if i == target else "")
+                               for i in range(ref.shape[1])],
+        },
+    }
+
+
 def lotka_file(
     path: str, *, target: int | None = None, steps: int = 300, n_sim: int = 30, seed: int = 0
 ) -> dict[str, Any]:
