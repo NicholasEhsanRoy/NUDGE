@@ -8,25 +8,25 @@ confident-wrong; document residual bounds loudly. See `README.md` for the protoc
 ## ▶ RESUME POINTER
 
 *(Mirror of the `NEXT →` block in the highest-numbered `runs/` record — currently
-`runs/000000026-orchestrator-final-gate.md`. That immutable record is the source of truth;
+`runs/000000028-uq-fixer-P7.md`. That immutable record is the source of truth;
 this is a convenience copy. See `README.md` → "The resume pointer & the queue".)*
 
-**Status: LOOP COMPLETE — release candidate pushed.** Both moat-cycle holes CLOSED + BOUNDED +
-merged: **P5** (gate-4d free-affine earn guard; audit PASS `runs/000000020`; merge `480468c`);
-**P6** (`dense_below=2048` deferral + inverse-iteration null probe; audit PASS `runs/000000023`;
-merge `3cd1f41` + honesty correction `ed3c381`). The re-scan STOP gate (`runs/000000025`) returned
-**HOLES_FOUND: 0** after a genuine full sweep. Final gate (`runs/000000026`): static + fast lane
-FULLY GREEN (310 passed); all 3 changed modules' slow suites green (differential 29p/1xf, sloppiness
-21p/1xf, service 2p) → no slow-lane regression possible; the full slow lane has a documented
-box-specific SIGSEGV-under-accumulation limit + 2 pre-existing/environmental failures in UNTOUCHED
-modules (neither a confident-wrong).
+**Status: LOOP RE-OPENED — NEW hole P7 fixed, awaiting audit.** The STOP gate
+(`runs/000000025`, HOLES_FOUND: 0) was re-opened by a NEW confident-wrong: **P7** — the
+multi-operating-point covariance breaker `attribute_lyapunov_multi` (M3) resolved a
+threshold-DOMINATED large-gain perturbation (Hill n 4→1.5) to a confident-wrong `threshold`
+(NLL gap ≈1.7 ≫ 0.03, 2/2 seeds), because the perturbed condition slides through the fold so
+the 2nd operating point never breaks gain⇄threshold and the existing near-fold guards
+(`NUDGE-LIM-017`) inspect only the WT/control side. Fixed by the uq-fixer (`runs/000000028`):
+a MEASURED **identifiability gate** on the joint-fit Laplace posterior + graceful monostable
+degradation (`NUDGE-LIM-025`). CLOSED (0 confident-wrong) / BOUNDED (over-abstains a genuinely-
+degenerate large-gain case).
 
-- **Next:** a human reviews + merges the PR → `main` ("hardening: post-moat red-team loop → release
-  candidate"); that merge unblocks the `nudge-bio 0.1.0` PyPI release. `main` UNTOUCHED throughout.
-- No further agent dispatch unless a NEW confident-wrong hole is later reported (re-opens the loop).
-- **HELD this sweep (recorded as fail-safe wins):** OED structural-null (`min_eig` honest
-  `0.0→0.0`), OED guarded ridge (over-cautious absolute CRLB), OED demo (no merge regression),
-  and all four round-3 fixes (P1/P2/P3/P4) — no merge-induced regression.
+- **Next:** `nudge-audit` independently re-verifies the P7 fix (commit on branch
+  `fix/lyapunov-multi-uq-gate`); iff PASS → orchestrator verifies + merges → red-team re-scan →
+  STOP at HOLES_FOUND: 0. `main` UNTOUCHED.
+- **Prior status (still true for P1–P6):** all merged + closed; the earlier STOP gate + moat
+  fixes stand. P7 is additive in `inference/lyapunov.py` and does not touch them.
 - **Recorded future candidate** (P4 audit, out-of-scope): a pre-existing gain⇄ceiling-
   *reduction* mis-attribution degeneracy in `differential`, unaffected by P4 — a possible
   later red-team target, not yet a queued hole.
@@ -37,10 +37,7 @@ modules (neither a confident-wrong).
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
-*(no OPEN or IN-PROGRESS rows — **P5 and P6 are both CLOSED + merged**; see "Closed problems"
-below. The queue is EMPTY. The loop is at the STOP gate: a `nudge-red-team` re-scan must return
-`HOLES_FOUND: 0` after a genuine full sweep — covering the P5+P6 regression AND the two moat
-surfaces left UNREACHED by `runs/000000018` — before the loop STOPS.)*
+| **P7** | `lyapunov` (`attribute_lyapunov_multi`) | LIM-025 | the M3 gain-vs-threshold breaker resolves a threshold-DOMINATED large-gain perturbation (Hill n 4→1.5) to a confident-wrong `threshold` (NLL gap ≈1.7 ≫ 0.03); the perturbed condition slides through the fold so the 2nd operating point never breaks the degeneracy, and the near-fold guards inspect only the WT/control side | `scripts/redteam/lyapunov_multi_gain_threshold_hole.py` | **FIXED (fixer `runs/000000028`); awaiting audit** |
 
 | id | capability | LIM | summary | repro | status |
 |----|-----------|-----|---------|-------|--------|
@@ -100,6 +97,8 @@ last; never edit a past row):
 | 000000024 | `runs/000000024-orchestrator-P6-merge.md` | orchestrator | P6 merge | independently re-measured probe RQ (~1e-12…1e-10, confirming ~1e-19 non-reproducing) + merged → `3cd1f41` (clean ort) + honesty correction `ed3c381`; P6 CLOSED/BOUNDED; queue now EMPTY |
 | 000000025 | `runs/000000025-redteam-rescan-STOP.md` | redteam | post-fix re-scan (STOP gate) | **HOLES_FOUND: 0** → **STOP** — genuine full sweep; both UNREACHED moat surfaces HELD (`adjoint.ode_identifiability` null ODEs abstain 0/12 at f32+f64; OED 144-config + last-iterate + ridge-masking 0 confident-wrong), P5/P6 + prior fixes no regression; orchestrator re-ran both guards (exit 0); report `FAILSAFE_REDTEAM_7.md`; commit `54204e0` |
 | 000000026 | `runs/000000026-orchestrator-final-gate.md` | orchestrator | final release gate + push + PR | **LOOP COMPLETE** — static + fast lane FULLY GREEN (310p/5s/2xf); all 3 changed modules' slow suites green (differential 29p/1xf, sloppiness 21p/1xf, service 2p) ⇒ no slow-lane regression possible; full slow lane has a box-specific SIGSEGV-under-accumulation limit + 2 pre-existing/environmental failures in untouched modules (neither confident-wrong), documented honestly; pushed + opened PR → main; `main` untouched |
+| 000000027 | `runs/000000027-redteam-P7.md` | redteam | P7 finding (LIM-025) | **RE-OPENS the loop** — NEW confident-wrong: `attribute_lyapunov_multi` resolves a threshold-dominated large-gain perturbation (n 4→1.5) to `threshold` (gap ≈1.7, 2/2 seeds); perturbed condition slides through the fold; repro `scripts/redteam/lyapunov_multi_gain_threshold_hole.py` |
+| 000000028 | `runs/000000028-uq-fixer-P7.md` | uq-fixer | P7 (LIM-025) | fix claim: MEASURED identifiability gate on the joint-fit Laplace posterior (abstain if a runner-up mechanism is identifiable + displaced > `_CONTAM_MARGIN`=0.5 log-units; genuine ≤0.12 vs hole ≈1.0) + graceful monostable degradation; CLOSED (0 confident-wrong) / BOUNDED (over-abstains a genuinely-degenerate large-gain case); commit `d4db2b0` |
 
 ---
 

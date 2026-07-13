@@ -13,6 +13,25 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Fixed
 
+- **Fail-safe red-team P7: the multi-operating-point breaker
+  (`attribute_lyapunov_multi`) resolved a threshold-DOMINATED large-gain perturbation to a
+  CONFIDENT WRONG `threshold` (`NUDGE-LIM-025`).** A true gain knockdown (Hill n 4→1.5) whose
+  perturbed condition slides through the saddle-node fold (monostable at one operating point,
+  at the fold at the other) is threshold-dominated in the LNA moments, so the second operating
+  point never breaks the gain⇄threshold degeneracy — yet the pure NLL-gap resolution (guarded
+  only on the WT/control side, `NUDGE-LIM-017`) resolved `threshold` with a gap ≈1.7 ≫ 0.03
+  (2/2 seeds; `scripts/redteam/lyapunov_multi_gain_threshold_hole.py`). Fixed (additive in
+  `inference/lyapunov.py`; frozen `fit.py`/`core/` untouched) by a MEASURED **identifiability
+  gate**: after a bare mechanism resolves, NUDGE fits the joint (winner, runner-up)
+  two-mechanism model and reads its Laplace posterior (`uncertainty.laplace_posterior`),
+  abstaining if a runner-up is identifiable and displaced from its no-change value beyond
+  `_CONTAM_MARGIN=0.5` log-units (measured separator: genuine resolutions ≤0.12 vs the hole
+  ≈1.0). Plus a graceful "bistability lost" degradation — a monostable operating point returns
+  `("unresolved", {})` instead of a `ValueError`. **CLOSED** (n=1.5 → `unresolved`, 0
+  confident-wrong; K=2.0 still resolves `threshold`; n=2.4 still abstains); residual **BOUND**
+  (locked strict-xfail): a genuinely-degenerate large-gain perturbation can only be abstained,
+  never positively resolved to `gain`. Regression-locked by
+  `tests/inference/test_lyapunov_multi_uq_gate.py`; FINDINGS §P7.
 ## [0.2.0] — 2026-07-13
 
 ### Added

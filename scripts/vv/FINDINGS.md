@@ -2163,3 +2163,79 @@ improvement, all three objectives, the gLV generalization). `nudge oed` CLI +
 Real-data lock-in (a longitudinal series with a real design choice) deferred as a later
 `needs_data` gate — the differentiable criterion + the synthetic round-trip are the
 deliverable.
+
+## §P7 — the multi-point breaker resolves a threshold-DOMINATED large-gain perturbation to a CONFIDENT WRONG 'threshold'; an identifiability gate on the joint-fit curvature (`NUDGE-LIM-025`)
+
+**The hole (red-team, verified through the shipped API).** `attribute_lyapunov_multi` (M3, the
+gain-vs-threshold breaker) fits ONE shared kinetic value jointly across ≥2 operating points and
+resolves the mechanism whose joint NLL wins by `resolve_margin=0.03`. It has near-fold proximity
+down-weighting + best-buffered-pair corroboration (`NUDGE-LIM-017`) — but those inspect the
+**WT/control** circuit at each operating point. On a mutual-repression toggle (`SCALE=20`,
+`OBS_SD=0.5`, LNA-mixture ground truth, two operating points `bB ∈ {0.05, 0.30}`, 3000 cells each;
+`scripts/redteam/lyapunov_multi_gain_threshold_hole.py`):
+
+| perturbation | truth | shipped verdict (before fix) | gap | 
+|---|---|---|---|
+| **gain n=1.5** | gain | **`threshold`** — CONFIDENT WRONG | **≈1.70 ≫ 0.03** (2/2 seeds) |
+| threshold K=2.0 | threshold | `threshold` (correct) | ≈0.6 |
+| gain n=2.4 | gain | `unresolved` (gain is argmin, gap ≈0.005 < 0.03 → safe abstain) | ≈0.005 |
+
+**Root cause (MEASURED — the fork resolved).** At n=1.5 the perturbation is large enough that the
+perturbed condition is threshold-DOMINATED in the LNA moments (flattening the Hill curve shifts the
+effective EC50, so a ΔK explains the dominant shift). Crucially the perturbed circuit **slides
+through the fold**: at `bB=0.30` it is **monostable** (`bifurcation_proximity` → None), at `bB=0.05`
+it sits **at the fold** (prox ≈ 0.539, just under `NEAR_FOLD`=0.55). So the "second operating point"
+carries no independent gain-vs-threshold information — the degeneracy is NOT broken — yet the pure
+NLL-gap test resolves `threshold` with a large gap. (K=2.0's perturbed circuit is *also* monostable
+at both operating points yet resolves correctly, so "perturbed monostable" ALONE does not separate
+the confident-wrong from the genuine — the discriminator has to be the joint-fit identifiability.)
+
+**The naive curvature hypothesis was FALSIFIED, then corrected.** The joint (Δn, ΔK) Laplace
+condition number is INVERTED from the intuition "degenerate ⇒ abstain": the CORRECT K=2.0 case has a
+DEGENERATE joint fit (cond ≈ 1000–1300, gain unidentifiable — a free nuisance the data ignores), while
+the WRONG n=1.5 case has a WELL-CONDITIONED joint fit (cond ≈ 7, both knobs identifiable). So the raw
+condition number is the wrong statistic. The RIGHT, measured discriminator (STATE.md gotcha #4 — *does
+the extra parameter earn its keep*): after resolving winner X, fit the joint (X, runner-up Y)
+two-mechanism model and read whether the runner-up Y is **identifiable AND displaced** from its
+no-change value in the Laplace posterior (`uncertainty.laplace_posterior`, the same machinery the
+single-operating-point call abstains with). Contamination `= |log Y* − log Y_nom|` if Y identifiable,
+else 0; maxed over the runner-ups.
+
+**Measured separator (fixed-root joint fit, `laplace_posterior`, ≥2 seeds each):**
+
+| case | truth | shipped resolves | runner-up | CONTAMINATION |
+|---|---|---|---|---|
+| threshold K=2.0 | threshold | threshold ✓ | ceiling (gain unident → 0) | **0.095** |
+| ceiling vmax=1.5 | ceiling | ceiling ✓ | gain | **0.114 / 0.116** |
+| **gain n=1.5** | gain | threshold ✗ | gain (n* ≈ 1.4, nominal 4) | **1.042 / 1.013** |
+
+Genuine single-mechanism resolutions leave every runner-up a free nuisance (unidentifiable → 0) or
+barely displaced (≤ 0.12); the confident-wrong forces the runner-up gain ≈ 1.0 log-units off nominal
+(the data demonstrably needs a gain change too). The cut **`_CONTAM_MARGIN = 0.5`** sits centred in
+the measured gap (≤ 0.12 vs ≈ 1.0) with ~0.4-log margin on each side — a MEASURED separator, not a
+guessed constant.
+
+**The fix (additive, `inference/lyapunov.py`; frozen `fit.py`/`core/` untouched).**
+1. **Identifiability gate** — after the breaker resolves a bare mechanism X, `_resolution_contamination`
+   fits the joint (X, Y) model for each runner-up Y (`_fixed_root_multi_loss` + `_fit_fixed_root`),
+   reads `laplace_posterior`, and if any Y is identifiable and displaced beyond `_CONTAM_MARGIN`,
+   NUDGE **abstains** (`unresolved`) regardless of the NLL gap. An unreadable curvature ⇒ abstain
+   (fail-safe).
+2. **Graceful monostable degradation** — an operating point whose circuit is monostable
+   (`bifurcation_proximity` → None / < 2 stable modes) now returns `('unresolved', {})` with a
+   "bistability lost" reason instead of raising `ValueError` deep in the k_modes fit; the joint-fit
+   calls are also wrapped so a mid-fit drift to monostability abstains, not crashes.
+
+**Re-validation (shipped `attribute_lyapunov_multi`, `scripts/redteam/lyapunov_multi_gain_threshold_hole.py`,
+2 seeds): HOLES: 0.** n=1.5 → `unresolved` (2/2, the confident-wrong is closed); K=2.0 → `threshold`
+(positive control, no over-abstention); n=2.4 → `unresolved` (unchanged); a monostable operating point
+→ `('unresolved', {})` gracefully (no exception).
+
+**Status: CLOSED (0 confident-wrong) with an honest residual BOUND.** A large-gain perturbation whose
+perturbed condition is genuinely threshold-DOMINATED and has slid through the fold is **fundamentally
+non-separable from a threshold shift with these two operating points** — NUDGE now ABSTAINS on it
+(the honest outcome) rather than emitting a false-precise `threshold`. Recovering a *positive* gain
+call there would need a better-buffered operating point (one where the perturbed condition stays
+well inside bistability). This over-abstention on a genuinely-degenerate large-gain case is the
+fail-safe residual (locked as a strict-xfail decoy), not a confident-wrong. Guarded by
+`tests/inference/test_lyapunov_multi_uq_gate.py`; `NUDGE-LIM-025`.
