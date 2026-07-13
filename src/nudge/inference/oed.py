@@ -78,6 +78,9 @@ __all__ = [
     "neg_log_crlb",
     "crlb",
     "min_eigenvalue",
+    "ridge_floor",
+    "is_rank_deficient",
+    "target_ridge_dominated",
     "criterion_value",
     "design_gradient",
     "optimize_design",
@@ -262,6 +265,59 @@ def min_eigenvalue(fim: np.ndarray) -> float:
     return float(np.linalg.eigvalsh(np.asarray(fim, dtype=np.float64))[0])
 
 
+def ridge_floor(fim: np.ndarray, *, ridge: float = 1e-8) -> float:
+    """The **relative-ridge information floor** ``ridge · trace(fim)/p`` that :func:`crlb`
+    (and the ridge-guarded criteria) add to keep a near-singular FIM invertible.
+
+    This is the load-bearing measured reference for honesty: a design's CRLB is a genuine
+    *data-driven* bound only when the FIM's smallest eigenvalue sits **above** this floor.
+    When ``min_eig(fim) ≲ ridge_floor``, the reported variance is dominated by the Tikhonov
+    ridge — a numerical artifact, not information in the data — so the design is effectively
+    rank-deficient in the flat direction and its finite CRLB must NOT be sold as a measured
+    identifiability. ``ridge`` defaults to :func:`crlb`'s reporting ridge (``1e-8``) so the
+    floor matches the one baked into the reported ``crlb_init``."""
+    fim = np.asarray(fim, dtype=np.float64)
+    p = fim.shape[0]
+    scale = max(float(np.trace(fim)) / p, 1e-30)
+    return float(ridge) * scale
+
+
+def is_rank_deficient(fim: np.ndarray, *, ridge: float = 1e-8) -> bool:
+    """True when the FIM's smallest eigenvalue is **at or below its own ridge floor** — the
+    design is effectively rank-deficient and its guarded CRLB is a ridge artifact, not a
+    data-driven bound.
+
+    A **curvature-grounded** test (the smallest eigenvalue vs the ridge floor at the FIM's
+    own scale), NOT a magic constant: both sides scale with ``trace(fim)``, so the comparison
+    is dimensionless and unit-free. On NUDGE's own designs the two regimes are separated by
+    >12 orders of magnitude (the singular ``[0, 12]`` ad_qsp baseline sits ~1e-8·floor; the
+    informative 8-point default sits ~3e4·floor), so the ``min_eig ≤ floor`` boundary is not
+    delicate."""
+    return min_eigenvalue(fim) <= ridge_floor(fim, ridge=ridge)
+
+
+def target_ridge_dominated(
+    fim: np.ndarray, index: int, *, ridge: float = 1e-8
+) -> tuple[bool, float]:
+    """Threshold-free identifiability check for **one** target parameter: is its guarded CRLB
+    a ridge artifact rather than genuine data information?
+
+    Measured, threshold-free: the ridge-guarded target variance ``var(r) = [inv(fim+r·s·I)]ᵢᵢ``
+    scales ~**inversely** with the ridge ``r`` when the target direction is in the (near-)null
+    space (variance ≈ halves when the ridge doubles → ``var(r)/var(2r) → 2``), but is
+    ridge-**insensitive** when the data actually identify the parameter (ratio → 1). Returns
+    ``(dominated, ratio)`` with ``dominated`` = ``ratio > 1.5`` — the midpoint between the two
+    limits (1 = data-identified, 2 = pure ridge artifact). On NUDGE's designs the ratio is
+    ``2.0000`` for the singular baseline and ``1.0000`` for the informative default, so the
+    1.5 separator is well away from either regime. This checks the **target direction
+    specifically**, catching a target that is unidentifiable even where the whole FIM is not
+    rank-deficient."""
+    v1 = float(crlb(fim, ridge=ridge)[index])
+    v2 = float(crlb(fim, ridge=2.0 * ridge)[index])
+    ratio = (v1 / v2) if v2 > 0 else float("inf")
+    return (ratio > 1.5), ratio
+
+
 def _criterion_fn(
     objective: str, target_index: int, ridge: float
 ) -> Callable[[Array], Array]:
@@ -362,6 +418,28 @@ class OEDResult:
     #: measurement times slide into the transient + the confidence ellipse collapse). Empty
     #: by default so the normal path pays nothing.
     phi_history: np.ndarray = field(default_factory=lambda: np.empty((0, 0)))
+    # --- rank-deficiency honesty (``NUDGE-LIM-029``) ----------------------------------- #
+    #: the ridge floor ``1e-8·trace(fim_init)/p`` — the smallest eigenvalue must sit ABOVE
+    #: this for the naive CRLB to be genuine data information rather than a Tikhonov artifact.
+    ridge_floor_init: float = 0.0
+    #: True when the naive baseline FIM is effectively **rank-deficient** (smallest eigenvalue
+    #: at/below :attr:`ridge_floor_init`): its guarded CRLB is a ridge artifact, so the true
+    #: smallest eigenvalue is ≈0 and ``min_eig_improvement`` is only a LOWER BOUND.
+    naive_rank_deficient: bool = False
+    #: True when the naive baseline actually **identifies the target parameter** (its guarded
+    #: CRLB is ridge-insensitive — genuine data information). False → the naive target CRLB is
+    #: a ridge artifact, the true CRLB is unbounded, and ``crlb_improvement`` is a LOWER BOUND.
+    naive_target_identifiable: bool = True
+    #: ``crlb_improvement`` is not a finitely-quantified factor — it is a LOWER BOUND on an
+    #: unbounded true improvement (the naive design does not identify the target).
+    crlb_improvement_is_lower_bound: bool = False
+    #: ``min_eig_improvement`` is a LOWER BOUND (the naive baseline is rank-deficient, true
+    #: smallest eigenvalue ≈ 0 → the true lift is unbounded).
+    min_eig_improvement_is_lower_bound: bool = False
+    #: plain-language honesty note; empty unless the naive baseline is rank-deficient / the
+    #: target is unidentifiable, in which case it states that the finite-factor claim is
+    #: withheld and why (the audit reads this alongside the boolean flags).
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -453,6 +531,35 @@ def optimize_design(
     tci, tco = float(crlb_init[idx]), float(crlb_opt[idx])
     me_i, me_o = min_eigenvalue(fim_init), min_eigenvalue(fim_opt)
 
+    # --- rank-deficiency honesty (NUDGE-LIM-029) ------------------------------------- #
+    # A naive baseline whose smallest eigenvalue sits AT/BELOW its own ridge floor does not
+    # carry data information in the flat direction — its guarded CRLB is a Tikhonov artifact,
+    # so the true CRLB is unbounded and any finite improvement factor is only a LOWER BOUND.
+    # This is measured (min-eig vs the ridge floor at the FIM's own scale; and a threshold-
+    # free ridge-doubling test on the TARGET direction), never a hard-coded constant.
+    floor_init = ridge_floor(fim_init)
+    rank_deficient = me_i <= floor_init
+    target_dominated, _tratio = target_ridge_dominated(fim_init, idx)
+    target_identifiable = not (rank_deficient or target_dominated)
+    opt_identifies = min_eigenvalue(fim_opt) > ridge_floor(fim_opt)
+    note = ""
+    if not target_identifiable:
+        tgt_label = problem.param_names[idx]
+        opt_clause = (
+            f"the optimized design makes it identifiable (smallest eigenvalue "
+            f"{me_o:.3g} > its ridge floor {ridge_floor(fim_opt):.2g})"
+            if opt_identifies else
+            "the optimized design does not escape the degeneracy from this start "
+            "(try a non-degenerate seed schedule that samples the transient)"
+        )
+        note = (
+            f"the naive design does not identify {tgt_label}: rank-deficient FIM "
+            f"(smallest eigenvalue {me_i:.2e} at/below the ridge floor {floor_init:.2e}), "
+            f"so its finite CRLB is a ridge artifact and the true CRLB is unbounded. "
+            f"{opt_clause}, but the improvement factor CANNOT be finitely quantified from "
+            f"the data alone — crlb_improvement / min_eig_improvement are LOWER BOUNDS."
+        )
+
     return OEDResult(
         objective=objective,
         target_name=problem.param_names[idx],
@@ -474,6 +581,12 @@ def optimize_design(
         history=history,
         n_steps=steps,
         phi_history=phi_history,
+        ridge_floor_init=floor_init,
+        naive_rank_deficient=rank_deficient,
+        naive_target_identifiable=target_identifiable,
+        crlb_improvement_is_lower_bound=not target_identifiable,
+        min_eig_improvement_is_lower_bound=rank_deficient,
+        note=note,
     )
 
 
