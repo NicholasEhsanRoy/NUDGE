@@ -123,6 +123,9 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 [tool.ruff.lint.per-file-ignores]
 # V&V analysis scripts (incl. nested): throwaway compute + plotting, not library code.
 "scripts/vv/**" = ["E501", "B905", "B007", "E402", "E702", "E731", "E741", "I001"]
+# Auto-generated from the CC0 Proctor 2013 SBML (scripts/vv/gen_proctor2013.py): the 112
+# transcribed rate laws are long, and species that appear in no rate law are unused locals.
+"src/nudge/mechanisms/_proctor2013.py" = ["E501", "F841"]
 
 [tool.pyright]
 include = ["src"]

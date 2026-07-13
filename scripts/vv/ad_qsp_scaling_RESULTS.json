@@ -1,0 +1,276 @@
+{
+  "model": "Proctor 2013 AD amyloid-\u03b2 QSP (BIOMD0000000488, CC0) \u2014 A\u03b2 subsystem, synthetic cohort",
+  "n_subjects": 250,
+  "n_obs_times": 2,
+  "sweep": [
+    400,
+    700,
+    1000,
+    1500,
+    2000
+  ],
+  "dense_cap_gb": 2.5,
+  "rows": [
+    {
+      "method": "dense",
+      "n_free": 400,
+      "n_subjects": 250,
+      "n_obs": 500,
+      "n_states": 1500,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 3.0227418069989653,
+      "peak_rss_mb": 1861.33203125
+    },
+    {
+      "method": "matrixfree",
+      "n_free": 400,
+      "n_subjects": 250,
+      "n_obs": 500,
+      "n_states": 1500,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 6.6371170450001955,
+      "peak_rss_mb": 569.8046875
+    },
+    {
+      "method": "dense",
+      "n_free": 700,
+      "n_subjects": 250,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_free": 700,
+      "n_subjects": 250,
+      "n_obs": 500,
+      "n_states": 1500,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 3.6284881139999925,
+      "peak_rss_mb": 568.3203125
+    },
+    {
+      "method": "dense",
+      "n_free": 1000,
+      "n_subjects": 250,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_free": 1000,
+      "n_subjects": 250,
+      "n_obs": 500,
+      "n_states": 1500,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 3.989676667000822,
+      "peak_rss_mb": 570.578125
+    },
+    {
+      "method": "dense",
+      "n_free": 1500,
+      "n_subjects": 250,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_free": 1500,
+      "n_subjects": 250,
+      "n_obs": 500,
+      "n_states": 1500,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 3.979499131999546,
+      "peak_rss_mb": 572.62109375
+    },
+    {
+      "method": "dense",
+      "n_free": 2000,
+      "n_subjects": 250,
+      "status": "oom",
+      "label": null,
+      "wall_s": NaN,
+      "peak_rss_mb": NaN,
+      "stderr_tail": []
+    },
+    {
+      "method": "matrixfree",
+      "n_free": 2000,
+      "n_subjects": 250,
+      "n_obs": 500,
+      "n_states": 1500,
+      "status": "ok",
+      "label": "unidentifiable",
+      "wall_s": 4.221802394000406,
+      "peak_rss_mb": 570.953125
+    }
+  ],
+  "summary": [
+    {
+      "n_free": 400,
+      "dense": {
+        "method": "dense",
+        "n_free": 400,
+        "n_subjects": 250,
+        "n_obs": 500,
+        "n_states": 1500,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 3.0227418069989653,
+        "peak_rss_mb": 1861.33203125
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_free": 400,
+        "n_subjects": 250,
+        "n_obs": 500,
+        "n_states": 1500,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 6.6371170450001955,
+        "peak_rss_mb": 569.8046875
+      }
+    },
+    {
+      "n_free": 700,
+      "dense": {
+        "method": "dense",
+        "n_free": 700,
+        "n_subjects": 250,
+        "status": "oom",
+        "label": null,
+        "wall_s": NaN,
+        "peak_rss_mb": NaN,
+        "stderr_tail": []
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_free": 700,
+        "n_subjects": 250,
+        "n_obs": 500,
+        "n_states": 1500,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 3.6284881139999925,
+        "peak_rss_mb": 568.3203125
+      }
+    },
+    {
+      "n_free": 1000,
+      "dense": {
+        "method": "dense",
+        "n_free": 1000,
+        "n_subjects": 250,
+        "status": "oom",
+        "label": null,
+        "wall_s": NaN,
+        "peak_rss_mb": NaN,
+        "stderr_tail": []
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_free": 1000,
+        "n_subjects": 250,
+        "n_obs": 500,
+        "n_states": 1500,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 3.989676667000822,
+        "peak_rss_mb": 570.578125
+      }
+    },
+    {
+      "n_free": 1500,
+      "dense": {
+        "method": "dense",
+        "n_free": 1500,
+        "n_subjects": 250,
+        "status": "oom",
+        "label": null,
+        "wall_s": NaN,
+        "peak_rss_mb": NaN,
+        "stderr_tail": []
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_free": 1500,
+        "n_subjects": 250,
+        "n_obs": 500,
+        "n_states": 1500,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 3.979499131999546,
+        "peak_rss_mb": 572.62109375
+      }
+    },
+    {
+      "n_free": 2000,
+      "dense": {
+        "method": "dense",
+        "n_free": 2000,
+        "n_subjects": 250,
+        "status": "oom",
+        "label": null,
+        "wall_s": NaN,
+        "peak_rss_mb": NaN,
+        "stderr_tail": []
+      },
+      "matrixfree": {
+        "method": "matrixfree",
+        "n_free": 2000,
+        "n_subjects": 250,
+        "n_obs": 500,
+        "n_states": 1500,
+        "status": "ok",
+        "label": "unidentifiable",
+        "wall_s": 4.221802394000406,
+        "peak_rss_mb": 570.953125
+      }
+    }
+  ],
+  "mismatches": [],
+  "dense_ok_max_nfree": 400,
+  "dense_oom_min_nfree": 700,
+  "mf_rss_flatness": 1.0075675304144616,
+  "sloppy_flagging": {
+    "label": "sloppy-but-predictive",
+    "cond_number": 691835277.3640004,
+    "spectral_span_decades": 8.840002703347473,
+    "smallest_eigenvalue": 1.333289835667856e-05,
+    "n_sloppy_dims": 6,
+    "n_null_dims": 0,
+    "sloppiest_directions": [
+      {
+        "eigenvalue": 1.3332898356253132e-05,
+        "loadings": {
+          "k_pg": 0.805,
+          "K_pg": 0.443,
+          "k_dis": -0.3
+        }
+      },
+      {
+        "eigenvalue": 0.0006625016343092676,
+        "loadings": {
+          "d_M": -0.678,
+          "k_dis": 0.507,
+          "k_pg": 0.326
+        }
+      }
+    ],
+    "reason": "SLOPPY but PREDICTIVE: the Fisher spectrum spans 8.8 decades (cond 6.92e+08) \u2014 individual parameters are poorly constrained \u2014 yet the prediction is tight (max relative prediction std 1.54% < 5%) and there is NO structural null. The model is usable: do not abstain, and do not naively Fisher-optimize the sloppy directions."
+  },
+  "verdict": "MATRIX-FREE FLAT + SCALES PAST DENSE OOM"
+}

@@ -2239,3 +2239,101 @@ call there would need a better-buffered operating point (one where the perturbed
 well inside bistability). This over-abstention on a genuinely-degenerate large-gain case is the
 fail-safe residual (locked as a strict-xfail decoy), not a confident-wrong. Guarded by
 `tests/inference/test_lyapunov_multi_uq_gate.py`; `NUDGE-LIM-025`.
+
+---
+
+# AD amyloid-β QSP clinical demo — matrix-free population identifiability + gradient OED (a REAL published model, synthetic cohort)
+
+The flagship real-model clinical demo: point NUDGE's white-box machinery — matrix-free
+population identifiability (`NUDGE-LIM-023`) and gradient-based OED (`NUDGE-METHOD-014`) — at a
+**real, published, open** Alzheimer's-disease amyloid-β QSP model, calibrated against a
+**synthetic ground-truth cohort** (no gated patient data). Model + demo in
+`nudge.mechanisms.ad_qsp`; scripts `scripts/demo_matrix_free_scale.py` (Action 2) and
+`scripts/demo_gradient_oed.py` (Action 3); honesty bounds `NUDGE-LIM-026` (synthetic cohort +
+demo-scaled constants) on top of `NUDGE-LIM-023`/`NUDGE-LIM-024`.
+
+**The model (real, CC0, cited).** Proctor CJ, Boche D, Gray DA, Nicoll JAR, "Investigating
+interventions in Alzheimer's disease with computer simulation models," PLoS ONE 2013;
+8(9):e73631 (PMID 24098635; DOI 10.1371/journal.pone.0073631); BioModels `BIOMD0000000488`,
+CC0 public domain. The **full** 64-state network (Aβ + tau + p53/Mdm2 + ubiquitin–proteasome +
+microglia) is transcribed **faithfully and in full** from the CC0 SBML into
+`nudge.mechanisms._proctor2013` by an offline MathML→JAX generator
+(`scripts/vv/gen_proctor2013.py`): **64 dynamic states, 73 kinetic parameters, 112 reactions**,
+verified to parse and evaluate a finite vector field at the published initial state. The
+model + reproduction were verified by a deep-research subagent that downloaded and machine-
+parsed the SBML (GO; CC0 confirmed; Geerts 2023 assessed CONDITIONAL-GO and deferred).
+
+**The honest bound (`NUDGE-LIM-026`, measured).** The published parameterization is a
+stochastic / stiff seconds-to-years system (rate constants span `kpf=0.2` → `kaggAbeta=3e-6`,
+~7e4 stiffness ratio; originally integrated with Gillespie/LSODA). An **explicit** fixed-step
+RK4 (NUDGE's differentiable `lax.scan`; no diffrax/implicit solver) **cannot** integrate it
+over disease timescales — MEASURED: it diverges to the abundance clip within days for any
+physiological monomer pool, at every dt tried down to 6 s. So the differentiable demo keeps the
+published reaction **topology + rate-law forms** (the autocatalytic Hill plaque-growth switch
+`kpg·O·P²/(K_pg²+P²)` = gain `kpg` / threshold `kpghalf`; the monomer→oligomer→plaque cascade;
+antibody PK/PD; microglial clearance) with **non-dimensionalized, demo-scaled constants** so
+the cascade is a **bounded, sensible amyloid→plaque sigmoid** (verified: plaque plateaus at
+~1.66; a 6-unit antibody dose lowers plaque **~89%**). The identifiability *structure* (which
+constants are sloppy, which pairs are confounded) is a property of the preserved rate-law
+forms; the magnitudes are for the demo-scaled model + **synthetic** cohort, never a patient or
+the published constants.
+
+## Action 2 — matrix-free stays flat where dense jacfwd OOMs (population-scale calibration)
+
+The dimensionality is sourced honestly from **population-scale calibration**: each of `N`
+synthetic subjects carries its own copy of the 12 kinetic parameters (nonlinear mixed effects),
+so the free-parameter count is `N × 12`. At **fixed** cohort (all subjects always simulated →
+fixed integrated state) we sweep how many subject-specific parameters are jointly estimated
+(`n_free`). MEASURED (`scripts/demo_matrix_free_scale.py`, N=250 subjects → state 1500, 2
+plaque timepoints/subject → n_obs=500, 2.5 GB systemd `MemoryMax` cap):
+
+| `n_free` | dense (jacfwd) | matrix-free |
+|---|---|---|
+| 400  | 4.89 s / **1861 MB** (ok) | 6.95 s / 569 MB |
+| 1000 | **OOM** (>2.5 GB) | 4.01 s / 573 MB |
+| 2000 | **OOM** | 4.25 s / 572 MB |
+
+Dense `jacfwd` succeeds at `n_free=400` (1.86 GB, near the cap) and is **OOM-killed at
+`n_free≥1000`** (the tangent fan-out ∝ `n_free · n_steps · state`); the matrix-free FIM matvec
+stays **flat at ~0.57 GB (1.01× across the sweep)**, fast (~4–7 s), and returns the **same**
+verdict where dense succeeds. With more subject-specific parameters than biomarker observations
+the population problem is genuinely **rank-deficient** → verdict `unidentifiable` — the
+`NUDGE-LIM-023` fail-safe: NUDGE certifies unidentifiability cheaply (by shape) rather than
+asserting an identifiability it cannot verify. **0 label mismatches.**
+
+**Sloppy-parameter flagging (single-subject identifiability, named + measured).** A single
+subject (12 params, 2 biomarkers × 8 timepoints, dense-exact) is **`sloppy-but-predictive`**
+(cond ≈ **6.9e8**, spectral span **8.8 decades**, smallest eig ≈ 1.3e-5) — a wide Fisher
+spectrum but usable, never a bare confident verdict. The **sloppiest** direction is dominated by
+the **autocatalytic plaque-growth gain `k_pg` (+0.81), threshold `K_pg` (+0.44), and oligomer
+disaggregation `k_dis` (−0.30)**; the next by monomer clearance `d_M` (−0.68). So the biomarker
+panel cannot pin the plaque-growth switch's gain/threshold from these observations — a named,
+measured, mechanistically-meaningful degeneracy (exactly the K-vs-n identifiability question
+NUDGE is built around, now on an amyloid model).
+
+## Action 3 — gradient OED resolves a genuine antibody confound (measured 220× CRLB)
+
+Two mechanistically distinct parameters are **confounded** by a realistic sparse clinical
+schedule: the antibody–Aβ **binding affinity `k_on`** vs the microglial **clearance rate
+`k_gl`** — both lower amyloid burden. MEASURED (`scripts/demo_gradient_oed.py`; plaque =
+amyloid-PET; antibody dosed on the normalized window [2, 8]):
+
+- **NAIVE schedule** (plaque at baseline + end of study, 6 points): `corr(k_on, k_gl) = +1.000`
+  (perfectly confounded), FIM cond ≈ **8.5e3**, smallest eig ≈ 0.06.
+- **Gradient-OED-optimised** (D-optimality ascended over the measurement times): `corr` → 0.94,
+  cond → **32.9**, smallest eig → 12.4.
+- **Measured gains** (local OED at θ₀, `NUDGE-LIM-024`): **CRLB(`k_on`) improves ×220.1**
+  (9.96 → 0.045), **FIM smallest-eigenvalue lifts ×204.6**, cond drops 8480 → 33.
+
+The gradient discovers *why*: `k_on` acts only while the antibody is present, `k_gl` acts
+throughout, so sampling the **antibody-dosing transient** (not the naive baseline/end cluster)
+breaks the tie. The **95%-confidence-ellipse collapse** animation (the `oed` animator,
+`nudge.viz.oed`) renders the measurement times sliding into the transient while the `(k_on,
+k_gl)` ellipse shrinks: `tmp/ad_qsp_oed/ad_qsp_oed_ellipse_collapse.gif` (gitignored scratch).
+
+**0 confident-wrong.** The identifiability diagnostic returns `sloppy-but-predictive` /
+`unidentifiable` (never a bare confident verdict); OED is a design recommendation reporting a
+*measured* gain at θ₀, never an attribution call. Every headline number is a property of the
+demo-scaled model + **synthetic** cohort (`NUDGE-LIM-026`), never a patient finding. Tests:
+`tests/mechanisms/test_ad_qsp.py` (6 fast + 1 slow). Results:
+`scripts/vv/ad_qsp_scaling_RESULTS.json`, `scripts/vv/ad_qsp_oed_RESULTS.json`.
