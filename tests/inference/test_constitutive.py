@@ -115,8 +115,12 @@ def test_linear_circuit_lim006_hazard_abstains_not_confident_wrong() -> None:
     assert res.call == "unresolved"
     assert res.call != "biological-switch"
     assert not res.is_confident_wrong
-    # The profile minimum sits at the no-switch end (n=1) — the honest signal there is none.
-    assert res.argmin_n_with_control == pytest.approx(1.0)
+    # The profile minimum sits at the NO-SWITCH end of the grid (the two lowest points,
+    # n in {1.0, 1.5}) — the honest signal there is none. We assert the end, not the exact
+    # grid index: the profile is near-flat at the low end for a linear circuit, so the
+    # argmin drifts one grid step (1.0 <-> 1.5) with optimizer/platform numerics. The
+    # load-bearing guarantee — unresolved, never a confident switch — is asserted above.
+    assert res.argmin_n_with_control <= 1.5
 
 
 @pytest.mark.verification
