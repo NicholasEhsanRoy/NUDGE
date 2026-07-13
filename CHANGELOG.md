@@ -13,10 +13,24 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
 
 ### Fixed
 
+## [0.4.1] — 2026-07-13
+
+### Fixed
+
+- **`oed` no longer emits a false-precise improvement factor on a rank-deficient naive design**
+  (`NUDGE-LIM-029`). When the naive baseline's Fisher information is singular in the target
+  direction (smallest eigenvalue at the guarded-ridge floor — e.g. a literal baseline+end
+  `[0, 12]` plaque schedule, where plaque ≈ 0 at t=0 zeroes both sensitivities), the true CRLB is
+  infinite, so any finite `crlb_improvement` was a Tikhonov-ridge artifact (~10⁷). The tool now
+  flags `naive_rank_deficient` / `naive_target_identifiable=False` and reports the improvement as
+  a LOWER BOUND — the honest abstention a competent analyst otherwise makes by hand. The finite
+  gain on informative designs is unchanged: the default `ad_qsp` schedule still reports
+  `crlb_improvement ≈ 259` byte-for-byte (the guard is a curvature-grounded ridge-floor test, not
+  a magic threshold, so it does not over-abstain).
 - Removed the redundant PyPI-version badge from `PYPI_README.md`: it permanently lagged one
-  release on the PyPI project page (PyPI snapshots the proxied shields image at upload, before
-  its own index reflects the just-published version), so it always showed the *previous* version.
-  PyPI's page header already shows the true version; the GitHub `README.md` keeps the live badge.
+  release on the PyPI project page (PyPI snapshots the proxied shields image at upload, before its
+  own index reflects the just-published version). PyPI's header already shows the true version;
+  the GitHub `README.md` keeps the live badge.
 
 ## [0.4.0] — 2026-07-13
 
