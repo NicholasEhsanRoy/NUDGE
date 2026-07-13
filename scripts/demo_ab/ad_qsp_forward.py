@@ -17,11 +17,19 @@ best measurement schedule — then compare its answer to NUDGE's honest one.
   topology + rate-law forms with non-dimensionalized constants (``NUDGE-LIM-026``). The
   identifiability *structure* (which constants are sloppy; which pairs are confounded) is a
   property of the preserved rate-law forms.
-- **The A/B point (``NUDGE-LIM-026``, and why NUDGE matters):** a single sparse biomarker
-  schedule under-determines these kinetics — the population calibration is rank-deficient and
-  the antibody-binding ⇄ microglial-clearance pair is confounded by a naive baseline+end
-  schedule. A bare least-squares fit returns confident-but-unidentifiable numbers; NUDGE
-  measures the Fisher geometry and abstains / prescribes the resolving experiment.
+- **The A/B point (``NUDGE-LIM-026``, and why NUDGE matters):** a sparse biomarker schedule
+  under-determines these kinetics — the population calibration is rank-deficient, so a bare
+  least-squares fit returns confident-but-unidentifiable numbers. *Which* combination is
+  unrecoverable is a property of the **design**, and NUDGE measures it rather than guessing.
+  On THIS cohort (plaque **+** soluble oligomer at 8 visits) the confounded pair is the two
+  **microglial** rates — clearance ``k_gl`` ⇄ activation ``k_ga`` (the data pin the net
+  plaque-clearance flux ``k_gl·G·Pl``, not the split between them) — while antibody binding
+  ``k_on`` is in fact *well*-identified (the oligomer readout + the dosing transient pin it).
+  Under a sparser **single-biomarker** design (amyloid-PET / plaque only, baseline+end) — the
+  one :func:`nudge.mechanisms.ad_qsp.make_ad_oed_problem` and the ``oed`` tool analyse — the
+  confound instead falls on antibody-binding ``k_on`` ⇄ microglial-clearance ``k_gl``. NUDGE
+  measures the Fisher geometry for the design you actually have and abstains / prescribes the
+  resolving experiment.
 
 Run ``python make_dataset.py`` to (re)generate ``cohort.npz`` / ``cohort.csv`` from this model.
 """
