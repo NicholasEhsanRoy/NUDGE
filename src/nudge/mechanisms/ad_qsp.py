@@ -373,7 +373,7 @@ def generate_ad_cohort(
 # --------------------------------------------------------------------------- #
 # the OED problem: two confounded parameters + the measurement schedule
 # --------------------------------------------------------------------------- #
-def _observe_at(traj: Array, grid_t: Array, phi: Array, biom: Array) -> Array:
+def _observe_at(traj: Array, grid_t: Array, phi: Array, biom: Array | np.ndarray) -> Array:
     """Interpolate a fine trajectory at continuous times ``phi`` and log the biomarkers."""
     cols = [jnp.interp(phi, grid_t, traj[:, int(s)]) for s in np.asarray(biom)]
     obs = jnp.stack(cols, axis=1)  # (m, n_biom)
@@ -422,7 +422,7 @@ def make_ad_oed_problem(
         u_grid = jnp.asarray(u_np, theta.dtype)
         x0 = jnp.asarray(x0_np, theta.dtype)
         traj = _rk4_full(p, x0, grid_t[:-1], u_grid, dt)
-        return _observe_at(traj, grid_t, phi, jnp.asarray(biom_np))
+        return _observe_at(traj, grid_t, phi, biom_np)
 
     theta0 = np.array([np.log(base[i0]), np.log(base[i1])], dtype=np.float64)
     tgt_name = f"log_{target}"
