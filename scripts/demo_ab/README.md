@@ -22,6 +22,22 @@ baseline+end measurement schedule, is **guessing**. NUDGE refuses to.
 | `ad_qsp_nlme_forward.py` | The **coupled hierarchical / NLME** version — subjects share population hyperparameters (`μ`, `φ`), so the joint FIM is a genuine **arrowhead** (not block-diagonal). **No `nudge` import.** Includes a finite-difference Jacobian (the only route a NumPy model has). |
 | `make_nlme_dataset.py` | Regenerates the coupled cohort from the NLME model. |
 | `cohort_nlme.npz` | The coupled cohort: `theta0` (joint `[μ | φ | r_i]` ground truth), `mu`/`phi` (shared border), `subject_multipliers`, `observations`, `border_size`. |
+| `ad_qsp_model.py` | The **differentiable JAX** version of the single-subject model + the population cohort, exposing the loader-convention builders `nudge_identifiability(...)` and `nudge_oed(...)` (plus a plain `forward(...)`). **No `nudge` import.** This is the file NUDGE ingests via `identifiability(model_path=…)` / `oed(model_path=…)` — the SAME file a raw agent autodiffs directly (`NUDGE-LIM-030`), reproducing the registered `ad_qsp` to machine precision. |
+| `ad_qsp_nlme_model.py` | The **differentiable JAX** coupled/arrowhead NLME cohort, exposing `nudge_identifiability(...)`. **No `nudge` import** (imports its sibling `ad_qsp_model` for the shared field/integrator). Ingested via `identifiability(model_path=…)`; reproduces the registered `ad_qsp_nlme` unidentifiable fail-safe to machine precision. |
+
+## Ingest a model into NUDGE (the symmetric A/B — `NUDGE-LIM-030`)
+
+The `*_model.py` files are the shared model both arms use. The raw agent reads them and
+autodiffs / finite-differences by hand; NUDGE ingests the *same* file:
+
+```
+identifiability(model_path="/abs/path/scripts/demo_ab/ad_qsp_model.py")   # → sloppy-but-predictive
+oed(model_path="/abs/path/scripts/demo_ab/ad_qsp_model.py")               # → ×259 CRLB lift
+identifiability(model_path="/abs/path/scripts/demo_ab/ad_qsp_nlme_model.py")  # → unidentifiable
+```
+
+**Security:** `model_path` / `model_code` execute arbitrary Python in the NUDGE process (like
+`python your_model.py`) — local, trusted-input only, not sandboxed (`NUDGE-LIM-030`).
 
 ## The COUPLED NLME arm (the non-strawman scale wall)
 

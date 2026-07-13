@@ -2468,3 +2468,50 @@ UNBOUNDED, so the reported factor is only a finite LOWER BOUND. This is a fail-s
 the finite-factor claim, never a confident-wrong. Guarded by `tests/mechanisms/test_ad_qsp.py`
 (rank-deficient flag + byte-for-byte default) and `tests/inference/test_oed.py` (curvature-helper
 unit + well-conditioned decoy).
+
+## Dynamic model ingestion — the `identifiability` / `oed` tools analyse a USER'S OWN model file, numerically IDENTICAL to the registered mirror (`NUDGE-LIM-030`)
+
+**What was built.** The general `identifiability` / `oed` MCP tools (`nudge.service.identifiability_tool`
+/ `.oed_tool`) now take a model from three sources — a registry `model` name (unchanged), a
+`model_path` (absolute path to a user Python file), or inline `model_code` — precedence
+`model_code` > `model_path` > `model`, exactly one required (ambiguous / absent → a clear error,
+never a guess). A user file needs **no `nudge` import**: it exposes `nudge_identifiability(n_free,
+seed, sigma) -> {predict_fn, theta0, param_names, sigma}` and/or `nudge_oed(target, sigma, seed) ->
+{observe, theta0, param_names, phi_bounds, sigma}`, wrapped by `nudge.inference.model_loader` into
+the same problem types the registry uses. This makes the with-vs-without-NUDGE A/B symmetric: the
+raw agent reads `scripts/demo_ab/ad_qsp_model.py` directly; NUDGE ingests the same file.
+
+**Security (the limitation, `NUDGE-LIM-030`).** `model_path` / `model_code` EXECUTE arbitrary user
+Python in-process (module body + builder call), exactly like `python your_model.py`. Local,
+trusted-input convenience; NOT sandboxed, NOT safe for untrusted / multi-tenant use. The
+registry-name path executes no user code and is the safe default.
+
+**MEASURED parity — path-loaded == registry, to machine precision** (through the shipped
+`identifiability_tool` / `oed_tool`, the exact path the MCP tools call):
+
+| check | registry (`model=`) | dynamic (`model_path=`) | match |
+|---|---|---|---|
+| `ad_qsp` identifiability verdict | `sloppy-but-predictive` | `sloppy-but-predictive` | label parity |
+| `ad_qsp` smallest FIM eigenvalue | `1.333289792042631e-05` | `1.333289792042631e-05` | **bit-identical** |
+| `ad_qsp` largest FIM eigenvalue | `10139.989101390947` | `10139.989101390947` | **bit-identical** |
+| `ad_qsp` FIM condition number | `760524018.2523447` | `760524018.2523447` | **bit-identical** |
+| `ad_qsp` OED `crlb_improvement` | `259.4437892475365` | `259.4437892475365` | **bit-identical** |
+| `ad_qsp` OED `min_eig_improvement` | (identical) | (identical) | **bit-identical** |
+| `ad_qsp_nlme` identifiability verdict | `unidentifiable` | `unidentifiable` | label parity |
+| `ad_qsp_nlme` smallest FIM eigenvalue | `0.0` | `0.0` | **bit-identical** |
+
+The `theta0` vectors match to 0.0 max-abs-diff (the cohort draws are the same seeded
+`np.random.default_rng`), and the standalone JAX forward math is copied verbatim from
+`nudge.mechanisms.ad_qsp`, so the FIM matvec is bit-identical. (The tool runs the OED optimize
+loop in the ambient precision, float32 — hence `259.44`; the same computation under x64 is the
+`259.42` of §P8. Both paths share that precision, so they agree exactly either way.)
+
+**Guard + regression preserved.** `oed(model_path=ad_qsp_model.py)` reproduces
+`naive_rank_deficient=False` on the ×259 default, and with `naive=[0, 12]` the `NUDGE-LIM-029`
+rank-deficiency guard fires (`naive_rank_deficient=True`, `crlb_improvement_is_lower_bound=True`).
+`model_code=<ad_qsp source>` matches the registry eigenspectrum to ~1e-9. The registry-name path
+is unchanged (`test_identifiability_oed.py` + `test_ad_qsp.py` green; the ×259 default byte-for-byte
+preserved). Tests: `tests/inference/test_model_loader.py` (10 fast — load-from-code/path, sibling
+import, no `sys.modules` leak, missing-builder / malformed-return / bad-source errors),
+`tests/mcp/test_dynamic_model_ingestion.py` (5 fast source/tiny-model + 5 slow ad_qsp/nlme parity).
+Additive; frozen `fit.py` / `core/` untouched.
