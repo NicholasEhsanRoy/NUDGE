@@ -18,8 +18,8 @@ from typing import Any
 
 import numpy as np
 
-from nudge.viz._util import get, verdict_color
-from nudge.viz.base import Panel, RenderedFigure, is_abstention
+from nudge.viz._util import ease, get, verdict_color
+from nudge.viz.base import AnimationSpec, Panel, RenderedFigure, abstain_overlay, is_abstention
 from nudge.viz.layout import freest_corner
 from nudge.viz.theme import apply_theme
 
@@ -162,3 +162,69 @@ def build(obj: Any, *, theme: str = "auto") -> RenderedFigure:
     return RenderedFigure(
         fig=fig, panels=panels, kind="constitutive", caption=_caption(d), data=d
     )
+
+
+def _anim_caption(d: dict[str, Any]) -> str:
+    call = d["call"].upper()
+    if is_abstention(d["call"]):
+        return f"{d['label']} → {call} (control ON, still flat → can't tell)"
+    n1 = d.get("n1_rejection", float("nan"))
+    return (f"{d['label']} → {call} — WITH the constitutive control, "
+            f"n=1 is rejected (by {n1:.1f})")
+
+
+def build_animation(obj: Any, *, theme: str = "auto", frames: int = 28) -> AnimationSpec:
+    """Animate the constitutive-flip: the n-profile going FLAT → n=1 rejected as the control
+    switches ON (``NUDGE-METHOD-011`` / the ``NUDGE-LIM-006`` flip; design §5.2's flagship).
+
+    The WITHOUT-control profile is flat (any ``n`` fits — you can't even tell a switch
+    exists); as the control ramps on the WITH-control curve morphs in and ``n=1`` is
+    rejected. If the fit ABSTAINS the profile stays flat on every frame and the abstention
+    overlay is stamped per-frame off the result's OWN verdict — the control can turn on and
+    the picture still says "can't tell".
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+
+    pal = apply_theme(theme)
+    d = constitutive_data(obj)
+    color = verdict_color(d["call"], pal)
+    ng = np.asarray(d["n_grid"], dtype=float)
+    lno = _norm(np.asarray(d["loss_no_control"], dtype=float))
+    lwith = _norm(np.asarray(d["loss_with_control"], dtype=float))
+    abst = is_abstention(d["call"])
+    ymax = float(np.nanmax([lno.max() if len(lno) else 0.0,
+                            lwith.max() if len(lwith) else 1.0])) or 1.0
+
+    fig, ax = plt.subplots(figsize=(7.4, 4.8))
+    hold = max(frames // 4, 2)  # hold the final ("control ON") state at the end
+
+    def draw(i: int) -> None:
+        ax.clear()
+        t = ease(min(i, frames - hold) / max(frames - hold, 1))
+        cur = (1.0 - t) * lno + t * lwith  # morph the WITH-control curve as control ramps
+        ax.plot(ng, lno, color=pal["muted"], lw=2.0, marker="o", ms=4, zorder=3,
+                label="WITHOUT control (flat → can't tell)")
+        ax.plot(ng, cur, color=color, lw=2.6, marker="o", ms=4, zorder=4,
+                label="WITH control")
+        ax.axvline(1.0, ls=":", color=pal["text"], lw=1.2, zorder=2)
+        ax.annotate("n=1\n(no switch)", xy=(1.0, 0.0), xycoords=("data", "axes fraction"),
+                    xytext=(4, 6), textcoords="offset points", fontsize=7.5,
+                    color=pal["text"], ha="left", va="bottom")
+        ax.set_xlabel("circuit Hill n (hypothesis)")
+        ax.set_ylabel("profile loss  (Δ from min)")
+        ax.set_ylim(-0.03 * ymax, 1.15 * ymax)
+        state = "ON" if t > 0.5 else "OFF"
+        ax.set_title(f"constitutive control: {state}   —   does a switch exist?",
+                     fontweight="bold", color=pal["text"])
+        # Keep the legend out of the reserved top band (the abstain banner may live there).
+        ax.legend(loc=freest_corner(ax, avoid_top=True), fontsize=8, framealpha=0.9)
+        if abst:
+            # The fit abstains → the profile stays flat even with the control on; say so.
+            abstain_overlay(ax, d["call"], d.get("reason", ""), palette=pal)
+
+    anim = FuncAnimation(
+        fig, draw, frames=frames, interval=1000 // 8, blit=False,  # type: ignore[arg-type]
+    )
+    return AnimationSpec(fig=fig, anim=anim, caption=_anim_caption(d),
+                         abstained=abst, data=d)

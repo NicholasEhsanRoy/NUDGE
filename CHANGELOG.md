@@ -32,6 +32,80 @@ is the stability contract (see `docs/architecture/verification_vs_validation.md`
   (locked strict-xfail): a genuinely-degenerate large-gain perturbation can only be abstained,
   never positively resolved to `gain`. Regression-locked by
   `tests/inference/test_lyapunov_multi_uq_gate.py`; FINDINGS §P7.
+## [0.2.0] — 2026-07-13
+
+### Added
+
+- **MCP figure transport — inline base64 for the Claude Science reality
+  (`mcp render_figure` + `service.render_result` + `nudge.viz.inline`).** Live-testing against
+  the Claude Science connector proved that **file-path delivery is structurally impossible**
+  there (the shared dir is mounted read-only → `EROFS`; the connector's own temp is invisible
+  to the client) and that **MCP `resources/read` is not bridged** — so a figure can only come
+  back as **inline base64**. `render_figure` now honours a `NUDGE_ENV` toggle: `=cloud` →
+  inline (`image_base64` + `mime_type` + the regenerating `fig.py` `code` and the sidecar
+  `data` inline as text, the artifact-provenance grain); otherwise → write to
+  `NUDGE_ARTIFACT_DIR` (fallback tempdir) and return `image_path`/`code_path`/`data_path`
+  (`png_path` kept as a back-compat alias). **GIF size discipline** (`viz/inline.py`):
+  downscale + frame-limit + tight-palette re-encode with a **never-inflate guard** (keep the
+  compressed bytes only if smaller than the original), a ~1.5 MB base64 hard cap, and — above
+  the cap — a **static final-frame PNG preview** (with `image_base64_omitted_reason`), never a
+  silent truncation. Verified end-to-end through a local MCP client in both env modes (static
+  PNG 122,752 chars; the constitutive-flip GIF 343,180 chars, never inflated; a synthetic
+  13.6 MB GIF → PNG-preview fallback; an abstaining animation keeps `abstained=True` through
+  the transport). Frozen core (`fit.py`/`core/`) untouched.
+- **Async job pattern — the ~60 s connector-cap breaker (`mcp job_submit` / `job_status`).**
+  The Claude Science connector kills any single tool call over ~60 s, but a covariance
+  `attribute`, an OED optimization, or the `constitutive` demo (~64 s) legitimately exceeds
+  that. `job_submit(tool, args_json)` runs any NUDGE tool in a `ThreadPoolExecutor` and returns
+  a `{job_id}` in <1 s; `job_status(job_id)` polls → `running` (with `elapsed_s`) / `done`
+  (with the tool's real `result`) / `error`. JAX releases the GIL during XLA, so the worker
+  doesn't block the event loop, and each call stays well under the cap while the real compute
+  spans however long it takes. Reuses the real FastMCP dispatch (no impl duplication). Verified
+  with a local MCP client: a slow demo (~27 s) submits in 0.00 s, polls at ~1 ms/call, and
+  delivers the real result. The server also advertises a connector usage note via FastMCP
+  `instructions`. Heavy tools documented; fast tools (`list_mechanisms`, `dose_response`,
+  `explain_abstention`, `get_mechanism_card`, `diagnose_abstention`) stay synchronous.
+- **The animation battery — `nudge.viz.animate` generic `build_animation` dispatch.** The
+  animation engine grows from the single constitutive-flip GIF to a **battery of ten
+  animators**, each an additive `build_animation` in its own renderer module (mirroring the
+  static `build`) + an `_ANIMATORS` registry entry + a render + abstention-overlay-fires test,
+  each authored small (~24–28 frames, downscaled, tight palette) to ride the inline transport:
+  `constitutive` (the LIM-006 flip), `oed` (measurement times sliding into the transient + the
+  (α,β) 95% confidence ellipse collapsing over gradient steps — `optimize_design(...,
+  capture_phi=True)` captures the design φ per step), `robustness` (the dial climbing 0→1 + the
+  three channels rising + the 1-node potential well flattening two basins → one), `aggregation`
+  (the **gauge orbit** — the three microscopic constants swing while the mass-fraction curve +
+  the composites κ, λ stay identical, measured gauge Δ ≈ 1e-7; the sharpest honesty visual),
+  `temporal` (the gLV community diverging from its reference under the antibiotic pulse),
+  `multi_reporter` (SINGLE abstains → JOINT resolves as reporters are added), `identifiability`
+  (perturb along the sloppy vs the stiff eigenvector — predictions barely move vs swing),
+  `design` (the intervention trajectory to target + the safety dial flagging HIGH RISK at the
+  fold), and `dose_response` (the Hill curve traced as the dose sweeps; `cross_modality`
+  reuses it). Kinds with no natural frame variable (`differential` / `diagnose` /
+  `attribution` / `epistasis`) are deliberately NOT animated. Every animator stamps the
+  **abstention overlay per-frame off the result's own verdict** (a positive call is never
+  drawn where the fit abstained) and ships the `fig.py` + sidecar provenance so the GIF
+  replays with no re-fit. New enriched-demo helpers (`service.oed_animation_demo` /
+  `robustness_animation_demo` / `fibrillization_animation_demo` / `temporal_animation_demo`)
+  compute the sweep/orbit/trajectory frame sequences in the analysis layer; `viz` only READS
+  them. Additive / opt-in — `fit.py`/`core/` untouched.
+- **Claude Science connector guide — the inline-transport + job-pattern findings
+  (`docs/user_guide/claude_science.md`).** Documents the EROFS/inline-only reality, the
+  `/usr/bin/env NUDGE_ENV=cloud …` single-command-field trick, the `job_submit`/`job_status`
+  pattern for the ~60 s cap, an agent-notes checklist (figures arrive inline → decode + don't
+  echo the blob → attach the code/data provenance → wrap heavy calls), and matching
+  troubleshooting rows. `design/VISUALIZATION_DESIGN.md` refreshed (the animation battery +
+  the two-transport `render_result` schema).
+
+### Changed
+
+- **`service.render_result` return schema (0.2.0).** Now transport-aware: always
+  `{transport, kind, caption, abstained, mime_type, code, data}`; inline adds `image_base64`
+  (+ `image_base64_omitted_reason`, `compression_note`), path adds
+  `image_path`/`code_path`/`data_path` (+ the `png_path` back-compat alias). The CLI figure
+  paths pin `transport="path"` so local file output is unchanged.
+
+### Fixed
 
 ## [0.1.0] — 2026-07-12
 

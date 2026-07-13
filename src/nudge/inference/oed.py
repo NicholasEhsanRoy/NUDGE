@@ -357,6 +357,11 @@ class OEDResult:
     min_eig_improvement: float
     history: np.ndarray
     n_steps: int
+    #: (steps, m) design trajectory φ per gradient step — populated only when
+    #: ``optimize_design(..., capture_phi=True)`` (the OED animation reads it to show the
+    #: measurement times slide into the transient + the confidence ellipse collapse). Empty
+    #: by default so the normal path pays nothing.
+    phi_history: np.ndarray = field(default_factory=lambda: np.empty((0, 0)))
 
 
 @dataclass(frozen=True)
@@ -388,6 +393,7 @@ def optimize_design(
     learning_rate: float = 0.1,
     ridge: float = 1e-6,
     seed: int = 0,
+    capture_phi: bool = False,
 ) -> OEDResult:
     """Gradient-**ascend** the design ``φ`` to the optimum ``φ*`` (projected Adam).
 
@@ -428,9 +434,15 @@ def optimize_design(
         return p_new, st, val
 
     history = np.empty(steps, dtype=np.float64)
+    phi_history = (
+        np.empty((steps, int(phi0.shape[0])), dtype=np.float64)
+        if capture_phi else np.empty((0, 0))
+    )
     for i in range(steps):
         phi, state, val = step_fn(phi, state)
         history[i] = -float(val)  # store the (maximized) criterion
+        if capture_phi:
+            phi_history[i] = np.asarray(phi, dtype=np.float64)
 
     phi_init_np = np.asarray(phi0, dtype=np.float64)
     phi_opt_np = np.asarray(phi, dtype=np.float64)
@@ -461,6 +473,7 @@ def optimize_design(
         min_eig_improvement=float(me_o / me_i) if me_i > 0 else float("inf"),
         history=history,
         n_steps=steps,
+        phi_history=phi_history,
     )
 
 

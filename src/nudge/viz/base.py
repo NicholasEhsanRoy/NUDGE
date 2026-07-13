@@ -99,6 +99,26 @@ class RenderedFigure:
         return any(p.abstained for p in self.panels)
 
 
+@dataclass
+class AnimationSpec:
+    """The record an animator's ``build_animation`` returns — the animation battery contract.
+
+    Each animated ``kind`` exposes ``build_animation(result_or_data, *, theme, frames) ->
+    AnimationSpec`` in its own renderer module (mirroring the static ``build``), so
+    :func:`nudge.viz.animate.render_animation` is generic. ``anim`` is a live
+    ``FuncAnimation``; ``data`` is the FULL, serialisable frame-sequence spec written to the
+    sidecar so the standalone ``fig.py`` replays the animation exactly (no re-fit). The
+    load-bearing honesty is the same as the static path: ``abstained`` is stamped off the
+    result's OWN verdict, and the per-frame abstention overlay fires when it is True.
+    """
+
+    fig: Any
+    anim: Any
+    caption: str
+    abstained: bool
+    data: dict[str, Any] = field(default_factory=dict)
+
+
 def abstain_overlay(
     ax: Any,
     verdict: str,
