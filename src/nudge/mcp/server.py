@@ -802,7 +802,7 @@ def build_server() -> Any:
         if result_json:
             result: Any = _json.loads(result_json)
         elif demo:
-            result = demo_result(kind)
+            result = demo_result(kind, animate=animate)
         else:
             return {"error": "provide result_json (a saved result) or demo=True"}
 

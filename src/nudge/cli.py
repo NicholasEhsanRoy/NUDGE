@@ -1228,7 +1228,7 @@ def viz(
             result: Any = _json.load(fh)
         source = f"replay of {json_in}"
     elif demo:
-        result = demo_result(kind)
+        result = demo_result(kind, animate=animate)
         source = "measured synthetic demo" if is_measured_demo(kind) else "illustrative demo"
     else:
         _echo("give either --demo (a synthetic example) or --json FILE (a saved result).")

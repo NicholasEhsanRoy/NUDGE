@@ -31,6 +31,9 @@ from nudge.viz.base import AnimationSpec, FigureResult
 # epistasis) are deliberately NOT animated; cross_modality reuses the dose-response animation.
 _ANIMATORS: dict[str, str] = {
     "constitutive": "nudge.viz.constitutive",
+    "oed": "nudge.viz.oed",
+    "robustness": "nudge.viz.robustness",
+    "aggregation": "nudge.viz.aggregation",
 }
 
 

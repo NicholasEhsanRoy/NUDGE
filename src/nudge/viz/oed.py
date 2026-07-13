@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 
 from nudge.viz._util import get
-from nudge.viz.base import Panel, RenderedFigure
+from nudge.viz.base import AnimationSpec, Panel, RenderedFigure, abstain_overlay, is_abstention
 from nudge.viz.theme import apply_theme
 
 
@@ -120,3 +120,93 @@ def build(obj: Any, *, theme: str = "auto") -> RenderedFigure:
     return RenderedFigure(
         fig=fig, panels=panels, kind="oed", caption=_caption(d), data=d
     )
+
+
+def build_animation(obj: Any, *, theme: str = "auto", frames: int = 28) -> AnimationSpec:
+    """Animate the OED gradient: the measurement times slide from the naive near-equilibrium
+    design into the informative transient while the (α,β) 95% confidence ellipse COLLAPSES
+    (``NUDGE-METHOD-014``; the differentiability moat, in motion).
+
+    Reads the enriched ``animation`` block (``service.oed_animation_demo``: a checkpointed
+    design-φ trajectory + the per-step covariance ellipse) and draws it — it never re-runs
+    the optimiser. Left panel: the transient backdrop with the current measurement times.
+    Right panel: the parameter-uncertainty ellipse shrinking. Everything is MEASURED at θ₀
+    (local OED, ``NUDGE-LIM-024``).
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+    from matplotlib.patches import Ellipse
+
+    pal = apply_theme(theme)
+    d = oed_data(obj)
+    call = d.get("call", "")
+    abst = is_abstention(call)
+    anim_data = obj.get("animation", {}) if isinstance(obj, dict) else {}
+    cps = anim_data.get("frames", [])
+    if not cps:
+        raise ValueError("oed animation needs the enriched 'animation' block "
+                         "(use service.oed_animation_demo / demo_result('oed', animate=True))")
+
+    labels = anim_data.get("param_labels", ["θ₁", "θ₂"])
+    theta0 = anim_data.get("theta0", [0.0, 0.0])
+    tb = anim_data.get("t_bounds", [0.0, 1.0])
+    traj_t = np.asarray(anim_data.get("traj_t", []), dtype=float)
+    traj_x = np.asarray(anim_data.get("traj_x", []), dtype=float)
+    n_cp = len(cps)
+    w0 = float(cps[0]["ellipse"]["width"])
+    h0 = float(cps[0]["ellipse"]["height"])
+    span = 0.62 * max(w0, h0)
+
+    fig, (ax_t, ax_e) = plt.subplots(1, 2, figsize=(10.6, 4.4))
+    hold = max(frames // 5, 2)
+
+    def draw(i: int) -> None:
+        ci = min(int(round(min(i, frames - hold) / max(frames - hold, 1) * (n_cp - 1))),
+                 n_cp - 1)
+        fr = cps[ci]
+        # left — the transient the samples slide into
+        ax_t.clear()
+        if len(traj_t):
+            ax_t.plot(traj_t, traj_x, color=pal["muted"], lw=2.0, zorder=2,
+                      label="growth transient x(t)")
+        for x in fr["phi"]:
+            ax_t.axvline(x, color=pal["threshold"], lw=1.6, alpha=0.85, zorder=3)
+        ax_t.plot(fr["phi"], [traj_x.min() if len(traj_x) else 0.0] * len(fr["phi"]),
+                  "o", color=pal["threshold"], ms=7, zorder=4, label="measurement times")
+        ax_t.set_xlim(tb[0], tb[1])
+        ax_t.set_xlabel("time")
+        ax_t.set_ylabel("abundance x(t)")
+        ax_t.set_title("measurement schedule → the transient", fontweight="bold",
+                       color=pal["text"])
+        ax_t.legend(loc="lower right", fontsize=8, framealpha=0.9)
+        # right — the confidence ellipse collapsing
+        ax_e.clear()
+        ell = fr["ellipse"]
+        ax_e.add_patch(Ellipse((theta0[0], theta0[1]), float(ell["width"]),
+                               float(ell["height"]), angle=float(ell["angle"]),
+                               facecolor=pal["threshold"], alpha=0.28,
+                               edgecolor=pal["threshold"], lw=2.0, zorder=3))
+        ax_e.plot([theta0[0]], [theta0[1]], "+", color=pal["text"], ms=11, mew=2, zorder=4)
+        ax_e.set_xlim(theta0[0] - span, theta0[0] + span)
+        ax_e.set_ylim(theta0[1] - span, theta0[1] + span)
+        ax_e.set_xlabel(labels[0])
+        ax_e.set_ylabel(labels[1])
+        crlb = fr.get("target_crlb", float("nan"))
+        ax_e.set_title(f"95% confidence ellipse  (CRLB→{crlb:.2g})", fontweight="bold",
+                       color=pal["text"])
+        if abst:
+            abstain_overlay(ax_e, call, d.get("reason", ""), palette=pal)
+
+    imprv = d.get("crlb_improvement", float("nan"))
+    fig.suptitle(f"gradient OED — CRLB of {d['target_parameter']} ×{imprv:.2g} "
+                 "(MEASURED at θ₀)", fontweight="bold", color=pal["text"], fontsize=12)
+    fig.tight_layout()
+    anim = FuncAnimation(
+        fig, draw, frames=frames, interval=1000 // 8, blit=False,  # type: ignore[arg-type]
+    )
+    caption = (f"{d['label']} → measurement times slide into the transient; the (α,β) 95% "
+               f"ellipse collapses (CRLB ×{imprv:.2g}, MEASURED at θ₀; NUDGE-LIM-024)")
+    # the animation block rides in the sidecar so fig.py replays it with no re-fit
+    out = dict(d)
+    out["animation"] = anim_data
+    return AnimationSpec(fig=fig, anim=anim, caption=caption, abstained=abst, data=out)

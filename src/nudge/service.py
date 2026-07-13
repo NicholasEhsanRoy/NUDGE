@@ -1920,6 +1920,241 @@ def oed_demo(
     }
 
 
+def oed_animation_demo(
+    *, objective: str = "crlb", n_obs: int = 8, steps: int = 300, n_frames: int = 24,
+    learning_rate: float = 0.2, seed: int = 0,
+) -> dict[str, Any]:
+    """OED demo enriched for the ANIMATION: the design φ trajectory + the (α,β) 95%
+    confidence-ellipse collapse over the gradient steps.
+
+    Runs the logistic-growth OED (``optimize_design(..., capture_phi=True)``) and, for
+    ``n_frames`` checkpoints along the gradient trajectory, computes the measurement times
+    ``φ`` and the 2×2 parameter covariance ``FIM(φ)⁻¹`` → the 95%-confidence ellipse in
+    ``(log α, log|β|)`` space. The animator (viz/oed.py) then shows the naive
+    near-equilibrium samples sliding into the informative transient while the ellipse
+    collapses — the differentiability moat, in motion. Everything is MEASURED at θ₀ (local
+    OED, ``NUDGE-LIM-024``); this only READS the fit's output for drawing.
+    """
+    import numpy as np
+
+    from nudge.inference.oed import (
+        fisher_information,
+        make_logistic_design_problem,
+        optimize_design,
+    )
+
+    prob = make_logistic_design_problem()
+    lo, hi = prob.phi_bounds
+    naive = np.linspace(0.6 * hi, hi, n_obs)
+    res = optimize_design(
+        prob, naive, objective=objective, target="log_alpha", steps=steps,
+        learning_rate=learning_rate, seed=seed, capture_phi=True,
+    )
+
+    # χ²(2 dof, 95%) = 5.991 — the 95%-confidence ellipse scale for a 2-parameter covariance.
+    chi2_95 = 5.991
+    idx = np.unique(np.linspace(0, steps - 1, num=min(n_frames, steps)).round().astype(int))
+    frames: list[dict[str, Any]] = []
+    for i in idx:
+        phi = res.phi_history[int(i)]
+        fim = fisher_information(prob, phi)
+        p = fim.shape[0]
+        scale = max(float(np.trace(fim)) / p, 1e-30)
+        cov = np.linalg.inv(fim + 1e-8 * scale * np.eye(p))
+        evals, evecs = np.linalg.eigh(cov)
+        evals = np.clip(evals, 0.0, None)
+        width = float(2.0 * np.sqrt(chi2_95 * evals[1]))   # full major axis
+        height = float(2.0 * np.sqrt(chi2_95 * evals[0]))  # full minor axis
+        angle = float(np.degrees(np.arctan2(evecs[1, 1], evecs[0, 1])))
+        frames.append({
+            "step": int(i),
+            "phi": [float(x) for x in np.sort(phi)],
+            "ellipse": {"width": width, "height": height, "angle": angle},
+            "target_crlb": _jsonsafe(float(np.diag(cov)[res.target_index])),
+        })
+
+    # The transient backdrop (analytic logistic solution x(t)) the samples slide over.
+    meta = prob.meta
+    alpha, k_cap, x0 = float(meta["alpha"]), float(meta["K"]), float(meta["x0"])
+    tgrid = np.linspace(0.0, float(meta["t_max"]), 120)
+    xt = k_cap / (1.0 + (k_cap / x0 - 1.0) * np.exp(-alpha * tgrid))
+
+    return {
+        "kind": "oed",
+        "label": "logistic growth OED",
+        "model": "logistic",
+        "objective": objective,
+        "target_parameter": res.target_name,
+        "call": "",
+        "reason": "",
+        "crlb_improvement": _jsonsafe(res.crlb_improvement),
+        "min_eig_improvement": _jsonsafe(res.min_eig_improvement),
+        "animation": {
+            "param_labels": ["log α (growth)", "log |β| (self-limitation)"],
+            "theta0": [float(np.log(alpha)), float(np.log(-float(meta["beta"])))],
+            "t_bounds": [float(lo), float(hi)],
+            "traj_t": [float(x) for x in tgrid],
+            "traj_x": [float(x) for x in xt],
+            "frames": frames,
+        },
+        "caveat": (
+            "local OED: the optimal design + the ellipse collapse are MEASURED at θ₀, not "
+            "extrapolated (NUDGE-LIM-024)."
+        ),
+    }
+
+
+def robustness_animation_demo(
+    *, k: float = 1.0, vmax: float = 2.0, basal: float = 0.05,
+    n_hi: float = 6.0, n_lo: float = 1.5, n_frames: int = 24,
+) -> dict[str, Any]:
+    """Robustness demo enriched for the ANIMATION: a 1-node switch swept TOWARD its fold.
+
+    Sweeps the self-activation Hill ``n`` from robust (deep two-basin bistability) down
+    toward and past the saddle-node fold, and per frame returns the fused proximity dial +
+    the three channel proximities (all 0..1) + the honest ``call`` (``robust`` → ``near-fold``
+    → ``unresolved``/``not-bistable``) + the **potential well** ``U(x)`` (two basins → one).
+    The animator (viz/robustness.py) shows the dial climbing while the well flattens — the
+    tipping point, in motion. It only READS ``bifurcation_proximity`` / ``classify_robustness``
+    (no fit); near the fold the dial is a ONE-SIDED lower bound (``NUDGE-LIM-012``).
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    from nudge.inference.bifurcation import bifurcation_proximity, classify_robustness
+
+    # x-grid from the robust (n_hi) switch's high basin, so the well morph shares one axis.
+    hi_circ = _build_named_circuit("1node", n=n_hi, k=k, vmax=vmax, basal=basal)
+    hi_fps = hi_circ.fixed_points() or []
+    x_hi = max((float(s[0]) for s, _ in hi_fps), default=float(vmax))
+    x_max = max(1.25 * x_hi, 1.0)
+    xg = np.linspace(0.0, x_max, 160)
+
+    def potential(circ: Any) -> np.ndarray:
+        params = circ.base_params()
+        f = np.asarray(
+            jax.vmap(lambda x: circ.vector_field(jnp.array([x]), params)[0])(
+                jnp.asarray(xg)
+            ),
+            dtype=float,
+        )
+        # U(x) = -∫₀ˣ f  (trapezoid); wells at stable FPs, barrier at the saddle.
+        u = -np.concatenate([[0.0], np.cumsum(0.5 * (f[1:] + f[:-1]) * np.diff(xg))])
+        return u - float(np.min(u))
+
+    import jax
+
+    frames: list[dict[str, Any]] = []
+    u_max = 0.0
+    for nv in np.linspace(n_hi, n_lo, n_frames):
+        circ = _build_named_circuit("1node", n=float(nv), k=k, vmax=vmax, basal=basal)
+        score = bifurcation_proximity(circ)
+        call, reason = classify_robustness(score)
+        u = potential(circ)
+        u_max = max(u_max, float(np.max(u)))
+        fps = circ.fixed_points() or []
+        chan = (score.channels.get("channel_proximities", {}) if score else {})
+        frames.append({
+            "n": float(nv),
+            "U": [float(v) for v in u],
+            "proximity": _jsonsafe(score.proximity if score else float("nan")),
+            "one_sided": bool(score.one_sided) if score else False,
+            "channel_proximities": {k2: _jsonsafe(v) for k2, v in chan.items()},
+            "call": call,
+            "reason": reason,
+            "fixed_points": [[float(s[0]), lab] for s, lab in fps],
+        })
+
+    return {
+        "kind": "robustness",
+        "label": "1-node switch → the fold",
+        "call": frames[-1]["call"],
+        "reason": frames[-1]["reason"],
+        "proximity": frames[-1]["proximity"],
+        "one_sided": frames[-1]["one_sided"],
+        "channels": frames[-1]["channel_proximities"],
+        "animation": {
+            "x": [float(v) for v in xg],
+            "u_max": float(u_max) or 1.0,
+            "frames": frames,
+        },
+    }
+
+
+def fibrillization_animation_demo(*, n_frames: int = 28, seed: int = 0) -> dict[str, Any]:
+    """Aggregation demo enriched for the ANIMATION: the **gauge orbit** — the honesty visual.
+
+    A single amyloid aggregation curve is PROVABLY non-identifiable in the three microscopic
+    constants: the exact continuous gauge ``(k_n, k_+, k_2) → (k_n/α, α·k_+, k_2/α)`` leaves
+    the mass-fraction curve — and the two identifiable composites κ, λ — UNCHANGED. This
+    builds that orbit: a sinusoidal sweep of α so the three constants swing (a seamless loop)
+    while the curve and κ, λ stay put. It re-simulates a gauged triple to MEASURE the curve
+    invariance (``gauge_check`` = max|Δ mass-fraction| ≈ 0). No fit needed — the gauge is an
+    exact analytic symmetry (Meisl 2016 / Michaels 2020), so this is fast; the animator only
+    DRAWS it. Individual constants are NOT identifiable → the constants panel abstains
+    (``NUDGE-LIM-021``).
+    """
+    import numpy as np
+
+    from nudge.mechanisms.fibrillization import (
+        _BALANCED_TRUTH,
+        AggregationParams,
+        composite_lambda_kappa,
+        simulate_aggregation_curve,
+    )
+
+    truth = _BALANCED_TRUTH
+    m_tot = 1.0
+    curve = simulate_aggregation_curve(params=truth, m_tot=m_tot, obs_noise=0.0, seed=seed)
+    t = np.asarray(curve.t_obs, dtype=float)
+    m = np.clip(np.asarray(curve.signal, dtype=float).mean(axis=0), 0.0, 1.0)
+    lam, kap = composite_lambda_kappa(truth, m_tot)
+
+    # a sinusoidal α(frame) so the orbit loops seamlessly (α=1 at both ends).
+    log_amp = float(np.log(2.8))
+    alphas = np.exp(log_amp * np.sin(2.0 * np.pi * np.arange(n_frames) / n_frames))
+    orbit = [
+        {"alpha": float(a), "k_n": float(truth.k_n / a),
+         "k_plus": float(truth.k_plus * a), "k_2": float(truth.k_2 / a)}
+        for a in alphas
+    ]
+
+    # MEASURE the curve invariance under the gauge (a strong-α gauged triple).
+    a_check = 2.5
+    gauged = AggregationParams(k_n=truth.k_n / a_check, k_plus=truth.k_plus * a_check,
+                               k_2=truth.k_2 / a_check, n_c=truth.n_c, n_2=truth.n_2)
+    m_g = np.clip(
+        np.asarray(simulate_aggregation_curve(params=gauged, m_tot=m_tot, obs_noise=0.0,
+                                              seed=seed).signal, dtype=float).mean(axis=0),
+        0.0, 1.0,
+    )
+    gauge_check = float(np.max(np.abs(m - m_g)))
+
+    return {
+        "kind": "aggregation",
+        "call": "composites-identified",
+        "reason": ("the mass-fraction curve fixes only the composites κ, λ; the three "
+                   "microscopic constants are gauge-degenerate (NUDGE-LIM-021)"),
+        "label": "amyloid aggregation — the gauge orbit",
+        "kappa": _jsonsafe(kap),
+        "lambda": _jsonsafe(lam),
+        "individual_k_identifiable": False,
+        "null_direction": [0.5773502691896258, -0.5773502691896258, 0.5773502691896258],
+        "gauge_check": gauge_check,
+        "animation": {
+            "t": [float(v) for v in t],
+            "m": [float(v) for v in m],
+            "kappa": _jsonsafe(kap),
+            "lambda": _jsonsafe(lam),
+            "k_labels": ["kₙ (primary)", "k₊ (elongation)", "k₂ (secondary)"],
+            "truth": {"k_n": float(truth.k_n), "k_plus": float(truth.k_plus),
+                      "k_2": float(truth.k_2)},
+            "gauge_check": gauge_check,
+            "orbit": orbit,
+        },
+    }
+
+
 def fibrillization_demo(
     *,
     mode: str = "single",
